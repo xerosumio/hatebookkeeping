@@ -10,6 +10,11 @@ import ClientForm from './pages/ClientForm';
 import QuotationList from './pages/QuotationList';
 import QuotationForm from './pages/QuotationForm';
 import QuotationDetail from './pages/QuotationDetail';
+import InvoiceList from './pages/InvoiceList';
+import InvoiceForm from './pages/InvoiceForm';
+import InvoiceDetail from './pages/InvoiceDetail';
+import ReceiptList from './pages/ReceiptList';
+import ReceiptForm from './pages/ReceiptForm';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -55,8 +60,11 @@ export default function App() {
               <Route path="quotations/new" element={<QuotationForm />} />
               <Route path="quotations/:id" element={<QuotationDetail />} />
               <Route path="quotations/:id/edit" element={<QuotationForm />} />
-              <Route path="invoices" element={<Placeholder title="Invoices" />} />
-              <Route path="receipts" element={<Placeholder title="Receipts" />} />
+              <Route path="invoices" element={<InvoiceList />} />
+              <Route path="invoices/new" element={<InvoiceForm />} />
+              <Route path="invoices/:id" element={<InvoiceDetail />} />
+              <Route path="receipts" element={<ReceiptList />} />
+              <Route path="receipts/new" element={<ReceiptForm />} />
               <Route path="transactions" element={<Placeholder title="Transactions" />} />
               <Route path="payment-requests" element={<Placeholder title="Payment Requests" />} />
               <Route path="recurring" element={<Placeholder title="Recurring" />} />

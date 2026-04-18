@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from './client';
-import type { Client, Quotation } from '../types';
+import type { Client, Quotation, Invoice, Receipt } from '../types';
 
 // Clients
 export function useClients(search?: string) {
@@ -83,6 +83,71 @@ export function useUpdateQuotationStatus() {
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       api.patch(`/quotations/${id}/status`, { status }).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['quotations'] }),
+  });
+}
+
+// Invoices
+export function useInvoices(filters?: { status?: string; client?: string }) {
+  return useQuery({
+    queryKey: ['invoices', filters],
+    queryFn: () => api.get<Invoice[]>('/invoices', { params: filters }).then((r) => r.data),
+  });
+}
+
+export function useInvoice(id: string) {
+  return useQuery({
+    queryKey: ['invoices', id],
+    queryFn: () => api.get<Invoice>(`/invoices/${id}`).then((r) => r.data),
+    enabled: !!id,
+  });
+}
+
+export function useCreateInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<Invoice>) =>
+      api.post<Invoice>('/invoices', data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['invoices'] }),
+  });
+}
+
+export function useConvertQuotationToInvoices() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (quotationId: string) =>
+      api.post<Invoice[]>(`/invoices/from-quotation/${quotationId}`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+      qc.invalidateQueries({ queryKey: ['quotations'] });
+    },
+  });
+}
+
+// Receipts
+export function useReceipts() {
+  return useQuery({
+    queryKey: ['receipts'],
+    queryFn: () => api.get<Receipt[]>('/receipts').then((r) => r.data),
+  });
+}
+
+export function useReceipt(id: string) {
+  return useQuery({
+    queryKey: ['receipts', id],
+    queryFn: () => api.get<Receipt>(`/receipts/${id}`).then((r) => r.data),
+    enabled: !!id,
+  });
+}
+
+export function useCreateReceipt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<Receipt>) =>
+      api.post<Receipt>('/receipts', data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['receipts'] });
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+    },
   });
 }
 

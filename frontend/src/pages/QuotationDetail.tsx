@@ -1,5 +1,5 @@
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useQuotation, useUpdateQuotationStatus } from '../api/hooks';
+import { useQuotation, useUpdateQuotationStatus, useConvertQuotationToInvoices } from '../api/hooks';
 import { formatMoney } from '../utils/money';
 import type { Client } from '../types';
 
@@ -15,6 +15,7 @@ export default function QuotationDetail() {
   const navigate = useNavigate();
   const { data: q, isLoading } = useQuotation(id || '');
   const updateStatus = useUpdateQuotationStatus();
+  const convertToInvoices = useConvertQuotationToInvoices();
 
   if (isLoading) return <p className="text-gray-500">Loading...</p>;
   if (!q) return <p className="text-gray-500">Quotation not found.</p>;
@@ -73,10 +74,14 @@ export default function QuotationDetail() {
           )}
           {q.status === 'accepted' && (
             <button
-              onClick={() => navigate(`/quotations/${id}/convert`)}
-              className="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700"
+              onClick={async () => {
+                await convertToInvoices.mutateAsync(id!);
+                navigate('/invoices');
+              }}
+              disabled={convertToInvoices.isPending}
+              className="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700 disabled:opacity-50"
             >
-              Convert to Invoice
+              {convertToInvoices.isPending ? 'Converting...' : 'Convert to Invoice'}
             </button>
           )}
         </div>

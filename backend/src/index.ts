@@ -8,6 +8,8 @@ import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import clientRoutes from './routes/clients.js';
 import quotationRoutes from './routes/quotations.js';
+import invoiceRoutes from './routes/invoices.js';
+import receiptRoutes from './routes/receipts.js';
 import uploadRoutes from './routes/uploads.js';
 
 const app = express();
@@ -20,6 +22,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/quotations', quotationRoutes);
+app.use('/api/invoices', invoiceRoutes);
+app.use('/api/receipts', receiptRoutes);
 app.use('/api/uploads', uploadRoutes);
 
 app.get('/api/health', (_req, res) => {
