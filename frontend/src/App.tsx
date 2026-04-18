@@ -5,6 +5,11 @@ import AppShell from './components/AppShell';
 import Login from './pages/Login';
 import ChangePassword from './pages/ChangePassword';
 import Dashboard from './pages/Dashboard';
+import ClientList from './pages/ClientList';
+import ClientForm from './pages/ClientForm';
+import QuotationList from './pages/QuotationList';
+import QuotationForm from './pages/QuotationForm';
+import QuotationDetail from './pages/QuotationDetail';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -43,8 +48,13 @@ export default function App() {
               }
             >
               <Route index element={<Dashboard />} />
-              <Route path="clients" element={<Placeholder title="Clients" />} />
-              <Route path="quotations" element={<Placeholder title="Quotations" />} />
+              <Route path="clients" element={<ClientList />} />
+              <Route path="clients/new" element={<ClientForm />} />
+              <Route path="clients/:id/edit" element={<ClientForm />} />
+              <Route path="quotations" element={<QuotationList />} />
+              <Route path="quotations/new" element={<QuotationForm />} />
+              <Route path="quotations/:id" element={<QuotationDetail />} />
+              <Route path="quotations/:id/edit" element={<QuotationForm />} />
               <Route path="invoices" element={<Placeholder title="Invoices" />} />
               <Route path="receipts" element={<Placeholder title="Receipts" />} />
               <Route path="transactions" element={<Placeholder title="Transactions" />} />
