@@ -1,7 +1,10 @@
 import { useParams, Link } from 'react-router-dom';
 import { useInvoice } from '../api/hooks';
 import { formatMoney } from '../utils/money';
+import { Download } from 'lucide-react';
 import type { Client } from '../types';
+
+const apiUrl = import.meta.env.VITE_API_URL || '';
 
 const statusColors: Record<string, string> = {
   unpaid: 'bg-red-100 text-red-700',
@@ -26,6 +29,14 @@ export default function InvoiceDetail() {
           {inv.milestone && <p className="text-gray-500">{inv.milestone}</p>}
         </div>
         <div className="flex items-center gap-3">
+          <a
+            href={`${apiUrl}/api/invoices/${id}/pdf`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 border border-gray-300 px-3 py-1.5 rounded text-sm hover:bg-gray-50"
+          >
+            <Download size={14} /> PDF
+          </a>
           <span className={`px-3 py-1 rounded text-sm font-medium ${statusColors[inv.status]}`}>
             {inv.status}
           </span>

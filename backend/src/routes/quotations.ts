@@ -1,9 +1,12 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { renderToBuffer } from '@react-pdf/renderer';
+import React from 'react';
 import { Quotation } from '../models/Quotation.js';
 import { getNextSequence } from '../models/Counter.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { QuotationPDF } from '../utils/pdf/QuotationPDF.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -118,6 +121,22 @@ router.patch('/:id/status', async (req, res, next) => {
     quotation.status = status;
     await quotation.save();
     res.json(quotation);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/:id/pdf', async (req, res, next) => {
+  try {
+    const quotation = await Quotation.findById(req.params.id).populate('client');
+    if (!quotation) throw new AppError(404, 'Quotation not found');
+
+    const buffer = await renderToBuffer(
+      React.createElement(QuotationPDF, { quotation: quotation as any }) as any,
+    );
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${quotation.quotationNumber}.pdf"`);
+    res.send(Buffer.from(buffer));
   } catch (error) {
     next(error);
   }

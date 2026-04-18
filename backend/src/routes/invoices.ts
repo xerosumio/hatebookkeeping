@@ -1,10 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import React from 'react';
+import { renderToBuffer } from '@react-pdf/renderer';
 import { Invoice } from '../models/Invoice.js';
 import { Quotation } from '../models/Quotation.js';
 import { getNextSequence } from '../models/Counter.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { InvoicePDF } from '../utils/pdf/InvoicePDF.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -154,6 +157,22 @@ router.post('/from-quotation/:quotationId', async (req: AuthRequest, res, next) 
     }
 
     res.status(201).json(invoices);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/:id/pdf', async (req, res, next) => {
+  try {
+    const invoice = await Invoice.findById(req.params.id).populate('client');
+    if (!invoice) throw new AppError(404, 'Invoice not found');
+
+    const buffer = await renderToBuffer(
+      React.createElement(InvoicePDF, { invoice: invoice as any }) as any,
+    );
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${invoice.invoiceNumber}.pdf"`);
+    res.send(Buffer.from(buffer));
   } catch (error) {
     next(error);
   }

@@ -1,11 +1,14 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import React from 'react';
+import { renderToBuffer } from '@react-pdf/renderer';
 import { Receipt } from '../models/Receipt.js';
 import { Invoice } from '../models/Invoice.js';
 import { Transaction } from '../models/Transaction.js';
 import { getNextSequence } from '../models/Counter.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { ReceiptPDF } from '../utils/pdf/ReceiptPDF.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -86,6 +89,24 @@ router.get('/:id', async (req, res, next) => {
       .populate('invoice');
     if (!receipt) throw new AppError(404, 'Receipt not found');
     res.json(receipt);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/:id/pdf', async (req, res, next) => {
+  try {
+    const receipt = await Receipt.findById(req.params.id)
+      .populate('client')
+      .populate('invoice');
+    if (!receipt) throw new AppError(404, 'Receipt not found');
+
+    const buffer = await renderToBuffer(
+      React.createElement(ReceiptPDF, { receipt: receipt as any }) as any,
+    );
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${receipt.receiptNumber}.pdf"`);
+    res.send(Buffer.from(buffer));
   } catch (error) {
     next(error);
   }

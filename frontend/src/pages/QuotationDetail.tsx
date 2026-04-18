@@ -1,7 +1,10 @@
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuotation, useUpdateQuotationStatus, useConvertQuotationToInvoices } from '../api/hooks';
 import { formatMoney } from '../utils/money';
+import { Download } from 'lucide-react';
 import type { Client } from '../types';
+
+const apiUrl = import.meta.env.VITE_API_URL || '';
 
 const statusColors: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-700',
@@ -34,6 +37,14 @@ export default function QuotationDetail() {
           <p className="text-gray-500">{q.title}</p>
         </div>
         <div className="flex items-center gap-3">
+          <a
+            href={`${apiUrl}/api/quotations/${id}/pdf`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 border border-gray-300 px-3 py-1.5 rounded text-sm hover:bg-gray-50"
+          >
+            <Download size={14} /> PDF
+          </a>
           <span className={`px-3 py-1 rounded text-sm font-medium ${statusColors[q.status]}`}>
             {q.status}
           </span>
