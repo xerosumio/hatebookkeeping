@@ -10,6 +10,10 @@ import clientRoutes from './routes/clients.js';
 import quotationRoutes from './routes/quotations.js';
 import invoiceRoutes from './routes/invoices.js';
 import receiptRoutes from './routes/receipts.js';
+import transactionRoutes from './routes/transactions.js';
+import paymentRequestRoutes from './routes/paymentRequests.js';
+import recurringRoutes from './routes/recurring.js';
+import reportRoutes from './routes/reports.js';
 import uploadRoutes from './routes/uploads.js';
 
 const app = express();
@@ -24,6 +28,10 @@ app.use('/api/clients', clientRoutes);
 app.use('/api/quotations', quotationRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/receipts', receiptRoutes);
+app.use('/api/transactions', transactionRoutes);
+app.use('/api/payment-requests', paymentRequestRoutes);
+app.use('/api/recurring', recurringRoutes);
+app.use('/api/reports', reportRoutes);
 app.use('/api/uploads', uploadRoutes);
 
 app.get('/api/health', (_req, res) => {
