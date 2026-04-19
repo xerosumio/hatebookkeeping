@@ -5,6 +5,7 @@ export interface IFund extends Document {
   type: 'reserve' | 'bank' | 'petty_cash';
   entity?: mongoose.Types.ObjectId;
   heldIn?: mongoose.Types.ObjectId;
+  openingBalance: number;
   balance: number;
   active: boolean;
   createdAt: Date;
@@ -17,6 +18,7 @@ const fundSchema = new Schema<IFund>(
     type: { type: String, enum: ['reserve', 'bank', 'petty_cash'], required: true },
     entity: { type: Schema.Types.ObjectId, ref: 'Entity' },
     heldIn: { type: Schema.Types.ObjectId, ref: 'Fund' },
+    openingBalance: { type: Number, default: 0 },
     balance: { type: Number, default: 0 },
     active: { type: Boolean, default: true },
   },

@@ -716,7 +716,7 @@ export function useFunds() {
 export function useCreateFund() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { name: string; type: string; entity?: string; heldIn?: string; balance?: number }) =>
+    mutationFn: (data: { name: string; type: string; entity?: string; heldIn?: string; openingBalance?: number; balance?: number }) =>
       api.post<Fund>('/funds', data).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['funds'] }),
   });
@@ -725,7 +725,7 @@ export function useCreateFund() {
 export function useUpdateFund() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { name?: string; type?: string; entity?: string | null; heldIn?: string | null; balance?: number; active?: boolean } }) =>
+    mutationFn: ({ id, data }: { id: string; data: { name?: string; type?: string; entity?: string | null; heldIn?: string | null; openingBalance?: number; balance?: number; active?: boolean } }) =>
       api.put<Fund>(`/funds/${id}`, data).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['funds'] }),
   });

@@ -129,6 +129,7 @@ export interface Fund {
   type: 'reserve' | 'bank' | 'petty_cash';
   entity?: string | Entity;
   heldIn?: string | { _id: string; name: string; type: string };
+  openingBalance: number;
   balance: number;
   active: boolean;
   createdAt: string;

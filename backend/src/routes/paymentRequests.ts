@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { PaymentRequest } from '../models/PaymentRequest.js';
 import { Transaction } from '../models/Transaction.js';
+import { adjustFundBalance } from '../utils/fundBalance.js';
 import { User } from '../models/User.js';
 import { Settings } from '../models/Settings.js';
 import { getNextSequence } from '../models/Counter.js';
@@ -303,6 +304,10 @@ router.patch('/:id/execute', roleGuard('admin', 'user'), async (req: AuthRequest
         reconciled: !!bankReference,
         createdBy: req.user!._id,
       });
+
+      if (request.sourceBankAccount) {
+        await adjustFundBalance(request.sourceBankAccount, -item.amount);
+      }
     }
 
     // Send execution notification emails

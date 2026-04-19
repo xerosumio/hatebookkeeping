@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { Transaction } from '../models/Transaction.js';
+import { adjustFundBalance } from '../utils/fundBalance.js';
 import { authMiddleware, roleGuard, AuthRequest } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
 
@@ -53,6 +54,12 @@ router.post('/', roleGuard('admin', 'user'), async (req: AuthRequest, res, next)
       date: new Date(data.date),
       createdBy: req.user!._id,
     });
+
+    if (data.bankAccount) {
+      const delta = data.type === 'income' ? data.amount : -data.amount;
+      await adjustFundBalance(data.bankAccount, delta);
+    }
+
     res.status(201).json(transaction);
   } catch (error) {
     next(error);
@@ -72,13 +79,27 @@ router.get('/:id', async (req, res, next) => {
 router.put('/:id', roleGuard('admin', 'user'), async (req, res, next) => {
   try {
     const data = transactionSchema.parse(req.body);
+
+    const old = await Transaction.findById(req.params.id);
+    if (!old) throw new AppError(404, 'Transaction not found');
+
+    if (old.bankAccount) {
+      const oldDelta = old.type === 'income' ? -old.amount : old.amount;
+      await adjustFundBalance(old.bankAccount, oldDelta);
+    }
+
     const transaction = await Transaction.findByIdAndUpdate(
       req.params.id,
       { ...data, date: new Date(data.date) },
       { new: true },
     );
-    if (!transaction) throw new AppError(404, 'Transaction not found');
-    res.json(transaction);
+
+    if (data.bankAccount) {
+      const newDelta = data.type === 'income' ? data.amount : -data.amount;
+      await adjustFundBalance(data.bankAccount, newDelta);
+    }
+
+    res.json(transaction!);
   } catch (error) {
     next(error);
   }
@@ -88,6 +109,12 @@ router.delete('/:id', roleGuard('admin', 'user'), async (req, res, next) => {
   try {
     const transaction = await Transaction.findByIdAndDelete(req.params.id);
     if (!transaction) throw new AppError(404, 'Transaction not found');
+
+    if (transaction.bankAccount) {
+      const reverseDelta = transaction.type === 'income' ? -transaction.amount : transaction.amount;
+      await adjustFundBalance(transaction.bankAccount, reverseDelta);
+    }
+
     res.json({ message: 'Transaction deleted' });
   } catch (error) {
     next(error);

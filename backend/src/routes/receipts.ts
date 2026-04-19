@@ -7,6 +7,7 @@ import { renderToBuffer } from '@react-pdf/renderer';
 import { Receipt } from '../models/Receipt.js';
 import { Invoice } from '../models/Invoice.js';
 import { Transaction } from '../models/Transaction.js';
+import { adjustFundBalance } from '../utils/fundBalance.js';
 import { getNextSequence } from '../models/Counter.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
@@ -87,6 +88,8 @@ router.post('/', async (req: AuthRequest, res, next) => {
       reconciled: !!data.bankReference,
       createdBy: req.user!._id,
     });
+
+    await adjustFundBalance(data.bankAccount, data.amount);
 
     res.status(201).json(receipt);
   } catch (error) {

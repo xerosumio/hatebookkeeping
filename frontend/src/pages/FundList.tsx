@@ -40,12 +40,14 @@ export default function FundList() {
 
   async function handleCreate() {
     if (!createForm.name || !createForm.type) return;
+    const cents = createForm.balance ? Math.round(parseFloat(createForm.balance) * 100) : 0;
     await createMutation.mutateAsync({
       name: createForm.name,
       type: createForm.type,
       entity: createForm.entity || undefined,
       heldIn: createForm.heldIn || undefined,
-      balance: createForm.balance ? Math.round(parseFloat(createForm.balance) * 100) : 0,
+      openingBalance: cents,
+      balance: cents,
     });
     setCreateForm({ name: '', type: 'reserve', entity: '', heldIn: '', balance: '' });
     setShowCreate(false);
@@ -67,12 +69,15 @@ export default function FundList() {
   function openEdit(fund: Fund) {
     const entId = fund.entity && typeof fund.entity === 'object' ? (fund.entity as Entity)._id : (fund.entity || '');
     const heldId = getHeldInId(fund) || '';
-    setEditForm({ name: fund.name, type: fund.type, entity: entId, heldIn: heldId, balance: (fund.balance / 100).toFixed(2) });
+    const balVal = fund.type === 'bank' ? (fund.openingBalance / 100).toFixed(2) : (fund.balance / 100).toFixed(2);
+    setEditForm({ name: fund.name, type: fund.type, entity: entId, heldIn: heldId, balance: balVal });
     setEditingFund(fund);
   }
 
   async function handleEdit() {
     if (!editingFund || !editForm.name) return;
+    const cents = editForm.balance ? Math.round(parseFloat(editForm.balance) * 100) : 0;
+    const isBankType = editForm.type === 'bank';
     await updateMutation.mutateAsync({
       id: editingFund._id,
       data: {
@@ -80,7 +85,7 @@ export default function FundList() {
         type: editForm.type,
         entity: editForm.entity || null,
         heldIn: editForm.heldIn || null,
-        balance: editForm.balance ? Math.round(parseFloat(editForm.balance) * 100) : 0,
+        ...(isBankType ? { openingBalance: cents } : { balance: cents }),
       },
     });
     setEditingFund(null);
@@ -336,9 +341,14 @@ export default function FundList() {
                 </div>
               )}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Balance ($)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {editForm.type === 'bank' ? 'Opening Balance ($)' : 'Balance ($)'}
+                </label>
                 <input type="number" step="0.01" value={editForm.balance} onChange={(e) => setEditForm({ ...editForm, balance: e.target.value })}
                   className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
+                {editForm.type === 'bank' && editingFund && (
+                  <p className="text-xs text-gray-400 mt-1">Current balance: {formatMoney(editingFund.balance)} (opening + transactions)</p>
+                )}
               </div>
             </div>
             <div className="flex gap-3 mt-4">
