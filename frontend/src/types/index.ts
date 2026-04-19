@@ -83,6 +83,18 @@ export interface Shareholder {
   updatedAt: string;
 }
 
+export interface ShareLiabilityEntry {
+  _id: string;
+  shareholder: string;
+  type: 'purchase' | 'payment';
+  amount: number;
+  date: string;
+  description: string;
+  createdBy: string | { _id: string; name: string };
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface EquityTransaction {
   _id: string;
   type: 'investment' | 'distribution' | 'collection' | 'adjustment';

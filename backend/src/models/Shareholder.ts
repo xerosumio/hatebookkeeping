@@ -12,8 +12,6 @@ export interface IShareholder extends Document {
   user: mongoose.Types.ObjectId;
   name: string;
   sharePercent: number;
-  sharePurchaseOwed: number;
-  sharePurchasePaid: number;
   active: boolean;
   shareHistory: IShareAdjustmentLog[];
   createdAt: Date;
@@ -36,8 +34,6 @@ const shareholderSchema = new Schema<IShareholder>(
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     name: { type: String, required: true, trim: true },
     sharePercent: { type: Number, required: true },
-    sharePurchaseOwed: { type: Number, default: 0 },
-    sharePurchasePaid: { type: Number, default: 0 },
     active: { type: Boolean, default: true },
     shareHistory: { type: [shareAdjustmentLogSchema], default: [] },
   },

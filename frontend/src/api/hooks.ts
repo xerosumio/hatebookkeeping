@@ -3,7 +3,7 @@ import api from './client';
 import type {
   Client, Quotation, Invoice, Receipt, Transaction, Payee, PaymentRequest, RecurringItem,
   Settings, CashFlowReport, AccountsReceivableReport, IncomeStatementReport, AccountsPayableReport,
-  User, Reimbursement, Entity, Shareholder, EquityTransaction, MonthlyClose, Fund, FundTransfer,
+  User, Reimbursement, Entity, Shareholder, ShareLiabilityEntry, EquityTransaction, MonthlyClose, Fund, FundTransfer,
 } from '../types';
 
 // Users (admin-only)
@@ -630,7 +630,7 @@ export function useUpdateShareholder() {
       data,
     }: {
       id: string;
-      data: { name?: string; sharePercent?: number; sharePurchaseOwed?: number; active?: boolean; reason?: string };
+      data: { name?: string; sharePercent?: number; active?: boolean; reason?: string };
     }) => api.put<Shareholder>(`/shareholders/${id}`, data).then((r) => r.data),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ['shareholders'] });
@@ -659,12 +659,44 @@ export function useInvestShareholder() {
   });
 }
 
-export function usePayShareholderLiability() {
+export function useShareholderLiabilities(id: string) {
+  return useQuery({
+    queryKey: ['shareholders', id, 'liabilities'],
+    queryFn: () => api.get<ShareLiabilityEntry[]>(`/shareholders/${id}/liabilities`).then((r) => r.data),
+    enabled: !!id,
+  });
+}
+
+export function useCreateShareholderLiability() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { amount: number; date: string; description?: string } }) =>
-      api.post(`/shareholders/${id}/pay-liability`, data).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['shareholders'] }),
+    mutationFn: ({ id, data }: { id: string; data: { type: string; amount: number; date: string; description?: string } }) =>
+      api.post(`/shareholders/${id}/liabilities`, data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['shareholders'] });
+    },
+  });
+}
+
+export function useUpdateShareholderLiability() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ shareholderId, entryId, data }: { shareholderId: string; entryId: string; data: { amount?: number; date?: string; description?: string } }) =>
+      api.put(`/shareholders/${shareholderId}/liabilities/${entryId}`, data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['shareholders'] });
+    },
+  });
+}
+
+export function useDeleteShareholderLiability() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ shareholderId, entryId }: { shareholderId: string; entryId: string }) =>
+      api.delete(`/shareholders/${shareholderId}/liabilities/${entryId}`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['shareholders'] });
+    },
   });
 }
 

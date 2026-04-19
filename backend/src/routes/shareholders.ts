@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { Shareholder } from '../models/Shareholder.js';
 import { EquityTransaction } from '../models/EquityTransaction.js';
+import { ShareLiability } from '../models/ShareLiability.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
 
@@ -22,10 +23,22 @@ router.get('/', async (_req, res, next) => {
           { $match: { shareholder: sh._id, type: { $in: ['investment', 'collection'] } } },
           { $group: { _id: null, total: { $sum: '$amount' } } },
         ]);
+        const liabilityTotals = await ShareLiability.aggregate([
+          { $match: { shareholder: sh._id } },
+          { $group: { _id: '$type', total: { $sum: '$amount' } } },
+        ]);
+        let sharePurchaseOwed = 0;
+        let sharePurchasePaid = 0;
+        for (const lt of liabilityTotals) {
+          if (lt._id === 'purchase') sharePurchaseOwed = lt.total;
+          if (lt._id === 'payment') sharePurchasePaid = lt.total;
+        }
         return {
           ...sh.toObject(),
           currentEquity: lastTxn?.balanceAfter ?? 0,
           totalInvested: totalInvested[0]?.total ?? 0,
+          sharePurchaseOwed,
+          sharePurchasePaid,
         };
       }),
     );
@@ -170,7 +183,6 @@ router.put('/:id', async (req: AuthRequest, res, next) => {
     const data = z.object({
       name: z.string().min(1).optional(),
       sharePercent: z.number().min(0).max(100).optional(),
-      sharePurchaseOwed: z.number().int().min(0).optional(),
       active: z.boolean().optional(),
       reason: z.string().optional(),
     }).parse(req.body);
@@ -191,7 +203,6 @@ router.put('/:id', async (req: AuthRequest, res, next) => {
 
     if (data.name !== undefined) shareholder.name = data.name;
     if (data.active !== undefined) shareholder.active = data.active;
-    if (data.sharePurchaseOwed !== undefined) shareholder.sharePurchaseOwed = data.sharePurchaseOwed;
 
     await shareholder.save();
     res.json(shareholder);
@@ -232,41 +243,95 @@ router.post('/:id/invest', async (req: AuthRequest, res, next) => {
   }
 });
 
-router.post('/:id/pay-liability', async (req: AuthRequest, res, next) => {
+router.get('/:id/liabilities', async (req, res, next) => {
+  try {
+    const entries = await ShareLiability.find({ shareholder: req.params.id })
+      .populate('createdBy', 'name')
+      .sort({ date: -1, createdAt: -1 });
+    res.json(entries);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/:id/liabilities', async (req: AuthRequest, res, next) => {
   try {
     if (req.user!.role !== 'admin') throw new AppError(403, 'Admin only');
     const data = z.object({
+      type: z.enum(['purchase', 'payment']),
       amount: z.number().int().positive(),
       date: z.string(),
-      description: z.string().optional().default('Share purchase payment'),
+      description: z.string().optional().default(''),
     }).parse(req.body);
 
     const shareholder = await Shareholder.findById(req.params.id);
     if (!shareholder) throw new AppError(404, 'Shareholder not found');
 
-    const outstanding = shareholder.sharePurchaseOwed - shareholder.sharePurchasePaid;
-    if (data.amount > outstanding) {
-      throw new AppError(400, `Payment exceeds outstanding liability (${outstanding / 100})`);
-    }
-
-    shareholder.sharePurchasePaid += data.amount;
-    await shareholder.save();
-
-    const lastTxn = await EquityTransaction.findOne({ shareholder: shareholder._id })
-      .sort({ date: -1, createdAt: -1 });
-    const currentBalance = lastTxn?.balanceAfter ?? 0;
-
-    const txn = await EquityTransaction.create({
-      type: 'investment',
+    const entry = await ShareLiability.create({
       shareholder: shareholder._id,
+      type: data.type,
       amount: data.amount,
       date: new Date(data.date),
       description: data.description,
-      balanceAfter: currentBalance + data.amount,
       createdBy: req.user!._id,
     });
 
-    res.status(201).json(txn);
+    if (data.type === 'payment') {
+      const lastTxn = await EquityTransaction.findOne({ shareholder: shareholder._id })
+        .sort({ date: -1, createdAt: -1 });
+      const currentBalance = lastTxn?.balanceAfter ?? 0;
+      await EquityTransaction.create({
+        type: 'investment',
+        shareholder: shareholder._id,
+        amount: data.amount,
+        date: new Date(data.date),
+        description: data.description || 'Share purchase payment',
+        balanceAfter: currentBalance + data.amount,
+        createdBy: req.user!._id,
+      });
+    }
+
+    res.status(201).json(entry);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put('/:id/liabilities/:entryId', async (req: AuthRequest, res, next) => {
+  try {
+    if (req.user!.role !== 'admin') throw new AppError(403, 'Admin only');
+    const data = z.object({
+      amount: z.number().int().positive().optional(),
+      date: z.string().optional(),
+      description: z.string().optional(),
+    }).parse(req.body);
+
+    const update: Record<string, unknown> = {};
+    if (data.amount !== undefined) update.amount = data.amount;
+    if (data.date !== undefined) update.date = new Date(data.date);
+    if (data.description !== undefined) update.description = data.description;
+
+    const entry = await ShareLiability.findOneAndUpdate(
+      { _id: req.params.entryId, shareholder: req.params.id },
+      update,
+      { new: true },
+    ).populate('createdBy', 'name');
+    if (!entry) throw new AppError(404, 'Liability entry not found');
+    res.json(entry);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/:id/liabilities/:entryId', async (req: AuthRequest, res, next) => {
+  try {
+    if (req.user!.role !== 'admin') throw new AppError(403, 'Admin only');
+    const entry = await ShareLiability.findOneAndDelete({
+      _id: req.params.entryId,
+      shareholder: req.params.id,
+    });
+    if (!entry) throw new AppError(404, 'Liability entry not found');
+    res.json({ message: 'Liability entry deleted' });
   } catch (error) {
     next(error);
   }
