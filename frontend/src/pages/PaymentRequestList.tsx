@@ -1,11 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  usePaymentRequests,
-  useApprovePaymentRequest,
-  useRejectPaymentRequest,
-  useExecutePaymentRequest,
-} from '../api/hooks';
+import { usePaymentRequests } from '../api/hooks';
 import { useAuth } from '../contexts/AuthContext';
 import { formatMoney } from '../utils/money';
 import { Plus } from 'lucide-react';
@@ -24,24 +19,8 @@ export default function PaymentRequestList() {
   const { data: requests, isLoading } = usePaymentRequests(
     statusFilter ? { status: statusFilter } : undefined,
   );
-  const approve = useApprovePaymentRequest();
-  const reject = useRejectPaymentRequest();
-  const execute = useExecutePaymentRequest();
 
-  const canCreate = user?.role === 'admin' || user?.role === 'maker';
-  const canApprove = user?.role === 'admin' || user?.role === 'checker';
-  const canExecute = user?.role === 'admin' || user?.role === 'maker';
-
-  async function handleReject(id: string) {
-    const reason = prompt('Rejection reason:');
-    if (!reason) return;
-    await reject.mutateAsync({ id, reason });
-  }
-
-  async function handleExecute(id: string) {
-    const bankReference = prompt('Bank reference (optional):') || '';
-    await execute.mutateAsync({ id, bankReference });
-  }
+  const canCreate = user?.role === 'admin' || user?.role === 'user';
 
   return (
     <div>
@@ -81,61 +60,34 @@ export default function PaymentRequestList() {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Number</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Type</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Payee</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Description</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">Amount</th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">Items</th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">Total</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Created By</th>
-                <th className="px-4 py-3 font-medium text-gray-600">Actions</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Date</th>
               </tr>
             </thead>
             <tbody>
               {requests.map((r) => {
                 const creator = typeof r.createdBy === 'object' ? (r.createdBy as User) : null;
-                const isOwnRequest = creator?.id === user?.id;
-
                 return (
                   <tr key={r._id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium">{r.requestNumber}</td>
-                    <td className="px-4 py-3 text-gray-600">{r.type.replace(/_/g, ' ')}</td>
-                    <td className="px-4 py-3">{r.payee}</td>
-                    <td className="px-4 py-3 text-gray-600 max-w-xs truncate">{r.description}</td>
-                    <td className="px-4 py-3 text-right font-mono">{formatMoney(r.amount)}</td>
+                    <td className="px-4 py-3">
+                      <Link to={`/payment-requests/${r._id}`} className="text-blue-600 hover:underline font-medium">
+                        {r.requestNumber}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 max-w-xs truncate">{r.description || '—'}</td>
+                    <td className="px-4 py-3 text-right text-gray-500">{r.items?.length || 0}</td>
+                    <td className="px-4 py-3 text-right font-mono tabular-nums">{formatMoney(r.totalAmount)}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[r.status]}`}>
                         {r.status}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-500">{creator?.name || ''}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-1">
-                        {r.status === 'pending' && canApprove && !isOwnRequest && (
-                          <>
-                            <button
-                              onClick={() => approve.mutateAsync(r._id)}
-                              className="text-xs bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              onClick={() => handleReject(r._id)}
-                              className="text-xs bg-red-600 text-white px-2 py-1 rounded hover:bg-red-700"
-                            >
-                              Reject
-                            </button>
-                          </>
-                        )}
-                        {r.status === 'approved' && canExecute && (
-                          <button
-                            onClick={() => handleExecute(r._id)}
-                            className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
-                          >
-                            Mark Executed
-                          </button>
-                        )}
-                      </div>
-                    </td>
+                    <td className="px-4 py-3 text-gray-400 text-xs">{new Date(r.createdAt).toLocaleDateString()}</td>
                   </tr>
                 );
               })}

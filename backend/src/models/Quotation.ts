@@ -5,6 +5,7 @@ export interface ILineItem {
   quantity: number;
   unitPrice: number;
   amount: number;
+  waived: boolean;
 }
 
 export interface IPaymentMilestone {
@@ -16,12 +17,14 @@ export interface IPaymentMilestone {
 
 export interface IQuotation extends Document {
   quotationNumber: string;
+  entity: mongoose.Types.ObjectId;
   client: mongoose.Types.ObjectId;
   status: 'draft' | 'sent' | 'accepted' | 'rejected';
   title: string;
   lineItems: ILineItem[];
   subtotal: number;
   discount: number;
+  discountPercent: number;
   total: number;
   termsAndConditions: string;
   paymentSchedule: IPaymentMilestone[];
@@ -40,6 +43,7 @@ const lineItemSchema = new Schema<ILineItem>(
     quantity: { type: Number, required: true },
     unitPrice: { type: Number, required: true },
     amount: { type: Number, required: true },
+    waived: { type: Boolean, default: false },
   },
   { _id: false },
 );
@@ -57,6 +61,7 @@ const paymentMilestoneSchema = new Schema<IPaymentMilestone>(
 const quotationSchema = new Schema<IQuotation>(
   {
     quotationNumber: { type: String, required: true, unique: true },
+    entity: { type: Schema.Types.ObjectId, ref: 'Entity', required: true },
     client: { type: Schema.Types.ObjectId, ref: 'Client', required: true },
     status: {
       type: String,
@@ -67,6 +72,7 @@ const quotationSchema = new Schema<IQuotation>(
     lineItems: [lineItemSchema],
     subtotal: { type: Number, required: true },
     discount: { type: Number, default: 0 },
+    discountPercent: { type: Number, default: 0 },
     total: { type: Number, required: true },
     termsAndConditions: { type: String, default: '' },
     paymentSchedule: [paymentMilestoneSchema],

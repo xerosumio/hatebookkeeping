@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import path from 'path';
+import fs from 'fs';
 import React from 'react';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { Receipt } from '../models/Receipt.js';
@@ -9,6 +11,8 @@ import { getNextSequence } from '../models/Counter.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { ReceiptPDF } from '../utils/pdf/ReceiptPDF.js';
+import { getSettings } from '../models/Settings.js';
+import { env } from '../config/env.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -86,7 +90,10 @@ router.get('/:id', async (req, res, next) => {
   try {
     const receipt = await Receipt.findById(req.params.id)
       .populate('client')
-      .populate('invoice');
+      .populate({
+        path: 'invoice',
+        populate: { path: 'quotation', select: 'quotationNumber title' },
+      });
     if (!receipt) throw new AppError(404, 'Receipt not found');
     res.json(receipt);
   } catch (error) {
@@ -98,11 +105,39 @@ router.get('/:id/pdf', async (req, res, next) => {
   try {
     const receipt = await Receipt.findById(req.params.id)
       .populate('client')
-      .populate('invoice');
+      .populate({
+        path: 'invoice',
+        populate: [
+          { path: 'quotation', select: 'quotationNumber title' },
+          { path: 'entity' },
+        ],
+      });
     if (!receipt) throw new AppError(404, 'Receipt not found');
 
+    const invoiceEntity = (receipt.invoice as any)?.entity;
+    const settings = await getSettings();
+    const company = invoiceEntity
+      ? { companyName: invoiceEntity.name, companyAddress: invoiceEntity.address, companyPhone: invoiceEntity.phone, companyEmail: invoiceEntity.email, companyWebsite: invoiceEntity.website, logoUrl: invoiceEntity.logoUrl, companyChopUrl: invoiceEntity.companyChopUrl, signatureUrl: invoiceEntity.signatureUrl, bankAccounts: invoiceEntity.bankAccounts }
+      : { ...settings.toObject() } as any;
+    for (const field of ['logoUrl', 'companyChopUrl', 'signatureUrl'] as const) {
+      if (company[field]) {
+        const file = company[field].replace(/^\/api\/uploads\//, '');
+        const abs = path.resolve(env.uploadDir, file);
+        company[field] = fs.existsSync(abs) && fs.statSync(abs).size > 0 ? abs : '';
+      }
+    }
+    const rcpt = receipt as any;
+    for (const field of ['companyChopUrl', 'signatureUrl'] as const) {
+      if (rcpt[field] && rcpt[field].startsWith('/api/uploads/')) {
+        const file = rcpt[field].replace(/^\/api\/uploads\//, '');
+        const abs = path.resolve(env.uploadDir, file);
+        rcpt[field] = fs.existsSync(abs) && fs.statSync(abs).size > 0 ? abs : '';
+      }
+    }
+    if (!rcpt.companyChopUrl && company.companyChopUrl) rcpt.companyChopUrl = company.companyChopUrl;
+    if (!rcpt.signatureUrl && company.signatureUrl) rcpt.signatureUrl = company.signatureUrl;
     const buffer = await renderToBuffer(
-      React.createElement(ReceiptPDF, { receipt: receipt as any }) as any,
+      React.createElement(ReceiptPDF, { receipt: rcpt, company }) as any,
     );
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${receipt.receiptNumber}.pdf"`);

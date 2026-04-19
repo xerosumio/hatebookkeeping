@@ -21,21 +21,7 @@ const transactionSchema = new Schema<ITransaction>(
   {
     date: { type: Date, required: true },
     type: { type: String, enum: ['income', 'expense'], required: true },
-    category: {
-      type: String,
-      enum: [
-        'revenue',
-        'salary',
-        'reimbursement',
-        'rent',
-        'utilities',
-        'software_subscription',
-        'professional_fees',
-        'tax',
-        'other',
-      ],
-      required: true,
-    },
+    category: { type: String, required: true },
     description: { type: String, required: true },
     amount: { type: Number, required: true },
     invoice: { type: Schema.Types.ObjectId, ref: 'Invoice' },

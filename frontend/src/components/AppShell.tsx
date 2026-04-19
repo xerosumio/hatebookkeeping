@@ -7,10 +7,15 @@ import {
   Receipt,
   ArrowRightLeft,
   ClipboardCheck,
+  UserCheck,
+  Wallet,
   Repeat,
   BarChart3,
   Settings,
   LogOut,
+  UsersRound,
+  PieChart,
+  CalendarCheck,
 } from 'lucide-react';
 
 const navItems = [
@@ -20,8 +25,12 @@ const navItems = [
   { to: '/invoices', icon: FileText, label: 'Invoices' },
   { to: '/receipts', icon: Receipt, label: 'Receipts' },
   { to: '/transactions', icon: ArrowRightLeft, label: 'Transactions' },
+  { to: '/payees', icon: UserCheck, label: 'Payees' },
   { to: '/payment-requests', icon: ClipboardCheck, label: 'Approvals' },
+  { to: '/reimbursements', icon: Wallet, label: 'Reimbursements' },
   { to: '/recurring', icon: Repeat, label: 'Recurring' },
+  { to: '/shareholders', icon: PieChart, label: 'Shareholders' },
+  { to: '/monthly-close', icon: CalendarCheck, label: 'Monthly Close' },
   { to: '/reports', icon: BarChart3, label: 'Reports' },
 ];
 
@@ -61,17 +70,30 @@ export default function AppShell() {
         </nav>
         <div className="p-2 border-t border-gray-200 space-y-0.5">
           {user?.role === 'admin' && (
-            <NavLink
-              to="/settings"
-              className={({ isActive }) =>
-                `flex items-center gap-2 px-3 py-2 rounded text-sm ${
-                  isActive ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-100'
-                }`
-              }
-            >
-              <Settings size={18} />
-              Settings
-            </NavLink>
+            <>
+              <NavLink
+                to="/users"
+                className={({ isActive }) =>
+                  `flex items-center gap-2 px-3 py-2 rounded text-sm ${
+                    isActive ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-100'
+                  }`
+                }
+              >
+                <UsersRound size={18} />
+                Users
+              </NavLink>
+              <NavLink
+                to="/settings"
+                className={({ isActive }) =>
+                  `flex items-center gap-2 px-3 py-2 rounded text-sm ${
+                    isActive ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-100'
+                  }`
+                }
+              >
+                <Settings size={18} />
+                Settings
+              </NavLink>
+            </>
           )}
           <button
             onClick={handleLogout}

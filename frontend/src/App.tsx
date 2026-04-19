@@ -14,12 +14,24 @@ import InvoiceList from './pages/InvoiceList';
 import InvoiceForm from './pages/InvoiceForm';
 import InvoiceDetail from './pages/InvoiceDetail';
 import ReceiptList from './pages/ReceiptList';
+import ReceiptDetail from './pages/ReceiptDetail';
 import ReceiptForm from './pages/ReceiptForm';
 import TransactionList from './pages/TransactionList';
+import PayeeList from './pages/PayeeList';
 import PaymentRequestList from './pages/PaymentRequestList';
+import PaymentRequestDetail from './pages/PaymentRequestDetail';
 import PaymentRequestForm from './pages/PaymentRequestForm';
+import ReimbursementList from './pages/ReimbursementList';
+import ReimbursementForm from './pages/ReimbursementForm';
+import ReimbursementDetail from './pages/ReimbursementDetail';
 import RecurringList from './pages/RecurringList';
+import ShareholderList from './pages/ShareholderList';
+import ShareholderDetail from './pages/ShareholderDetail';
+import MonthlyCloseList from './pages/MonthlyCloseList';
+import MonthlyCloseDetail from './pages/MonthlyCloseDetail';
 import Reports from './pages/Reports';
+import UserList from './pages/UserList';
+import SettingsPage from './pages/Settings';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -68,14 +80,28 @@ export default function App() {
               <Route path="invoices" element={<InvoiceList />} />
               <Route path="invoices/new" element={<InvoiceForm />} />
               <Route path="invoices/:id" element={<InvoiceDetail />} />
+              <Route path="invoices/:id/edit" element={<InvoiceForm />} />
               <Route path="receipts" element={<ReceiptList />} />
               <Route path="receipts/new" element={<ReceiptForm />} />
+              <Route path="receipts/:id" element={<ReceiptDetail />} />
               <Route path="transactions" element={<TransactionList />} />
+              <Route path="payees" element={<PayeeList />} />
               <Route path="payment-requests" element={<PaymentRequestList />} />
               <Route path="payment-requests/new" element={<PaymentRequestForm />} />
+              <Route path="payment-requests/:id" element={<PaymentRequestDetail />} />
+              <Route path="payment-requests/:id/edit" element={<PaymentRequestForm />} />
+              <Route path="reimbursements" element={<ReimbursementList />} />
+              <Route path="reimbursements/new" element={<ReimbursementForm />} />
+              <Route path="reimbursements/:id" element={<ReimbursementDetail />} />
+              <Route path="reimbursements/:id/edit" element={<ReimbursementForm />} />
               <Route path="recurring" element={<RecurringList />} />
+              <Route path="shareholders" element={<ShareholderList />} />
+              <Route path="shareholders/:id" element={<ShareholderDetail />} />
+              <Route path="monthly-close" element={<MonthlyCloseList />} />
+              <Route path="monthly-close/:year/:month" element={<MonthlyCloseDetail />} />
               <Route path="reports" element={<Reports />} />
-              <Route path="settings" element={<Placeholder title="Settings" />} />
+              <Route path="users" element={<UserList />} />
+              <Route path="settings" element={<SettingsPage />} />
             </Route>
           </Routes>
         </HashRouter>

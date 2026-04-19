@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { Transaction } from '../models/Transaction.js';
 import { Invoice } from '../models/Invoice.js';
+import { PaymentRequest } from '../models/PaymentRequest.js';
 import { RecurringItem } from '../models/RecurringItem.js';
 import { authMiddleware } from '../middleware/auth.js';
 
@@ -65,14 +66,24 @@ router.get('/cash-flow', async (req, res, next) => {
 });
 
 // Accounts receivable
-router.get('/accounts-receivable', async (_req, res, next) => {
+router.get('/accounts-receivable', async (req, res, next) => {
   try {
-    const invoices = await Invoice.find({ status: { $in: ['unpaid', 'partial'] } })
-      .populate('client', 'name')
-      .sort({ createdAt: -1 });
+    const filter: Record<string, unknown> = { status: { $in: ['unpaid', 'partial'] } };
 
+    if (req.query.startDate || req.query.endDate) {
+      const dueDateFilter: Record<string, Date> = {};
+      if (req.query.startDate) dueDateFilter.$gte = new Date(req.query.startDate as string);
+      if (req.query.endDate) dueDateFilter.$lte = new Date(req.query.endDate as string);
+      filter.dueDate = dueDateFilter;
+    }
+
+    const invoices = await Invoice.find(filter)
+      .populate('client', 'name')
+      .sort({ dueDate: 1, createdAt: -1 });
+
+    const now = new Date();
     const totalDue = invoices.reduce((sum, inv) => sum + inv.amountDue, 0);
-    const overdue = invoices.filter((inv) => inv.dueDate && new Date(inv.dueDate) < new Date());
+    const overdue = invoices.filter((inv) => inv.dueDate && new Date(inv.dueDate) < now);
 
     res.json({
       invoices,
@@ -164,6 +175,88 @@ router.get('/income-statement', async (req, res, next) => {
       income,
       expenses,
       totals: { income: totalIncome, expense: totalExpense, net: totalIncome - totalExpense },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Income statement drill-down: transactions for a specific type+category
+router.get('/income-statement/transactions', async (req, res, next) => {
+  try {
+    const { type, category } = req.query;
+    if (!type || !category) {
+      res.status(400).json({ error: 'type and category are required' });
+      return;
+    }
+
+    const startDate = req.query.startDate
+      ? new Date(req.query.startDate as string)
+      : new Date(new Date().getFullYear(), 0, 1);
+    const endDate = req.query.endDate
+      ? new Date(req.query.endDate as string)
+      : new Date();
+
+    const transactions = await Transaction.find({
+      type: type as string,
+      category: category as string,
+      date: { $gte: startDate, $lte: endDate },
+    })
+      .populate('invoice', 'invoiceNumber')
+      .populate('paymentRequest', 'requestNumber')
+      .sort({ date: -1 });
+
+    res.json(transactions);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Accounts payable (pending + approved payment requests = committed but unpaid outflows)
+router.get('/accounts-payable', async (req, res, next) => {
+  try {
+    const filter: Record<string, unknown> = { status: { $in: ['pending', 'approved'] } };
+
+    if (req.query.startDate || req.query.endDate) {
+      const dateFilter: Record<string, Date> = {};
+      if (req.query.startDate) dateFilter.$gte = new Date(req.query.startDate as string);
+      if (req.query.endDate) dateFilter.$lte = new Date(req.query.endDate as string);
+      filter.createdAt = dateFilter;
+    }
+
+    const requests = await PaymentRequest.find(filter)
+      .populate('items.payee', 'name')
+      .populate('createdBy', 'name')
+      .sort({ createdAt: -1 });
+
+    const totalAmount = requests.reduce((s, r) => s + r.totalAmount, 0);
+    const pendingRequests = requests.filter((r) => r.status === 'pending');
+    const approvedRequests = requests.filter((r) => r.status === 'approved');
+    const pendingAmount = pendingRequests.reduce((s, r) => s + r.totalAmount, 0);
+    const approvedAmount = approvedRequests.reduce((s, r) => s + r.totalAmount, 0);
+
+    const categoryMap: Record<string, number> = {};
+    for (const req of requests) {
+      for (const item of req.items) {
+        const cat = item.category || 'Uncategorized';
+        categoryMap[cat] = (categoryMap[cat] || 0) + item.amount;
+      }
+    }
+    const categoryBreakdown = Object.entries(categoryMap)
+      .map(([category, total]) => ({ category, total }))
+      .sort((a, b) => b.total - a.total);
+
+    res.json({
+      requests,
+      summary: {
+        totalAmount,
+        count: requests.length,
+        pendingAmount,
+        pendingCount: pendingRequests.length,
+        approvedAmount,
+        approvedCount: approvedRequests.length,
+      },
+      categoryBreakdown,
     });
   } catch (error) {
     next(error);

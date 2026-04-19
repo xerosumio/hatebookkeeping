@@ -18,7 +18,7 @@ const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
   name: z.string().min(1),
-  role: z.enum(['admin', 'maker', 'checker']),
+  role: z.enum(['admin', 'user']),
 });
 
 const changePasswordSchema = z.object({
@@ -45,6 +45,9 @@ router.post('/login', async (req, res, next) => {
         name: user.name,
         role: user.role,
         mustChangePassword: user.mustChangePassword,
+        bankName: user.bankName,
+        bankAccountNumber: user.bankAccountNumber,
+        fpsPhone: user.fpsPhone,
       },
     });
   } catch (error) {
@@ -94,6 +97,9 @@ router.get('/me', authMiddleware, (req: AuthRequest, res) => {
     name: user.name,
     role: user.role,
     mustChangePassword: user.mustChangePassword,
+    bankName: user.bankName,
+    bankAccountNumber: user.bankAccountNumber,
+    fpsPhone: user.fpsPhone,
   });
 });
 

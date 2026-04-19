@@ -1,19 +1,26 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
-import { useCreateTransaction } from '../api/hooks';
-import { decimalToCents } from '../utils/money';
+import { useCreateTransaction, useUpdateTransaction, useSettings } from '../api/hooks';
+import { decimalToCents, centsToDecimal } from '../utils/money';
+import type { Transaction } from '../types';
 
-const categories = [
-  'revenue', 'salary', 'reimbursement', 'rent', 'utilities',
-  'software_subscription', 'professional_fees', 'tax', 'other',
-];
+interface Props {
+  onDone: () => void;
+  existing?: Transaction | null;
+}
 
-export default function TransactionForm({ onDone }: { onDone: () => void }) {
+export default function TransactionForm({ onDone, existing }: Props) {
   const createTransaction = useCreateTransaction();
+  const updateTransaction = useUpdateTransaction();
+  const { data: settings } = useSettings();
+  const isEdit = !!existing;
+
+  const categories = (settings?.chartOfAccounts || []).filter((a) => a.active);
+
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     type: 'expense' as 'income' | 'expense',
-    category: 'other',
+    category: '',
     description: '',
     amount: '',
     bankReference: '',
@@ -21,22 +28,44 @@ export default function TransactionForm({ onDone }: { onDone: () => void }) {
   });
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    if (existing) {
+      setForm({
+        date: existing.date.slice(0, 10),
+        type: existing.type,
+        category: existing.category,
+        description: existing.description,
+        amount: String(centsToDecimal(existing.amount)),
+        bankReference: existing.bankReference || '',
+        bankAccount: existing.bankAccount || '',
+      });
+    }
+  }, [existing]);
+
+  const isPending = createTransaction.isPending || updateTransaction.isPending;
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError('');
+    const payload = {
+      ...form,
+      amount: decimalToCents(Number(form.amount)),
+    };
     try {
-      await createTransaction.mutateAsync({
-        ...form,
-        amount: decimalToCents(Number(form.amount)),
-      });
+      if (isEdit) {
+        await updateTransaction.mutateAsync({ id: existing!._id, data: payload });
+      } else {
+        await createTransaction.mutateAsync(payload);
+      }
       onDone();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to create transaction');
+      setError(err.response?.data?.error || `Failed to ${isEdit ? 'update' : 'create'} transaction`);
     }
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
+      <h3 className="text-sm font-semibold text-gray-700">{isEdit ? 'Edit Transaction' : 'New Transaction'}</h3>
       {error && <div className="bg-red-50 text-red-600 text-sm p-2 rounded">{error}</div>}
       <div className="grid grid-cols-4 gap-3">
         <div>
@@ -67,9 +96,12 @@ export default function TransactionForm({ onDone }: { onDone: () => void }) {
             onChange={(e) => setForm({ ...form, category: e.target.value })}
             className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
           >
-            {categories.map((c) => (
-              <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>
-            ))}
+            <option value="">Select...</option>
+            {categories
+              .filter((a) => a.type === form.type)
+              .map((a) => (
+                <option key={a.code} value={a.name}>{a.name}</option>
+              ))}
           </select>
         </div>
         <div>
@@ -85,14 +117,24 @@ export default function TransactionForm({ onDone }: { onDone: () => void }) {
           />
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-3">
-        <div className="col-span-1">
+      <div className="grid grid-cols-4 gap-3">
+        <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
           <input
             type="text"
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
             required
+            className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Bank Account</label>
+          <input
+            type="text"
+            value={form.bankAccount}
+            onChange={(e) => setForm({ ...form, bankAccount: e.target.value })}
+            placeholder="e.g. HSBC HKD"
             className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
           />
         </div>
@@ -105,27 +147,20 @@ export default function TransactionForm({ onDone }: { onDone: () => void }) {
             className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
           />
         </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Bank Account</label>
-          <input
-            type="text"
-            value={form.bankAccount}
-            onChange={(e) => setForm({ ...form, bankAccount: e.target.value })}
-            className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
-          />
+        <div className="flex items-end">
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={isPending}
+              className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isPending ? 'Saving...' : isEdit ? 'Save' : 'Add'}
+            </button>
+            <button type="button" onClick={onDone} className="text-sm text-gray-500 hover:underline">
+              Cancel
+            </button>
+          </div>
         </div>
-      </div>
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={createTransaction.isPending}
-          className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
-        >
-          {createTransaction.isPending ? 'Saving...' : 'Add'}
-        </button>
-        <button type="button" onClick={onDone} className="text-sm text-gray-500 hover:underline">
-          Cancel
-        </button>
       </div>
     </form>
   );

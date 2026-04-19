@@ -1,12 +1,17 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import path from 'path';
+import fs from 'fs';
 import { renderToBuffer } from '@react-pdf/renderer';
 import React from 'react';
 import { Quotation } from '../models/Quotation.js';
+import { Entity } from '../models/Entity.js';
 import { getNextSequence } from '../models/Counter.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { QuotationPDF } from '../utils/pdf/QuotationPDF.js';
+import { getSettings } from '../models/Settings.js';
+import { env } from '../config/env.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -16,6 +21,7 @@ const lineItemSchema = z.object({
   quantity: z.number().positive(),
   unitPrice: z.number().int(),
   amount: z.number().int(),
+  waived: z.boolean().optional().default(false),
 });
 
 const milestoneSchema = z.object({
@@ -26,11 +32,13 @@ const milestoneSchema = z.object({
 });
 
 const quotationSchema = z.object({
+  entity: z.string().min(1),
   client: z.string().min(1),
   title: z.string().min(1),
   lineItems: z.array(lineItemSchema).min(1),
   subtotal: z.number().int(),
   discount: z.number().int().optional().default(0),
+  discountPercent: z.number().min(0).max(100).optional().default(0),
   total: z.number().int(),
   termsAndConditions: z.string().optional().default(''),
   paymentSchedule: z.array(milestoneSchema).optional().default([]),
@@ -53,6 +61,7 @@ router.get('/', async (req, res, next) => {
 
     const quotations = await Quotation.find(filter)
       .populate('client', 'name')
+      .populate('entity', 'code name')
       .sort({ createdAt: -1 });
     res.json(quotations);
   } catch (error) {
@@ -63,7 +72,9 @@ router.get('/', async (req, res, next) => {
 router.post('/', async (req: AuthRequest, res, next) => {
   try {
     const data = quotationSchema.parse(req.body);
-    const quotationNumber = await getNextSequence('quo');
+    const entity = await Entity.findById(data.entity);
+    if (!entity) throw new AppError(400, 'Entity not found');
+    const quotationNumber = await getNextSequence('quo', entity.code);
     const quotation = await Quotation.create({
       ...data,
       quotationNumber,
@@ -78,7 +89,8 @@ router.post('/', async (req: AuthRequest, res, next) => {
 router.get('/:id', async (req, res, next) => {
   try {
     const quotation = await Quotation.findById(req.params.id)
-      .populate('client');
+      .populate('client')
+      .populate('entity');
     if (!quotation) throw new AppError(404, 'Quotation not found');
     res.json(quotation);
   } catch (error) {
@@ -128,11 +140,33 @@ router.patch('/:id/status', async (req, res, next) => {
 
 router.get('/:id/pdf', async (req, res, next) => {
   try {
-    const quotation = await Quotation.findById(req.params.id).populate('client');
+    const quotation = await Quotation.findById(req.params.id).populate('client').populate('entity');
     if (!quotation) throw new AppError(404, 'Quotation not found');
 
+    const entityObj = (quotation as any).entity;
+    const settings = await getSettings();
+    const company = entityObj
+      ? { companyName: entityObj.name, companyAddress: entityObj.address, companyPhone: entityObj.phone, companyEmail: entityObj.email, companyWebsite: entityObj.website, logoUrl: entityObj.logoUrl, companyChopUrl: entityObj.companyChopUrl, signatureUrl: entityObj.signatureUrl, bankAccounts: entityObj.bankAccounts }
+      : { ...settings.toObject() } as any;
+    for (const field of ['logoUrl', 'companyChopUrl', 'signatureUrl'] as const) {
+      if (company[field]) {
+        const file = company[field].replace(/^\/api\/uploads\//, '');
+        const abs = path.resolve(env.uploadDir, file);
+        company[field] = fs.existsSync(abs) && fs.statSync(abs).size > 0 ? abs : '';
+      }
+    }
+    const q = quotation as any;
+    for (const field of ['companyChopUrl', 'signatureUrl'] as const) {
+      if (q[field] && q[field].startsWith('/api/uploads/')) {
+        const file = q[field].replace(/^\/api\/uploads\//, '');
+        const abs = path.resolve(env.uploadDir, file);
+        q[field] = fs.existsSync(abs) && fs.statSync(abs).size > 0 ? abs : '';
+      }
+    }
+    if (!q.companyChopUrl && company.companyChopUrl) q.companyChopUrl = company.companyChopUrl;
+    if (!q.signatureUrl && company.signatureUrl) q.signatureUrl = company.signatureUrl;
     const buffer = await renderToBuffer(
-      React.createElement(QuotationPDF, { quotation: quotation as any }) as any,
+      React.createElement(QuotationPDF, { quotation: q, company }) as any,
     );
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${quotation.quotationNumber}.pdf"`);

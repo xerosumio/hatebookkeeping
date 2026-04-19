@@ -8,7 +8,7 @@ interface Props {
 }
 
 export default function LineItemEditor({ items, onChange }: Props) {
-  function updateItem(index: number, field: keyof LineItem, value: string | number) {
+  function updateItem(index: number, field: keyof LineItem, value: string | number | boolean) {
     const updated = [...items];
     const item = { ...updated[index] };
 
@@ -16,10 +16,17 @@ export default function LineItemEditor({ items, onChange }: Props) {
       item.description = value as string;
     } else if (field === 'quantity') {
       item.quantity = Number(value) || 0;
-      item.amount = decimalToCents(item.quantity * centsToDecimal(item.unitPrice));
+      item.amount = item.waived ? 0 : decimalToCents(item.quantity * centsToDecimal(item.unitPrice));
     } else if (field === 'unitPrice') {
       item.unitPrice = decimalToCents(Number(value) || 0);
-      item.amount = decimalToCents(item.quantity * (Number(value) || 0));
+      item.amount = item.waived ? 0 : decimalToCents(item.quantity * (Number(value) || 0));
+    } else if (field === 'waived') {
+      item.waived = value as boolean;
+      if (item.waived) {
+        item.amount = 0;
+      } else {
+        item.amount = decimalToCents(item.quantity * centsToDecimal(item.unitPrice));
+      }
     }
 
     updated[index] = item;
@@ -27,7 +34,7 @@ export default function LineItemEditor({ items, onChange }: Props) {
   }
 
   function addItem() {
-    onChange([...items, { description: '', quantity: 1, unitPrice: 0, amount: 0 }]);
+    onChange([...items, { description: '', quantity: 1, unitPrice: 0, amount: 0, waived: false }]);
   }
 
   function removeItem(index: number) {
@@ -73,11 +80,20 @@ export default function LineItemEditor({ items, onChange }: Props) {
               onChange={(e) => updateItem(i, 'unitPrice', e.target.value)}
               min={0}
               step={0.01}
-              className="w-28 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-28 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${item.waived ? 'line-through text-gray-400' : ''}`}
             />
-            <div className="w-28 px-3 py-2 text-sm text-right font-mono text-gray-600">
-              {(centsToDecimal(item.amount)).toLocaleString('en-HK', { minimumFractionDigits: 2 })}
+            <div className={`w-28 px-3 py-2 text-sm text-right font-mono ${item.waived ? 'text-green-600 font-medium' : 'text-gray-600'}`}>
+              {item.waived ? 'WAIVED' : centsToDecimal(item.amount).toLocaleString('en-HK', { minimumFractionDigits: 2 })}
             </div>
+            <label className="flex items-center gap-1 py-2 cursor-pointer select-none" title="Waive fee">
+              <input
+                type="checkbox"
+                checked={!!item.waived}
+                onChange={(e) => updateItem(i, 'waived', e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span className="text-xs text-gray-500">Waive</span>
+            </label>
             <button
               type="button"
               onClick={() => removeItem(i)}

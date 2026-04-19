@@ -1,6 +1,45 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from './client';
-import type { Client, Quotation, Invoice, Receipt, Transaction, PaymentRequest, RecurringItem } from '../types';
+import type {
+  Client, Quotation, Invoice, Receipt, Transaction, Payee, PaymentRequest, RecurringItem,
+  Settings, CashFlowReport, AccountsReceivableReport, IncomeStatementReport, AccountsPayableReport,
+  User, Reimbursement, Entity, Shareholder, EquityTransaction, MonthlyClose,
+} from '../types';
+
+// Users (admin-only)
+interface UserFromApi { _id: string; email: string; name: string; role: string; active: boolean; bankName?: string; bankAccountNumber?: string; fpsPhone?: string; createdAt: string }
+export function useUsers() {
+  return useQuery({
+    queryKey: ['users'],
+    queryFn: () => api.get<UserFromApi[]>('/users').then((r) => r.data),
+  });
+}
+
+export function useCreateUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { email: string; password: string; name: string; role: string }) =>
+      api.post('/auth/register', data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  });
+}
+
+export function useUpdateUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { name?: string; email?: string; role?: string; active?: boolean; password?: string; bankName?: string; bankAccountNumber?: string; fpsPhone?: string } }) =>
+      api.put(`/users/${id}`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  });
+}
+
+export function useDeactivateUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/users/${id}`).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+  });
+}
 
 // Clients
 export function useClients(search?: string) {
@@ -111,6 +150,15 @@ export function useCreateInvoice() {
   });
 }
 
+export function useUpdateInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<Invoice> }) =>
+      api.put<Invoice>(`/invoices/${id}`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['invoices'] }),
+  });
+}
+
 export function useConvertQuotationToInvoices() {
   const qc = useQueryClient();
   return useMutation({
@@ -168,11 +216,54 @@ export function useCreateTransaction() {
   });
 }
 
+export function useUpdateTransaction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<Transaction> }) =>
+      api.put<Transaction>(`/transactions/${id}`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['transactions'] }),
+  });
+}
+
 export function useDeleteTransaction() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.delete(`/transactions/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['transactions'] }),
+  });
+}
+
+// Payees
+export function usePayees() {
+  return useQuery({
+    queryKey: ['payees'],
+    queryFn: () => api.get<Payee[]>('/payees').then((r) => r.data),
+  });
+}
+
+export function useCreatePayee() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<Payee>) =>
+      api.post<Payee>('/payees', data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['payees'] }),
+  });
+}
+
+export function useUpdatePayee() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<Payee> }) =>
+      api.put<Payee>(`/payees/${id}`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['payees'] }),
+  });
+}
+
+export function useDeletePayee() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/payees/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['payees'] }),
   });
 }
 
@@ -197,6 +288,32 @@ export function useCreatePaymentRequest() {
   return useMutation({
     mutationFn: (data: Partial<PaymentRequest>) =>
       api.post<PaymentRequest>('/payment-requests', data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['paymentRequests'] }),
+  });
+}
+
+export function useUpdatePaymentRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) =>
+      api.put<PaymentRequest>(`/payment-requests/${id}`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['paymentRequests'] }),
+  });
+}
+
+export function useDeletePaymentRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/payment-requests/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['paymentRequests'] }),
+  });
+}
+
+export function useNotifyPaymentRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, emails }: { id: string; emails: string[] }) =>
+      api.post(`/payment-requests/${id}/notify`, { emails }).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['paymentRequests'] }),
   });
 }
@@ -248,6 +365,15 @@ export function useCreateRecurringItem() {
   });
 }
 
+export function useUpdateRecurringItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<RecurringItem> }) =>
+      api.put<RecurringItem>(`/recurring/${id}`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['recurring'] }),
+  });
+}
+
 export function useDeleteRecurringItem() {
   const qc = useQueryClient();
   return useMutation({
@@ -263,7 +389,39 @@ export function useGenerateRecurring() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['recurring'] });
       qc.invalidateQueries({ queryKey: ['transactions'] });
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+      qc.invalidateQueries({ queryKey: ['paymentRequests'] });
     },
+  });
+}
+
+export function useGenerateRecurringInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api.post<{ invoiceId: string; invoiceNumber: string }>(`/recurring/${id}/generate-invoice`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['recurring'] });
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+      qc.invalidateQueries({ queryKey: ['transactions'] });
+    },
+  });
+}
+
+// Settings
+export function useSettings() {
+  return useQuery({
+    queryKey: ['settings'],
+    queryFn: () => api.get<Settings>('/settings').then((r) => r.data),
+  });
+}
+
+export function useUpdateSettings() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<Settings>) =>
+      api.put<Settings>('/settings', data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings'] }),
   });
 }
 
@@ -271,14 +429,25 @@ export function useGenerateRecurring() {
 export function useCashFlow(year: number) {
   return useQuery({
     queryKey: ['reports', 'cash-flow', year],
-    queryFn: () => api.get('/reports/cash-flow', { params: { year } }).then((r) => r.data),
+    queryFn: () => api.get<CashFlowReport>('/reports/cash-flow', { params: { year } }).then((r) => r.data),
   });
 }
 
-export function useAccountsReceivable() {
+export function useAccountsReceivable(startDate?: string, endDate?: string) {
   return useQuery({
-    queryKey: ['reports', 'accounts-receivable'],
-    queryFn: () => api.get('/reports/accounts-receivable').then((r) => r.data),
+    queryKey: ['reports', 'accounts-receivable', startDate, endDate],
+    queryFn: () => api.get<AccountsReceivableReport>('/reports/accounts-receivable', {
+      params: { ...(startDate ? { startDate } : {}), ...(endDate ? { endDate } : {}) },
+    }).then((r) => r.data),
+  });
+}
+
+export function useAccountsPayable(startDate?: string, endDate?: string) {
+  return useQuery({
+    queryKey: ['reports', 'accounts-payable', startDate, endDate],
+    queryFn: () => api.get<AccountsPayableReport>('/reports/accounts-payable', {
+      params: { ...(startDate ? { startDate } : {}), ...(endDate ? { endDate } : {}) },
+    }).then((r) => r.data),
   });
 }
 
@@ -293,8 +462,208 @@ export function useIncomeStatement(startDate?: string, endDate?: string) {
   return useQuery({
     queryKey: ['reports', 'income-statement', startDate, endDate],
     queryFn: () =>
-      api.get('/reports/income-statement', { params: { startDate, endDate } }).then((r) => r.data),
+      api.get<IncomeStatementReport>('/reports/income-statement', { params: { startDate, endDate } }).then((r) => r.data),
   });
+}
+
+export function useIncomeStatementTransactions(
+  type: string, category: string, startDate?: string, endDate?: string, enabled = false,
+) {
+  return useQuery({
+    queryKey: ['reports', 'income-statement-txns', type, category, startDate, endDate],
+    queryFn: () =>
+      api.get<Transaction[]>('/reports/income-statement/transactions', {
+        params: { type, category, startDate, endDate },
+      }).then((r) => r.data),
+    enabled,
+  });
+}
+
+// Reimbursements
+export function useReimbursements() {
+  return useQuery({
+    queryKey: ['reimbursements'],
+    queryFn: () => api.get<Reimbursement[]>('/reimbursements').then((r) => r.data),
+  });
+}
+
+export function useReimbursement(id: string) {
+  return useQuery({
+    queryKey: ['reimbursements', id],
+    queryFn: () => api.get<Reimbursement>(`/reimbursements/${id}`).then((r) => r.data),
+    enabled: !!id,
+  });
+}
+
+export function useCreateReimbursement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { title: string; onBehalfOfUserId?: string; items: any[]; notes?: string }) =>
+      api.post<Reimbursement>('/reimbursements', data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['reimbursements'] });
+      qc.invalidateQueries({ queryKey: ['payment-requests'] });
+    },
+  });
+}
+
+export function useUpdateReimbursement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) =>
+      api.put<Reimbursement>(`/reimbursements/${id}`, data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['reimbursements'] });
+      qc.invalidateQueries({ queryKey: ['payment-requests'] });
+    },
+  });
+}
+
+export function useDeleteReimbursement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/reimbursements/${id}`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['reimbursements'] });
+      qc.invalidateQueries({ queryKey: ['payment-requests'] });
+    },
+  });
+}
+
+// Entities
+export function useEntities() {
+  return useQuery({
+    queryKey: ['entities'],
+    queryFn: () => api.get<Entity[]>('/entities').then((r) => r.data),
+  });
+}
+
+export function useEntity(id: string) {
+  return useQuery({
+    queryKey: ['entities', id],
+    queryFn: () => api.get<Entity>(`/entities/${id}`).then((r) => r.data),
+    enabled: !!id,
+  });
+}
+
+export function useCreateEntity() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Partial<Entity>) =>
+      api.post<Entity>('/entities', data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['entities'] }),
+  });
+}
+
+export function useUpdateEntity() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<Entity> }) =>
+      api.put<Entity>(`/entities/${id}`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['entities'] }),
+  });
+}
+
+// Shareholders
+export function useShareholders() {
+  return useQuery({
+    queryKey: ['shareholders'],
+    queryFn: () => api.get<Shareholder[]>('/shareholders').then((r) => r.data),
+  });
+}
+
+export function useShareholder(id: string) {
+  return useQuery({
+    queryKey: ['shareholders', id],
+    queryFn: () => api.get<{ shareholder: Shareholder; transactions: EquityTransaction[] }>(`/shareholders/${id}`).then((r) => r.data),
+    enabled: !!id,
+  });
+}
+
+export function useShareholderSummary() {
+  return useQuery({
+    queryKey: ['shareholders', 'summary'],
+    queryFn: () => api.get('/shareholders/summary').then((r) => r.data),
+  });
+}
+
+export function useCreateShareholder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { user: string; name: string; sharePercent: number }) =>
+      api.post<Shareholder>('/shareholders', data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['shareholders'] }),
+  });
+}
+
+export function useUpdateShareholder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { name?: string; sharePercent?: number; active?: boolean } }) =>
+      api.put<Shareholder>(`/shareholders/${id}`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['shareholders'] }),
+  });
+}
+
+export function useInvestShareholder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { amount: number; date: string; description?: string } }) =>
+      api.post(`/shareholders/${id}/invest`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['shareholders'] }),
+  });
+}
+
+// Monthly Close
+export function useMonthlyCloses() {
+  return useQuery({
+    queryKey: ['monthlyClose'],
+    queryFn: () => api.get<MonthlyClose[]>('/monthly-close').then((r) => r.data),
+  });
+}
+
+export function useMonthlyClose(year: number, month: number) {
+  return useQuery({
+    queryKey: ['monthlyClose', year, month],
+    queryFn: () => api.get<MonthlyClose>(`/monthly-close/${year}/${month}`).then((r) => r.data),
+    enabled: year > 0 && month > 0,
+  });
+}
+
+export function usePreviewMonthlyClose() {
+  return useMutation({
+    mutationFn: ({ year, month }: { year: number; month: number }) =>
+      api.post<MonthlyClose>(`/monthly-close/${year}/${month}/preview`).then((r) => r.data),
+  });
+}
+
+export function useFinalizeMonthlyClose() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ year, month, notes }: { year: number; month: number; notes?: string }) =>
+      api.post<MonthlyClose>(`/monthly-close/${year}/${month}/finalize`, { notes }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['monthlyClose'] });
+      qc.invalidateQueries({ queryKey: ['shareholders'] });
+    },
+  });
+}
+
+export function useCreateCollectionRequests() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ year, month }: { year: number; month: number }) =>
+      api.post(`/monthly-close/${year}/${month}/create-collection-requests`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['paymentRequests'] });
+    },
+  });
+}
+
+export async function fetchPdfBlob(url: string): Promise<string> {
+  const response = await api.get(url, { responseType: 'blob' });
+  const blob = new Blob([response.data], { type: 'application/pdf' });
+  return URL.createObjectURL(blob);
 }
 
 export function uploadFile(file: File): Promise<string> {

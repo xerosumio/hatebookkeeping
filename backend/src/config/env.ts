@@ -8,4 +8,7 @@ export const env = {
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
   uploadDir: process.env.UPLOAD_DIR || './uploads',
   nodeEnv: process.env.NODE_ENV || 'development',
+  emailApiUrl: process.env.EMAIL_API_URL || 'https://zog8wc804808wcgosgsgcs00.prod.wellplay.io',
+  emailApiKey: process.env.EMAIL_API_KEY || '',
+  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
 };

@@ -10,10 +10,7 @@ router.use(authMiddleware);
 const transactionSchema = z.object({
   date: z.string(),
   type: z.enum(['income', 'expense']),
-  category: z.enum([
-    'revenue', 'salary', 'reimbursement', 'rent', 'utilities',
-    'software_subscription', 'professional_fees', 'tax', 'other',
-  ]),
+  category: z.string().min(1),
   description: z.string().min(1),
   amount: z.number().int().positive(),
   bankReference: z.string().optional().default(''),
@@ -41,7 +38,7 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-router.post('/', roleGuard('admin', 'maker'), async (req: AuthRequest, res, next) => {
+router.post('/', roleGuard('admin', 'user'), async (req: AuthRequest, res, next) => {
   try {
     const data = transactionSchema.parse(req.body);
     const transaction = await Transaction.create({
@@ -65,7 +62,7 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-router.put('/:id', roleGuard('admin', 'maker'), async (req, res, next) => {
+router.put('/:id', roleGuard('admin', 'user'), async (req, res, next) => {
   try {
     const data = transactionSchema.parse(req.body);
     const transaction = await Transaction.findByIdAndUpdate(
@@ -80,7 +77,7 @@ router.put('/:id', roleGuard('admin', 'maker'), async (req, res, next) => {
   }
 });
 
-router.delete('/:id', roleGuard('admin', 'maker'), async (req, res, next) => {
+router.delete('/:id', roleGuard('admin', 'user'), async (req, res, next) => {
   try {
     const transaction = await Transaction.findByIdAndDelete(req.params.id);
     if (!transaction) throw new AppError(404, 'Transaction not found');

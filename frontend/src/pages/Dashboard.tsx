@@ -2,17 +2,27 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { useCashFlow, useAccountsReceivable, useRecurringOverview, usePaymentRequests } from '../api/hooks';
+import { useAuth } from '../contexts/AuthContext';
 import { formatMoney, centsToDecimal } from '../utils/money';
 import type { Client } from '../types';
 
 const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+const statusColors: Record<string, string> = {
+  pending: 'bg-amber-100 text-amber-700',
+  approved: 'bg-blue-100 text-blue-700',
+};
+
 export default function Dashboard() {
-  const [year] = useState(new Date().getFullYear());
+  const currentYear = new Date().getFullYear();
+  const [year, setYear] = useState(currentYear);
+  const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - i);
   const { data: cashFlow } = useCashFlow(year);
   const { data: ar } = useAccountsReceivable();
   const { data: recurring } = useRecurringOverview();
   const { data: pendingRequests } = usePaymentRequests({ status: 'pending' });
+  const { data: approvedRequests } = usePaymentRequests({ status: 'approved' });
+  const { user } = useAuth();
 
   const chartData = cashFlow?.months?.map((m: any) => ({
     name: monthNames[m.month],
@@ -20,9 +30,37 @@ export default function Dashboard() {
     Expense: centsToDecimal(m.expense),
   })) || [];
 
+  const canApprove = user?.role === 'admin';
+  const canExecute = user?.role === 'admin' || user?.role === 'user';
+
+  const actionableItems = [
+    ...(canApprove
+      ? (pendingRequests || []).map((r) => ({ ...r, actionType: 'Review' as const }))
+      : []),
+    ...(canExecute
+      ? (approvedRequests || []).map((r) => ({ ...r, actionType: 'Execute' as const }))
+      : []),
+  ].slice(0, 8);
+
+  const totalPendingCount = (pendingRequests?.length || 0) + (approvedRequests?.length || 0);
+
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-gray-500">Year</label>
+          <select
+            value={year}
+            onChange={(e) => setYear(Number(e.target.value))}
+            className="border border-gray-300 rounded px-3 py-1.5 text-sm"
+          >
+            {yearOptions.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
+      </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-4 mb-8">
@@ -46,10 +84,10 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="text-sm text-gray-500 mb-1">Pending Approvals</div>
-          <div className="text-xl font-bold">{pendingRequests?.length || 0}</div>
-          {(pendingRequests?.length || 0) > 0 && (
-            <Link to="/payment-requests" className="text-xs text-blue-600 hover:underline">View</Link>
+          <div className="text-sm text-gray-500 mb-1">Pending Actions</div>
+          <div className="text-xl font-bold">{totalPendingCount}</div>
+          {totalPendingCount > 0 && (
+            <Link to="/payment-requests" className="text-xs text-blue-600 hover:underline">View all</Link>
           )}
         </div>
       </div>
@@ -68,6 +106,52 @@ export default function Dashboard() {
           </BarChart>
         </ResponsiveContainer>
       </div>
+
+      {/* Actionable Payment Requests */}
+      {actionableItems.length > 0 && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-8">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-semibold">Payment Requests Requiring Action</h2>
+            <Link to="/payment-requests" className="text-xs text-blue-600 hover:underline">View all</Link>
+          </div>
+          <table className="w-full text-sm">
+            <thead className="border-b border-gray-200">
+              <tr>
+                <th className="text-left py-2 font-medium text-gray-600">Number</th>
+                <th className="text-left py-2 font-medium text-gray-600">Description</th>
+                <th className="text-right py-2 font-medium text-gray-600">Total</th>
+                <th className="text-left py-2 font-medium text-gray-600">Status</th>
+                <th className="text-left py-2 font-medium text-gray-600">Action</th>
+                <th className="text-left py-2 font-medium text-gray-600">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {actionableItems.map((r) => (
+                <tr key={r._id} className="border-b border-gray-100">
+                  <td className="py-2">
+                    <Link to={`/payment-requests/${r._id}`} className="text-blue-600 hover:underline font-medium">
+                      {r.requestNumber}
+                    </Link>
+                  </td>
+                  <td className="py-2 text-gray-600 max-w-xs truncate">{r.description || '—'}</td>
+                  <td className="py-2 text-right font-mono tabular-nums">{formatMoney(r.totalAmount)}</td>
+                  <td className="py-2">
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[r.status] || 'bg-gray-100 text-gray-600'}`}>
+                      {r.status}
+                    </span>
+                  </td>
+                  <td className="py-2">
+                    <Link to={`/payment-requests/${r._id}`} className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded hover:bg-blue-100">
+                      {r.actionType}
+                    </Link>
+                  </td>
+                  <td className="py-2 text-gray-400 text-xs">{new Date(r.createdAt).toLocaleDateString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Outstanding Invoices */}
       {ar && ar.invoices.length > 0 && (

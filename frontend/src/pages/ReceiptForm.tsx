@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useInvoice, useCreateReceipt } from '../api/hooks';
-import { formatMoney, decimalToCents } from '../utils/money';
+import { formatMoney, decimalToCents, centsToDecimal } from '../utils/money';
 import type { Client } from '../types';
 
 export default function ReceiptForm() {
@@ -19,21 +19,34 @@ export default function ReceiptForm() {
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
 
+  useEffect(() => {
+    if (invoice && invoice.amountDue > 0 && !amount) {
+      setAmount(String(centsToDecimal(invoice.amountDue)));
+    }
+  }, [invoice]);
+
   const client = invoice && typeof invoice.client === 'object' ? (invoice.client as Client) : null;
+  const amountCents = decimalToCents(Number(amount) || 0);
+  const isFullPayment = invoice && amountCents === invoice.amountDue;
+  const isOverpay = invoice && amountCents > invoice.amountDue;
+
+  function handlePayFull() {
+    if (invoice) setAmount(String(centsToDecimal(invoice.amountDue)));
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError('');
     try {
-      await createReceipt.mutateAsync({
+      const receipt = await createReceipt.mutateAsync({
         invoice: invoiceId,
-        amount: decimalToCents(Number(amount)),
+        amount: amountCents,
         paymentMethod,
         paymentDate,
         bankReference,
         notes,
       });
-      navigate(`/invoices/${invoiceId}`);
+      navigate(`/receipts/${receipt._id}`);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to create receipt');
     }
@@ -46,11 +59,27 @@ export default function ReceiptForm() {
       <h1 className="text-2xl font-bold mb-6">Record Payment</h1>
 
       {invoice && (
-        <div className="bg-gray-50 rounded-lg p-4 mb-6 text-sm space-y-1">
-          <div><span className="text-gray-500">Invoice:</span> {invoice.invoiceNumber}</div>
-          {client && <div><span className="text-gray-500">Client:</span> {client.name}</div>}
-          <div><span className="text-gray-500">Total:</span> {formatMoney(invoice.total)}</div>
-          <div><span className="text-gray-500">Amount Due:</span> <span className="font-bold text-red-600">{formatMoney(invoice.amountDue)}</span></div>
+        <div className="bg-gray-50 rounded-lg p-4 mb-6 text-sm">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+            <div className="text-gray-500">Invoice</div>
+            <div className="font-medium">{invoice.invoiceNumber}</div>
+            {client && (
+              <>
+                <div className="text-gray-500">Client</div>
+                <div className="font-medium">{client.name}</div>
+              </>
+            )}
+            <div className="text-gray-500">Invoice Total</div>
+            <div className="font-medium tabular-nums">{formatMoney(invoice.total)}</div>
+            {invoice.amountPaid > 0 && (
+              <>
+                <div className="text-gray-500">Already Paid</div>
+                <div className="font-medium tabular-nums text-green-600">{formatMoney(invoice.amountPaid)}</div>
+              </>
+            )}
+            <div className="text-gray-500 font-medium">Amount Due</div>
+            <div className="font-bold tabular-nums text-red-600">{formatMoney(invoice.amountDue)}</div>
+          </div>
         </div>
       )}
 
@@ -59,41 +88,59 @@ export default function ReceiptForm() {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Amount (HKD) *</label>
-          <input
-            type="number"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            required
-            min={0.01}
-            step={0.01}
-            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          <div className="flex gap-2">
+            <input
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              required
+              min={0.01}
+              step={0.01}
+              className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            {invoice && !isFullPayment && (
+              <button
+                type="button"
+                onClick={handlePayFull}
+                className="px-3 py-2 text-xs font-medium text-blue-600 border border-blue-300 rounded hover:bg-blue-50 whitespace-nowrap"
+              >
+                Pay Full ({formatMoney(invoice.amountDue)})
+              </button>
+            )}
+          </div>
+          {isFullPayment && (
+            <p className="text-xs text-green-600 mt-1">Full payment — invoice will be marked as paid</p>
+          )}
+          {isOverpay && (
+            <p className="text-xs text-amber-600 mt-1">Amount exceeds balance due ({formatMoney(invoice!.amountDue)})</p>
+          )}
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
-          <select
-            value={paymentMethod}
-            onChange={(e) => setPaymentMethod(e.target.value)}
-            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="bank_transfer">Bank Transfer</option>
-            <option value="cheque">Cheque</option>
-            <option value="cash">Cash</option>
-            <option value="fps">FPS</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Payment Date *</label>
-          <input
-            type="date"
-            value={paymentDate}
-            onChange={(e) => setPaymentDate(e.target.value)}
-            required
-            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+            <select
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value)}
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="bank_transfer">Bank Transfer</option>
+              <option value="cheque">Cheque</option>
+              <option value="cash">Cash</option>
+              <option value="fps">FPS</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Payment Date *</label>
+            <input
+              type="date"
+              value={paymentDate}
+              onChange={(e) => setPaymentDate(e.target.value)}
+              required
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
         </div>
 
         <div>

@@ -1,0 +1,281 @@
+import { Router } from 'express';
+import { z } from 'zod';
+import { MonthlyClose } from '../models/MonthlyClose.js';
+import { Transaction } from '../models/Transaction.js';
+import { Shareholder } from '../models/Shareholder.js';
+import { EquityTransaction } from '../models/EquityTransaction.js';
+import { Payee } from '../models/Payee.js';
+import { PaymentRequest } from '../models/PaymentRequest.js';
+import { getNextSequence } from '../models/Counter.js';
+import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { AppError } from '../middleware/errorHandler.js';
+
+const router = Router();
+router.use(authMiddleware);
+
+async function computeMonthlyFigures(year: number, month: number) {
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 1);
+
+  const results = await Transaction.aggregate([
+    { $match: { date: { $gte: startDate, $lt: endDate } } },
+    { $group: { _id: '$type', total: { $sum: '$amount' } } },
+  ]);
+
+  let totalIncome = 0;
+  let totalExpense = 0;
+  for (const r of results) {
+    if (r._id === 'income') totalIncome = r.total;
+    if (r._id === 'expense') totalExpense = r.total;
+  }
+
+  return { totalIncome, totalExpense, netProfit: totalIncome - totalExpense };
+}
+
+function computeDistribution(netProfit: number, shareholders: Array<{ _id: any; sharePercent: number }>) {
+  const isLoss = netProfit < 0;
+  let shareholderPool = 0;
+  let companyReserve = 0;
+  let staffReserve = 0;
+
+  if (!isLoss) {
+    shareholderPool = Math.round(netProfit * 0.75);
+    companyReserve = Math.round(netProfit * 0.20);
+    staffReserve = netProfit - shareholderPool - companyReserve;
+  } else {
+    shareholderPool = netProfit; // full loss covered by shareholders
+  }
+
+  const distributions = shareholders.map((sh) => ({
+    shareholder: sh._id,
+    sharePercent: sh.sharePercent,
+    amount: Math.round(Math.abs(shareholderPool) * sh.sharePercent / 100) * (isLoss ? -1 : 1),
+  }));
+
+  // Fix rounding: assign remainder to largest shareholder
+  const distributedTotal = distributions.reduce((sum, d) => sum + Math.abs(d.amount), 0);
+  const remainder = Math.abs(shareholderPool) - distributedTotal;
+  if (remainder !== 0 && distributions.length > 0) {
+    const sign = isLoss ? -1 : 1;
+    distributions[0].amount += remainder * sign;
+  }
+
+  return { shareholderPool: Math.abs(shareholderPool), companyReserve, staffReserve, isLoss, distributions };
+}
+
+router.get('/', async (_req, res, next) => {
+  try {
+    const closes = await MonthlyClose.find()
+      .sort({ year: -1, month: -1 })
+      .populate('closedBy', 'name');
+    res.json(closes);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/:year/:month', async (req, res, next) => {
+  try {
+    const year = parseInt(req.params.year as string);
+    const month = parseInt(req.params.month as string);
+    const existing = await MonthlyClose.findOne({ year, month })
+      .populate('distributions.shareholder', 'name sharePercent')
+      .populate('closedBy', 'name');
+    if (existing) return res.json(existing);
+
+    // Return preview
+    const figures = await computeMonthlyFigures(year, month);
+    const shareholders = await Shareholder.find({ active: true }).sort({ sharePercent: -1 });
+    const dist = computeDistribution(figures.netProfit, shareholders);
+
+    res.json({
+      year,
+      month,
+      status: 'draft',
+      ...figures,
+      shareholderDistribution: dist.shareholderPool,
+      companyReserve: dist.companyReserve,
+      staffReserve: dist.staffReserve,
+      isLoss: dist.isLoss,
+      distributions: dist.distributions.map((d) => {
+        const sh = shareholders.find((s) => s._id.equals(d.shareholder));
+        return { ...d, shareholder: { _id: sh!._id, name: sh!.name, sharePercent: sh!.sharePercent } };
+      }),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/:year/:month/preview', async (req, res, next) => {
+  try {
+    const year = parseInt(req.params.year as string);
+    const month = parseInt(req.params.month as string);
+
+    const figures = await computeMonthlyFigures(year, month);
+    const shareholders = await Shareholder.find({ active: true }).sort({ sharePercent: -1 });
+    const dist = computeDistribution(figures.netProfit, shareholders);
+
+    res.json({
+      year,
+      month,
+      ...figures,
+      shareholderDistribution: dist.shareholderPool,
+      companyReserve: dist.companyReserve,
+      staffReserve: dist.staffReserve,
+      isLoss: dist.isLoss,
+      distributions: dist.distributions.map((d) => {
+        const sh = shareholders.find((s) => s._id.equals(d.shareholder));
+        return { ...d, shareholder: { _id: sh!._id, name: sh!.name, sharePercent: sh!.sharePercent } };
+      }),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/:year/:month/finalize', async (req: AuthRequest, res, next) => {
+  try {
+    if (req.user!.role !== 'admin') throw new AppError(403, 'Admin only');
+
+    const year = parseInt(req.params.year as string);
+    const month = parseInt(req.params.month as string);
+    const { notes } = z.object({ notes: z.string().optional().default('') }).parse(req.body);
+
+    const existing = await MonthlyClose.findOne({ year, month });
+    if (existing?.status === 'finalized') throw new AppError(400, 'Month already finalized');
+
+    const figures = await computeMonthlyFigures(year, month);
+    const shareholders = await Shareholder.find({ active: true }).sort({ sharePercent: -1 });
+    const dist = computeDistribution(figures.netProfit, shareholders);
+
+    // Create the MonthlyClose document first (or update draft)
+    const closeDoc = existing
+      ? await MonthlyClose.findByIdAndUpdate(existing._id, {
+          ...figures,
+          shareholderDistribution: dist.shareholderPool,
+          companyReserve: dist.companyReserve,
+          staffReserve: dist.staffReserve,
+          isLoss: dist.isLoss,
+          status: 'finalized',
+          closedBy: req.user!._id,
+          closedAt: new Date(),
+          notes,
+        }, { new: true })
+      : await MonthlyClose.create({
+          year,
+          month,
+          ...figures,
+          shareholderDistribution: dist.shareholderPool,
+          companyReserve: dist.companyReserve,
+          staffReserve: dist.staffReserve,
+          isLoss: dist.isLoss,
+          status: 'finalized',
+          closedBy: req.user!._id,
+          closedAt: new Date(),
+          notes,
+          distributions: [],
+        });
+
+    // Create equity transactions for each shareholder
+    const distributions = [];
+    for (const d of dist.distributions) {
+      const lastTxn = await EquityTransaction.findOne({ shareholder: d.shareholder })
+        .sort({ date: -1, createdAt: -1 });
+      const currentBalance = lastTxn?.balanceAfter ?? 0;
+
+      const eqType = dist.isLoss ? 'collection' : 'distribution';
+      const amount = dist.isLoss ? Math.abs(d.amount) : -Math.abs(d.amount);
+      const balanceAfter = currentBalance + amount;
+
+      const sh = shareholders.find((s) => s._id.equals(d.shareholder));
+      const monthName = new Date(year, month - 1).toLocaleString('en', { month: 'long' });
+      const description = dist.isLoss
+        ? `Capital collection — ${monthName} ${year} loss`
+        : `Profit distribution — ${monthName} ${year}`;
+
+      const eqTxn = await EquityTransaction.create({
+        type: eqType,
+        shareholder: d.shareholder,
+        amount,
+        date: new Date(year, month - 1, 28),
+        description,
+        monthlyClose: closeDoc!._id,
+        balanceAfter,
+        createdBy: req.user!._id,
+      });
+
+      distributions.push({
+        shareholder: d.shareholder,
+        sharePercent: d.sharePercent,
+        amount: d.amount,
+        equityTransaction: eqTxn._id,
+      });
+    }
+
+    closeDoc!.distributions = distributions;
+    await closeDoc!.save();
+
+    const result = await MonthlyClose.findById(closeDoc!._id)
+      .populate('distributions.shareholder', 'name sharePercent')
+      .populate('closedBy', 'name');
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/:year/:month/create-collection-requests', async (req: AuthRequest, res, next) => {
+  try {
+    if (req.user!.role !== 'admin') throw new AppError(403, 'Admin only');
+
+    const year = parseInt(req.params.year as string);
+    const month = parseInt(req.params.month as string);
+
+    const close = await MonthlyClose.findOne({ year, month, status: 'finalized' })
+      .populate('distributions.shareholder');
+    if (!close) throw new AppError(404, 'No finalized close for this month');
+    if (!close.isLoss) throw new AppError(400, 'Month is not a loss — no collection needed');
+
+    const items = [];
+    for (const d of close.distributions) {
+      const sh = d.shareholder as any;
+      let payee = await Payee.findOne({ name: sh.name });
+      if (!payee) {
+        payee = await Payee.create({
+          name: sh.name,
+          bankName: '',
+          bankAccountNumber: '',
+          bankCode: '',
+          notes: 'Shareholder',
+          createdBy: req.user!._id,
+        });
+      }
+      items.push({
+        payee: payee._id,
+        description: `Capital collection — ${sh.name} (${d.sharePercent.toFixed(2)}%)`,
+        amount: Math.abs(d.amount),
+        category: 'Shareholder Collection',
+      });
+    }
+
+    const requestNumber = await getNextSequence('pay');
+    const monthName = new Date(year, month - 1).toLocaleString('en', { month: 'long' });
+    const pr = await PaymentRequest.create({
+      requestNumber,
+      description: `Shareholder capital collection — ${monthName} ${year} loss`,
+      items,
+      totalAmount: items.reduce((sum, i) => sum + i.amount, 0),
+      sourceBankAccount: '',
+      status: 'pending',
+      createdBy: req.user!._id,
+      activityLog: [{ action: 'created', user: req.user!._id, timestamp: new Date() }],
+    });
+
+    res.status(201).json(pr);
+  } catch (error) {
+    next(error);
+  }
+});
+
+export default router;

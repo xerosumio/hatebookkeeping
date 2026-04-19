@@ -2,8 +2,16 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { RecurringItem } from '../models/RecurringItem.js';
 import { Transaction } from '../models/Transaction.js';
+import { Invoice } from '../models/Invoice.js';
+import { PaymentRequest } from '../models/PaymentRequest.js';
+import { User } from '../models/User.js';
+import { getNextSequence } from '../models/Counter.js';
+import { getSettings } from '../models/Settings.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { sendEmail, buildRecurringReminderEmailHtml, buildPaymentRequestEmailHtml, getSubjectForRequest } from '../utils/email.js';
+import { env } from '../config/env.js';
+import { formatMoney } from '../utils/pdf/formatMoney.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -15,16 +23,85 @@ const recurringSchema = z.object({
   amount: z.number().int().positive(),
   frequency: z.enum(['monthly', 'quarterly', 'yearly']),
   client: z.string().optional(),
+  payee: z.string().optional(),
   description: z.string().optional().default(''),
   startDate: z.string(),
   endDate: z.string().optional(),
   active: z.boolean().optional().default(true),
+  dueDay: z.number().int().min(1).max(28).optional().default(1),
+  alertDaysBefore: z.number().int().min(0).optional().default(7),
+  paymentTerms: z.string().optional().default(''),
+  bankAccountInfo: z.string().optional().default(''),
 });
+
+function computeDueDate(paymentTerms: string): Date {
+  const now = new Date();
+  if (paymentTerms === 'net_30') return new Date(now.getTime() + 30 * 86400000);
+  if (paymentTerms === 'net_60') return new Date(now.getTime() + 60 * 86400000);
+  return now;
+}
+
+async function generateInvoiceForItem(
+  item: InstanceType<typeof RecurringItem>,
+  userId: import('mongoose').Types.ObjectId,
+) {
+  const now = new Date();
+  const invoiceNumber = await getNextSequence('inv');
+  const clientName = (item.client && typeof item.client === 'object') ? (item.client as any).name : '';
+  const dueDate = computeDueDate(item.paymentTerms);
+
+  const invoice = await Invoice.create({
+    invoiceNumber,
+    client: item.client,
+    status: 'unpaid',
+    lineItems: [{
+      description: item.name + (item.description ? ` — ${item.description}` : ''),
+      quantity: 1,
+      unitPrice: item.amount,
+      amount: item.amount,
+    }],
+    subtotal: item.amount,
+    discount: 0,
+    total: item.amount,
+    amountPaid: 0,
+    amountDue: item.amount,
+    paymentTerms: item.paymentTerms || '',
+    bankAccountInfo: item.bankAccountInfo || '',
+    dueDate,
+    notes: `Auto-generated from recurring item: ${item.name}`,
+    createdBy: userId,
+  });
+
+  await Transaction.create({
+    date: now,
+    type: 'income',
+    category: item.category,
+    description: `[Recurring] ${item.name}${item.description ? ' — ' + item.description : ''}`,
+    amount: item.amount,
+    invoice: invoice._id,
+    reconciled: false,
+    createdBy: userId,
+  });
+
+  item.lastGeneratedDate = now;
+  item.lastGeneratedInvoice = invoice._id;
+  item.history.push({
+    date: now,
+    action: 'generated_invoice',
+    referenceId: invoice._id,
+    referenceModel: 'Invoice',
+    note: `Invoice ${invoiceNumber} auto-generated`,
+  } as any);
+  await item.save();
+
+  return { invoice, invoiceNumber, clientName };
+}
 
 router.get('/', async (_req, res, next) => {
   try {
     const items = await RecurringItem.find()
       .populate('client', 'name')
+      .populate('payee', 'name')
       .sort({ createdAt: -1 });
     res.json(items);
   } catch (error) {
@@ -35,32 +112,54 @@ router.get('/', async (_req, res, next) => {
 router.post('/', async (req: AuthRequest, res, next) => {
   try {
     const data = recurringSchema.parse(req.body);
+
+    if (data.type === 'income' && !data.client) {
+      throw new AppError(400, 'Client is required for income recurring items');
+    }
+
     const item = await RecurringItem.create({
       ...data,
       startDate: new Date(data.startDate),
       endDate: data.endDate ? new Date(data.endDate) : undefined,
+      client: data.client || undefined,
+      payee: data.payee || undefined,
       createdBy: req.user!._id,
     });
-    res.status(201).json(item);
+
+    const populated = await RecurringItem.findById(item._id)
+      .populate('client', 'name')
+      .populate('payee', 'name');
+    res.status(201).json(populated);
   } catch (error) {
     next(error);
   }
 });
 
-router.put('/:id', async (req, res, next) => {
+router.put('/:id', async (req: AuthRequest, res, next) => {
   try {
     const data = recurringSchema.parse(req.body);
+
+    if (data.type === 'income' && !data.client) {
+      throw new AppError(400, 'Client is required for income recurring items');
+    }
+
     const item = await RecurringItem.findByIdAndUpdate(
       req.params.id,
       {
         ...data,
         startDate: new Date(data.startDate),
         endDate: data.endDate ? new Date(data.endDate) : undefined,
+        client: data.client || null,
+        payee: data.payee || null,
       },
       { new: true },
     );
     if (!item) throw new AppError(404, 'Recurring item not found');
-    res.json(item);
+
+    const populated = await RecurringItem.findById(item._id)
+      .populate('client', 'name')
+      .populate('payee', 'name');
+    res.json(populated);
   } catch (error) {
     next(error);
   }
@@ -76,7 +175,6 @@ router.delete('/:id', async (req, res, next) => {
   }
 });
 
-// Generate transactions for current month
 router.post('/generate', async (req: AuthRequest, res, next) => {
   try {
     const now = new Date();
@@ -87,14 +185,18 @@ router.post('/generate', async (req: AuthRequest, res, next) => {
       active: true,
       startDate: { $lte: monthEnd },
       $or: [{ endDate: null }, { endDate: { $gte: monthStart } }],
-    });
+    }).populate('client', 'name').populate('payee', 'name');
 
-    const generated = [];
+    const settings = await getSettings();
+    const companyName = settings.companyName || 'HateBookkeeping';
+    const admins = await User.find({ role: 'admin', active: true }).select('email name');
+    const adminEmails = admins.map((a) => a.email).filter(Boolean);
+
+    const results: Array<{ itemName: string; type: string; action: string }> = [];
+
     for (const item of items) {
-      // Skip if already generated for this month
       if (item.lastGeneratedDate && item.lastGeneratedDate >= monthStart) continue;
 
-      // Check frequency
       const monthsSinceStart = (now.getFullYear() - item.startDate.getFullYear()) * 12 +
         (now.getMonth() - item.startDate.getMonth());
 
@@ -105,22 +207,150 @@ router.post('/generate', async (req: AuthRequest, res, next) => {
 
       if (!shouldGenerate) continue;
 
-      const transaction = await Transaction.create({
-        date: now,
-        type: item.type,
-        category: item.category,
-        description: `[Recurring] ${item.name}${item.description ? ' — ' + item.description : ''}`,
-        amount: item.amount,
-        reconciled: false,
-        createdBy: req.user!._id,
-      });
+      if (item.type === 'income') {
+        const { invoice, invoiceNumber, clientName } = await generateInvoiceForItem(item, req.user!._id);
 
-      item.lastGeneratedDate = now;
-      await item.save();
-      generated.push(transaction);
+        if (adminEmails.length > 0) {
+          const detailUrl = `${env.frontendUrl}/#/invoices/${invoice._id}`;
+          const html = buildRecurringReminderEmailHtml({
+            companyName,
+            itemName: item.name,
+            type: 'income',
+            invoiceNumber,
+            clientName,
+            amount: formatMoney(item.amount),
+            frequency: item.frequency,
+            detailUrl,
+            invoiceId: String(invoice._id),
+          });
+          const primary = adminEmails[0];
+          const cc = adminEmails.slice(1);
+          sendEmail({
+            to: primary,
+            cc: cc.length > 0 ? cc : undefined,
+            subject: `[${invoiceNumber}] Recurring Invoice Auto-Generated`,
+            html,
+          }).catch(() => {});
+        }
+
+        results.push({ itemName: item.name, type: 'income', action: `Invoice ${invoiceNumber} created` });
+      } else {
+        const payRequestNumber = await getNextSequence('pay');
+        const payeeName = (item.payee && typeof item.payee === 'object') ? (item.payee as any).name : 'N/A';
+
+        const paymentRequest = await PaymentRequest.create({
+          requestNumber: payRequestNumber,
+          description: `[Recurring] ${item.name}${item.description ? ' — ' + item.description : ''}`,
+          items: [{
+            payee: item.payee || undefined,
+            description: item.name + (item.description ? ` — ${item.description}` : ''),
+            amount: item.amount,
+            category: item.category,
+            recipient: '',
+          }],
+          totalAmount: item.amount,
+          sourceBankAccount: '',
+          status: 'pending',
+          createdBy: req.user!._id,
+          activityLog: [{
+            action: 'created',
+            user: req.user!._id,
+            timestamp: now,
+            note: `Auto-created from recurring item: ${item.name}`,
+          }],
+        });
+
+        item.lastGeneratedDate = now;
+        item.lastGeneratedPaymentRequest = paymentRequest._id;
+        item.history.push({
+          date: now,
+          action: 'generated_payment_request',
+          referenceId: paymentRequest._id,
+          referenceModel: 'PaymentRequest',
+          note: `Payment request ${payRequestNumber} auto-created`,
+        } as any);
+        await item.save();
+
+        if (adminEmails.length > 0) {
+          const detailUrl = `${env.frontendUrl}/#/payment-requests/${paymentRequest._id}`;
+          const html = buildRecurringReminderEmailHtml({
+            companyName,
+            itemName: item.name,
+            type: 'expense',
+            requestNumber: payRequestNumber,
+            payeeName,
+            amount: formatMoney(item.amount),
+            frequency: item.frequency,
+            detailUrl,
+          });
+          const primary = adminEmails[0];
+          const cc = adminEmails.slice(1);
+          sendEmail({
+            to: primary,
+            cc: cc.length > 0 ? cc : undefined,
+            subject: `[${payRequestNumber}] Recurring Expense — Approval Required`,
+            html,
+          }).catch(() => {});
+
+          paymentRequest.notifiedEmails = adminEmails;
+          paymentRequest.activityLog.push({
+            action: 'notified',
+            user: req.user!._id,
+            timestamp: new Date(),
+            note: `Auto-notified admins: ${adminEmails.join(', ')}`,
+          } as any);
+          await paymentRequest.save();
+        }
+
+        results.push({ itemName: item.name, type: 'expense', action: `Payment request ${payRequestNumber} created` });
+      }
     }
 
-    res.json({ generated: generated.length, transactions: generated });
+    res.json({ generated: results.length, results });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/:id/generate-invoice', async (req: AuthRequest, res, next) => {
+  try {
+    const item = await RecurringItem.findById(req.params.id)
+      .populate('client', 'name')
+      .populate('payee', 'name');
+    if (!item) throw new AppError(404, 'Recurring item not found');
+    if (item.type !== 'income') throw new AppError(400, 'Only income recurring items can generate invoices');
+
+    const { invoice, invoiceNumber, clientName } = await generateInvoiceForItem(item, req.user!._id);
+
+    const settings = await getSettings();
+    const companyName = settings.companyName || 'HateBookkeeping';
+    const admins = await User.find({ role: 'admin', active: true }).select('email name');
+    const adminEmails = admins.map((a) => a.email).filter(Boolean);
+
+    if (adminEmails.length > 0) {
+      const detailUrl = `${env.frontendUrl}/#/invoices/${invoice._id}`;
+      const html = buildRecurringReminderEmailHtml({
+        companyName,
+        itemName: item.name,
+        type: 'income',
+        invoiceNumber,
+        clientName,
+        amount: formatMoney(item.amount),
+        frequency: item.frequency,
+        detailUrl,
+        invoiceId: String(invoice._id),
+      });
+      const primary = adminEmails[0];
+      const cc = adminEmails.slice(1);
+      sendEmail({
+        to: primary,
+        cc: cc.length > 0 ? cc : undefined,
+        subject: `[${invoiceNumber}] Recurring Invoice Generated`,
+        html,
+      }).catch(() => {});
+    }
+
+    res.json({ invoiceId: invoice._id, invoiceNumber });
   } catch (error) {
     next(error);
   }
