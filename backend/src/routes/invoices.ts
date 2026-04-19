@@ -122,6 +122,30 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
+router.patch('/:id/status', async (req, res, next) => {
+  try {
+    const { status } = z.object({
+      status: z.enum(['unpaid', 'partial', 'paid']),
+    }).parse(req.body);
+
+    const invoice = await Invoice.findById(req.params.id);
+    if (!invoice) throw new AppError(404, 'Invoice not found');
+
+    invoice.status = status;
+    if (status === 'paid') {
+      invoice.amountPaid = invoice.total;
+      invoice.amountDue = 0;
+    } else if (status === 'unpaid') {
+      invoice.amountPaid = 0;
+      invoice.amountDue = invoice.total;
+    }
+    await invoice.save();
+    res.json(invoice);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Convert quotation to invoice(s)
 router.post('/from-quotation/:quotationId', async (req: AuthRequest, res, next) => {
   try {

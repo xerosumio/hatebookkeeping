@@ -185,6 +185,15 @@ export function useUpdateInvoice() {
   });
 }
 
+export function useUpdateInvoiceStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { status: string } }) =>
+      api.patch<Invoice>(`/invoices/${id}/status`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['invoices'] }),
+  });
+}
+
 export function useConvertQuotationToInvoices() {
   const qc = useQueryClient();
   return useMutation({

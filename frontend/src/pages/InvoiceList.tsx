@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useInvoices, useEntities } from '../api/hooks';
+import { useInvoices, useEntities, useUpdateInvoiceStatus } from '../api/hooks';
 import { formatMoney } from '../utils/money';
 import { Plus } from 'lucide-react';
 import type { Client, Entity } from '../types';
@@ -15,6 +15,7 @@ export default function InvoiceList() {
   const [statusFilter, setStatusFilter] = useState('');
   const [entityFilter, setEntityFilter] = useState('');
   const { data: entities } = useEntities();
+  const updateStatus = useUpdateInvoiceStatus();
   const filters: Record<string, string> = {};
   if (statusFilter) filters.status = statusFilter;
   if (entityFilter) filters.entity = entityFilter;
@@ -99,9 +100,19 @@ export default function InvoiceList() {
                   <td className="px-4 py-3 text-right font-mono">{formatMoney(inv.total)}</td>
                   <td className="px-4 py-3 text-right font-mono">{formatMoney(inv.amountDue)}</td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[inv.status]}`}>
-                      {inv.status}
-                    </span>
+                    <select
+                      value={inv.status}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => {
+                        e.preventDefault();
+                        updateStatus.mutate({ id: inv._id, data: { status: e.target.value } });
+                      }}
+                      className={`px-2 py-0.5 rounded text-xs font-medium border-0 cursor-pointer ${statusColors[inv.status]}`}
+                    >
+                      <option value="unpaid">unpaid</option>
+                      <option value="partial">partial</option>
+                      <option value="paid">paid</option>
+                    </select>
                   </td>
                   <td className="px-4 py-3 text-gray-500">
                     {new Date(inv.createdAt).toLocaleDateString()}

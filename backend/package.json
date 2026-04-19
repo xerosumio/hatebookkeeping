@@ -14,7 +14,8 @@
     "seed:classify": "tsx src/seed-classify-transactions.ts",
     "seed:recompute-funds": "tsx src/seed-recompute-fund-balances.ts",
     "seed:shareholder-liability": "tsx src/seed-shareholder-liability.ts",
-    "seed:liability-ledger": "tsx src/seed-liability-ledger.ts"
+    "seed:liability-ledger": "tsx src/seed-liability-ledger.ts",
+    "seed:reconcile-airwallex": "tsx src/seed-reconcile-airwallex.ts"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",

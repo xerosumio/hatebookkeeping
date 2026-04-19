@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useInvoice, fetchPdfBlob } from '../api/hooks';
+import { useInvoice, useUpdateInvoiceStatus, fetchPdfBlob } from '../api/hooks';
 import { formatMoney } from '../utils/money';
 import { FileText, Pencil, ArrowLeft } from 'lucide-react';
 import PdfInlinePreview from '../components/PdfPreviewModal';
@@ -31,6 +31,7 @@ const statusColors: Record<string, string> = {
 export default function InvoiceDetail() {
   const { id } = useParams();
   const { data: inv, isLoading } = useInvoice(id || '');
+  const updateStatus = useUpdateInvoiceStatus();
 
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -89,9 +90,15 @@ export default function InvoiceDetail() {
               <FileText size={14} /> {pdfLoading ? 'Loading...' : 'Preview PDF'}
             </button>
           )}
-          <span className={`px-3 py-1 rounded text-sm font-medium ${statusColors[inv.status]}`}>
-            {inv.status}
-          </span>
+          <select
+            value={inv.status}
+            onChange={(e) => updateStatus.mutate({ id: inv._id, data: { status: e.target.value } })}
+            className={`px-3 py-1 rounded text-sm font-medium border-0 cursor-pointer ${statusColors[inv.status]}`}
+          >
+            <option value="unpaid">unpaid</option>
+            <option value="partial">partial</option>
+            <option value="paid">paid</option>
+          </select>
           {inv.status !== 'paid' && (
             <Link
               to={`/receipts/new?invoiceId=${inv._id}`}
