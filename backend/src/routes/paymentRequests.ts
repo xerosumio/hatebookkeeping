@@ -23,19 +23,23 @@ const itemSchema = z.object({
 });
 
 const createSchema = z.object({
+  entity: z.string().optional(),
   description: z.string().optional().default(''),
   items: z.array(itemSchema).min(1),
   sourceBankAccount: z.string().optional().default(''),
   attachments: z.array(z.string()).optional().default([]),
+  status: z.enum(['pending', 'approved', 'rejected']).optional(),
 });
 
 router.get('/', async (req, res, next) => {
   try {
-    const { status } = req.query;
+    const { status, entity } = req.query;
     const filter: Record<string, unknown> = {};
     if (status) filter.status = status;
+    if (entity) filter.entity = entity;
 
     const requests = await PaymentRequest.find(filter)
+      .populate('entity', 'code name')
       .populate('createdBy', 'name')
       .populate('approvedBy', 'name')
       .populate('items.payee', 'name bankName bankAccountNumber')
@@ -71,6 +75,7 @@ router.post('/', roleGuard('admin', 'user'), async (req: AuthRequest, res, next)
 router.get('/:id', async (req, res, next) => {
   try {
     const request = await PaymentRequest.findById(req.params.id)
+      .populate('entity', 'code name bankAccounts')
       .populate('createdBy', 'name email')
       .populate('approvedBy', 'name email')
       .populate('items.payee', 'name bankName bankAccountNumber bankCode')
@@ -87,21 +92,35 @@ router.put('/:id', roleGuard('admin', 'user'), async (req: AuthRequest, res, nex
     const data = createSchema.parse(req.body);
     const request = await PaymentRequest.findById(req.params.id);
     if (!request) throw new AppError(404, 'Payment request not found');
-    if (request.status !== 'pending') {
-      throw new AppError(400, 'Can only edit pending requests');
+    if (request.status === 'executed') {
+      throw new AppError(400, 'Cannot edit executed requests');
     }
 
     const totalAmount = data.items.reduce((sum, item) => sum + item.amount, 0);
+    request.entity = data.entity ? (data.entity as any) : undefined;
     request.description = data.description;
     request.items = data.items as any;
     request.totalAmount = totalAmount;
     request.sourceBankAccount = data.sourceBankAccount;
     request.attachments = data.attachments;
-    request.activityLog.push({
-      action: 'updated',
-      user: req.user!._id,
-      timestamp: new Date(),
-    } as any);
+
+    if (data.status && data.status !== request.status) {
+      const oldStatus = request.status;
+      request.status = data.status;
+      request.activityLog.push({
+        action: 'updated',
+        user: req.user!._id,
+        timestamp: new Date(),
+        note: `Status changed from ${oldStatus} to ${data.status}`,
+      } as any);
+    } else {
+      request.activityLog.push({
+        action: 'updated',
+        user: req.user!._id,
+        timestamp: new Date(),
+      } as any);
+    }
+
     await request.save();
 
     res.json(request);
@@ -114,11 +133,14 @@ router.delete('/:id', roleGuard('admin', 'user'), async (req: AuthRequest, res, 
   try {
     const request = await PaymentRequest.findById(req.params.id);
     if (!request) throw new AppError(404, 'Payment request not found');
-    if (request.status !== 'pending') {
-      throw new AppError(400, 'Can only delete pending requests');
+    if (request.status === 'executed') {
+      throw new AppError(400, 'Cannot delete executed requests');
     }
     const isCreator = request.createdBy.toString() === req.user!._id.toString();
     const isAdmin = req.user!.role === 'admin';
+    if (request.status !== 'pending' && !isAdmin) {
+      throw new AppError(400, 'Only admins can delete non-pending requests');
+    }
     if (!isCreator && !isAdmin) {
       throw new AppError(403, 'Only the creator or admin can delete this request');
     }
@@ -263,12 +285,18 @@ router.patch('/:id/execute', roleGuard('admin', 'user'), async (req: AuthRequest
         ? (item.payee as any).name
         : 'Unknown';
 
+      const payeeId = typeof item.payee === 'object' && (item.payee as any)._id
+        ? (item.payee as any)._id
+        : item.payee;
+
       await Transaction.create({
         date: new Date(),
         type: 'expense',
         category: categoryMap[item.category] || 'other',
-        description: `${item.description} — ${payeeName}`,
+        description: item.description,
         amount: item.amount,
+        entity: request.entity,
+        payee: payeeId,
         paymentRequest: request._id,
         bankAccount: request.sourceBankAccount,
         bankReference,

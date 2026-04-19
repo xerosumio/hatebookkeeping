@@ -7,7 +7,11 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "seed": "tsx src/seed.ts",
-    "seed:demo": "tsx src/seed-demo.ts"
+    "seed:demo": "tsx src/seed-demo.ts",
+    "seed:expense": "tsx src/seed-expense.ts",
+    "seed:recurring": "tsx src/seed-recurring-income.ts",
+    "seed:backfill-entity": "tsx src/seed-backfill-entity.ts",
+    "seed:classify": "tsx src/seed-classify-transactions.ts"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",

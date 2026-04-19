@@ -1,27 +1,59 @@
 import { useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useQuotation, useUpdateQuotationStatus, useConvertQuotationToInvoices, fetchPdfBlob } from '../api/hooks';
+import {
+  useQuotation, useUpdateQuotationStatus, useConvertQuotationToInvoices,
+  useApproveQuotation, useRejectQuotation, useNotifyQuotation, useUsers,
+  fetchPdfBlob,
+} from '../api/hooks';
+import { useAuth } from '../contexts/AuthContext';
 import { formatMoney } from '../utils/money';
-import { FileText, Calendar, ArrowLeft } from 'lucide-react';
+import { FileText, Calendar, ArrowLeft, Plus, Pencil, CheckCircle, XCircle, Send, Clock, Mail } from 'lucide-react';
 import PdfInlinePreview from '../components/PdfPreviewModal';
-import type { Client } from '../types';
+import type { Client, User, QuotationActivityLog } from '../types';
 
 const statusColors: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-700',
+  pending_approval: 'bg-amber-100 text-amber-700',
+  approved: 'bg-indigo-100 text-indigo-700',
   sent: 'bg-blue-100 text-blue-700',
   accepted: 'bg-green-100 text-green-700',
   rejected: 'bg-red-100 text-red-700',
 };
 
+const statusLabels: Record<string, string> = {
+  pending_approval: 'Pending Approval',
+};
+
+const actionConfig: Record<string, { label: string; icon: typeof Plus; color: string }> = {
+  created: { label: 'Created', icon: Plus, color: 'text-blue-500' },
+  updated: { label: 'Updated', icon: Pencil, color: 'text-gray-500' },
+  pending_approval: { label: 'Requested Approval', icon: Send, color: 'text-amber-500' },
+  approved: { label: 'Approved', icon: CheckCircle, color: 'text-green-600' },
+  rejected: { label: 'Returned to Draft', icon: XCircle, color: 'text-red-600' },
+  sent: { label: 'Sent to Client', icon: Send, color: 'text-blue-600' },
+  accepted: { label: 'Accepted by Client', icon: CheckCircle, color: 'text-green-600' },
+  client_rejected: { label: 'Rejected by Client', icon: XCircle, color: 'text-red-600' },
+  notified: { label: 'Notification Sent', icon: Mail, color: 'text-indigo-500' },
+};
+
 export default function QuotationDetail() {
   const { id } = useParams();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const { data: q, isLoading } = useQuotation(id || '');
   const updateStatus = useUpdateQuotationStatus();
   const convertToInvoices = useConvertQuotationToInvoices();
+  const approve = useApproveQuotation();
+  const reject = useRejectQuotation();
+  const notify = useNotifyQuotation();
+  const { data: allUsers } = useUsers();
 
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [showReject, setShowReject] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [showNotify, setShowNotify] = useState(false);
+  const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
 
   const showPdfPreview = useCallback(async () => {
     if (!id || !q) return;
@@ -46,9 +78,43 @@ export default function QuotationDetail() {
   if (!q) return <p className="text-gray-500">Quotation not found.</p>;
 
   const client = typeof q.client === 'object' ? (q.client as Client) : null;
+  const isAdmin = user?.role === 'admin';
 
   async function changeStatus(status: string) {
     await updateStatus.mutateAsync({ id: id!, status });
+  }
+
+  function openNotifyModal() {
+    const adminEmails = (allUsers || [])
+      .filter((u) => u.role === 'admin' && u.active)
+      .map((u) => u.email);
+    setSelectedEmails(adminEmails);
+    setShowNotify(true);
+  }
+
+  function toggleEmail(email: string, isAdminUser: boolean) {
+    if (isAdminUser) return;
+    setSelectedEmails((prev) =>
+      prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email],
+    );
+  }
+
+  async function handleNotify() {
+    if (!id || selectedEmails.length === 0) return;
+    await notify.mutateAsync({ id, emails: selectedEmails });
+    setShowNotify(false);
+  }
+
+  async function handleApprove() {
+    if (!id) return;
+    await approve.mutateAsync(id);
+  }
+
+  async function handleReject() {
+    if (!id) return;
+    await reject.mutateAsync({ id, reason: rejectReason });
+    setShowReject(false);
+    setRejectReason('');
   }
 
   return (
@@ -76,7 +142,7 @@ export default function QuotationDetail() {
             </button>
           )}
           <span className={`px-3 py-1 rounded text-sm font-medium ${statusColors[q.status]}`}>
-            {q.status}
+            {statusLabels[q.status] || q.status}
           </span>
           {q.status === 'draft' && (
             <>
@@ -87,13 +153,46 @@ export default function QuotationDetail() {
                 Edit
               </Link>
               <button
+                onClick={() => changeStatus('pending_approval')}
+                disabled={updateStatus.isPending}
+                className="bg-amber-600 text-white px-3 py-1.5 rounded text-sm hover:bg-amber-700 disabled:opacity-50"
+              >
+                Request Approval
+              </button>
+              <button
                 onClick={() => changeStatus('sent')}
                 disabled={updateStatus.isPending}
                 className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
               >
-                Mark as Sent
+                Send Directly
               </button>
             </>
+          )}
+          {q.status === 'pending_approval' && (
+            <>
+              <button
+                onClick={openNotifyModal}
+                className="flex items-center gap-1 bg-indigo-600 text-white px-3 py-1.5 rounded text-sm hover:bg-indigo-700"
+              >
+                <Send size={14} /> Send for Approval
+              </button>
+              <button
+                onClick={() => changeStatus('sent')}
+                disabled={updateStatus.isPending}
+                className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+              >
+                Skip & Mark Sent
+              </button>
+            </>
+          )}
+          {q.status === 'approved' && (
+            <button
+              onClick={() => changeStatus('sent')}
+              disabled={updateStatus.isPending}
+              className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+            >
+              Mark as Sent
+            </button>
           )}
           {q.status === 'sent' && (
             <>
@@ -131,8 +230,8 @@ export default function QuotationDetail() {
       {pdfBlobUrl ? (
         <PdfInlinePreview blobUrl={pdfBlobUrl} filename={`${q.quotationNumber}.pdf`} />
       ) : (
-        <>
-          <div className="flex gap-4 mb-4">
+        <div className="space-y-4">
+          <div className="flex gap-4">
             <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-4 py-2.5">
               <Calendar size={14} className="text-gray-400" />
               <div>
@@ -249,7 +348,134 @@ export default function QuotationDetail() {
               )}
             </div>
           </div>
-        </>
+
+          {/* Approval Review */}
+          {q.status === 'pending_approval' && isAdmin && (
+            <div className="bg-white rounded-lg border border-gray-200 p-5 space-y-3">
+              <h3 className="text-sm font-medium text-gray-700">Review Quotation</h3>
+              {showReject ? (
+                <div className="space-y-2">
+                  <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Reason for returning to draft (optional)..." rows={2} className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
+                  <div className="flex gap-2">
+                    <button onClick={handleReject} disabled={reject.isPending} className="bg-red-600 text-white px-4 py-1.5 rounded text-sm hover:bg-red-700 disabled:opacity-50">
+                      {reject.isPending ? 'Returning...' : 'Confirm Return'}
+                    </button>
+                    <button onClick={() => setShowReject(false)} className="text-sm text-gray-500 hover:underline">Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <button onClick={handleApprove} disabled={approve.isPending} className="bg-green-600 text-white px-4 py-1.5 rounded text-sm hover:bg-green-700 disabled:opacity-50">
+                    {approve.isPending ? 'Approving...' : 'Approve'}
+                  </button>
+                  <button onClick={() => setShowReject(true)} className="bg-red-600 text-white px-4 py-1.5 rounded text-sm hover:bg-red-700">
+                    Return to Draft
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Activity History */}
+          {q.activityLog && q.activityLog.length > 0 && (
+            <div className="bg-white rounded-lg border border-gray-200 p-5">
+              <h3 className="text-sm font-medium text-gray-700 mb-4 flex items-center gap-1">
+                <Clock size={14} /> History
+              </h3>
+              <div className="space-y-0">
+                {q.activityLog.map((entry: QuotationActivityLog, i: number) => {
+                  const cfg = actionConfig[entry.action] || actionConfig.created;
+                  const Icon = cfg.icon;
+                  const userName = typeof entry.user === 'object' ? entry.user.name : 'Unknown';
+                  const isLast = i === q.activityLog!.length - 1;
+                  return (
+                    <div key={i} className="flex gap-3">
+                      <div className="flex flex-col items-center">
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center bg-gray-100 ${cfg.color}`}>
+                          <Icon size={14} />
+                        </div>
+                        {!isLast && <div className="w-px flex-1 bg-gray-200 my-1" />}
+                      </div>
+                      <div className="pb-4">
+                        <p className="text-sm">
+                          <span className={`font-medium ${cfg.color}`}>{cfg.label}</span>
+                          {' by '}
+                          <span className="font-medium">{userName}</span>
+                        </p>
+                        <p className="text-xs text-gray-400">{new Date(entry.timestamp).toLocaleString()}</p>
+                        {entry.note && <p className="text-xs text-gray-500 mt-0.5">{entry.note}</p>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Send for Approval Modal */}
+      {showNotify && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div className="p-5 border-b border-gray-200">
+              <h3 className="text-lg font-semibold">Send for Approval</h3>
+              <p className="text-sm text-gray-500 mt-1">Select who should review this quotation. Admins are always notified.</p>
+            </div>
+            <div className="p-5 max-h-80 overflow-y-auto">
+              {(allUsers || [])
+                .filter((u) => u.active)
+                .map((u) => {
+                  const isAdminUser = u.role === 'admin';
+                  const checked = selectedEmails.includes(u.email);
+                  return (
+                    <label
+                      key={u._id}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded cursor-pointer hover:bg-gray-50 ${isAdminUser ? 'opacity-90' : ''}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleEmail(u.email, isAdminUser)}
+                        disabled={isAdminUser}
+                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">{u.name}</span>
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                            isAdminUser ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-500'
+                          }`}>
+                            {u.role}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 truncate">{u.email}</p>
+                      </div>
+                    </label>
+                  );
+                })}
+            </div>
+            <div className="p-5 border-t border-gray-200 flex justify-between items-center">
+              <span className="text-xs text-gray-400">{selectedEmails.length} recipient(s)</span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowNotify(false)}
+                  className="px-4 py-1.5 rounded text-sm text-gray-600 border border-gray-300 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleNotify}
+                  disabled={selectedEmails.length === 0 || notify.isPending}
+                  className="flex items-center gap-1 bg-indigo-600 text-white px-4 py-1.5 rounded text-sm hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  <Send size={14} />
+                  {notify.isPending ? 'Sending...' : 'Send Email'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

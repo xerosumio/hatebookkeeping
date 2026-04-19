@@ -1,6 +1,6 @@
 import React from 'react';
 import { Document, Page, Text, View, Image, Link } from '@react-pdf/renderer';
-import { styles } from './styles.js';
+import { styles as defaultStyles, createStyles } from './styles.js';
 import { formatMoney } from './formatMoney.js';
 import type { IReceipt } from '../../models/Receipt.js';
 import type { IInvoice } from '../../models/Invoice.js';
@@ -12,6 +12,7 @@ export interface CompanyInfo {
   companyEmail: string;
   companyWebsite: string;
   logoUrl: string;
+  brandColor?: string;
 }
 
 interface PopulatedInvoice extends IInvoice {
@@ -35,6 +36,8 @@ const methodLabels: Record<string, string> = {
 };
 
 export function ReceiptPDF({ receipt: r, company }: Props) {
+  const styles = company.brandColor ? createStyles(company.brandColor) : defaultStyles;
+  const accentColor = company.brandColor || '#0369a1';
   const fmtDate = (d: string | Date) =>
     new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
@@ -135,7 +138,7 @@ export function ReceiptPDF({ receipt: r, company }: Props) {
         </View>
 
         {/* ── Amount Banner ── */}
-        <View style={{ backgroundColor: '#0369a1', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 3, marginTop: 20, alignItems: 'center' }}>
+        <View style={{ backgroundColor: accentColor, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 3, marginTop: 20, alignItems: 'center' }}>
           <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#ffffff', textAlign: 'center' }}>
             <Text style={{ fontSize: 10 }}>Amount Received    </Text>
             {formatMoney(r.amount)}

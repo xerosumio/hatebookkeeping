@@ -3,11 +3,11 @@ import type { FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   useCreatePaymentRequest, useUpdatePaymentRequest, usePaymentRequest,
-  usePayees, useCreatePayee, useSettings, uploadFile,
+  usePayees, useCreatePayee, useSettings, uploadFile, useEntities,
 } from '../api/hooks';
 import { formatMoney, decimalToCents, centsToDecimal } from '../utils/money';
 import { Plus, X, Upload, Trash2 } from 'lucide-react';
-import type { Payee } from '../types';
+import type { Payee, Entity } from '../types';
 
 
 interface ItemRow {
@@ -30,9 +30,12 @@ export default function PaymentRequestForm() {
   const { data: existing, isLoading: loadingExisting } = usePaymentRequest(id || '');
   const { data: payees } = usePayees();
   const { data: settings } = useSettings();
+  const { data: entities } = useEntities();
   const expenseCategories = (settings?.chartOfAccounts || []).filter((a) => a.active && a.type === 'expense');
   const createPayee = useCreatePayee();
 
+  const [entity, setEntity] = useState('');
+  const [status, setStatus] = useState('');
   const [description, setDescription] = useState('');
   const [sourceBankAccount, setSourceBankAccount] = useState('');
   const [items, setItems] = useState<ItemRow[]>([emptyItem()]);
@@ -46,8 +49,18 @@ export default function PaymentRequestForm() {
   const [newPayeeBank, setNewPayeeBank] = useState('');
   const [newPayeeAccount, setNewPayeeAccount] = useState('');
 
+  const selectedEntity = entities?.find((e) => e._id === entity);
+  const bankAccountOptions = selectedEntity?.bankAccounts?.length
+    ? selectedEntity.bankAccounts
+    : settings?.bankAccounts || [];
+
   useEffect(() => {
     if (isEdit && existing && !loaded) {
+      const existingEntityId = existing.entity
+        ? typeof existing.entity === 'object' ? (existing.entity as Entity)._id : existing.entity
+        : '';
+      setEntity(existingEntityId);
+      setStatus(existing.status || '');
       setDescription(existing.description || '');
       setSourceBankAccount(existing.sourceBankAccount || '');
       setAttachments(existing.attachments || []);
@@ -122,6 +135,7 @@ export default function PaymentRequestForm() {
     }
 
     const payload = {
+      entity: entity || undefined,
       description,
       sourceBankAccount,
       items: validItems.map((item) => ({
@@ -132,6 +146,7 @@ export default function PaymentRequestForm() {
         recipient: item.recipient,
       })),
       attachments,
+      ...(isEdit && status ? { status } : {}),
     };
 
     try {
@@ -158,7 +173,35 @@ export default function PaymentRequestForm() {
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && <div className="bg-red-50 text-red-600 text-sm p-3 rounded">{error}</div>}
 
-        <div className="grid grid-cols-2 gap-4">
+        {isEdit && (
+          <div className="max-w-xs">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </div>
+        )}
+
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Entity</label>
+            <select
+              value={entity}
+              onChange={(e) => { setEntity(e.target.value); setSourceBankAccount(''); }}
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select entity...</option>
+              {entities?.map((ent) => (
+                <option key={ent._id} value={ent._id}>{ent.code} — {ent.name}</option>
+              ))}
+            </select>
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
             <input
@@ -177,7 +220,7 @@ export default function PaymentRequestForm() {
               className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Select account...</option>
-              {settings?.bankAccounts?.map((acc, i) => (
+              {bankAccountOptions.map((acc, i) => (
                 <option key={i} value={acc.name}>
                   {acc.name}{acc.bankName ? ` (${acc.bankName})` : ''}
                 </option>

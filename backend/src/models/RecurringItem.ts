@@ -10,6 +10,7 @@ export interface IRecurringHistoryEntry {
 
 export interface IRecurringItem extends Document {
   name: string;
+  entity?: mongoose.Types.ObjectId;
   type: 'income' | 'expense';
   category: string;
   amount: number;
@@ -17,7 +18,7 @@ export interface IRecurringItem extends Document {
   client?: mongoose.Types.ObjectId;
   payee?: mongoose.Types.ObjectId;
   description: string;
-  startDate: Date;
+  startDate?: Date;
   endDate?: Date;
   active: boolean;
   dueDay: number;
@@ -47,6 +48,7 @@ const historyEntrySchema = new Schema<IRecurringHistoryEntry>(
 const recurringItemSchema = new Schema<IRecurringItem>(
   {
     name: { type: String, required: true, trim: true },
+    entity: { type: Schema.Types.ObjectId, ref: 'Entity' },
     type: { type: String, enum: ['income', 'expense'], required: true },
     category: { type: String, required: true },
     amount: { type: Number, required: true },
@@ -54,7 +56,7 @@ const recurringItemSchema = new Schema<IRecurringItem>(
     client: { type: Schema.Types.ObjectId, ref: 'Client' },
     payee: { type: Schema.Types.ObjectId, ref: 'Payee' },
     description: { type: String, default: '' },
-    startDate: { type: Date, required: true },
+    startDate: { type: Date },
     endDate: { type: Date },
     active: { type: Boolean, default: true },
     dueDay: { type: Number, default: 1, min: 1, max: 28 },

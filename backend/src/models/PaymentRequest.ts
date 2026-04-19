@@ -17,6 +17,7 @@ export interface IActivityLogEntry {
 
 export interface IPaymentRequest extends Document {
   requestNumber: string;
+  entity?: mongoose.Types.ObjectId;
   description: string;
   items: IPaymentRequestItem[];
   totalAmount: number;
@@ -63,6 +64,7 @@ const activityLogSchema = new Schema<IActivityLogEntry>(
 const paymentRequestSchema = new Schema<IPaymentRequest>(
   {
     requestNumber: { type: String, required: true, unique: true },
+    entity: { type: Schema.Types.ObjectId, ref: 'Entity' },
     description: { type: String, default: '' },
     items: [itemSchema],
     totalAmount: { type: Number, required: true },

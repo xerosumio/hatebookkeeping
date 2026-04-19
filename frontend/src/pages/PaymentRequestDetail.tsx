@@ -12,7 +12,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { formatMoney } from '../utils/money';
 import { Paperclip, Pencil, Trash2, Plus, CheckCircle, XCircle, Zap, Clock, Send, Mail } from 'lucide-react';
-import type { User, Payee, ActivityLogEntry } from '../types';
+import type { User, Payee, ActivityLogEntry, Entity } from '../types';
 
 const statusColors: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-700',
@@ -57,7 +57,7 @@ export default function PaymentRequestDetail() {
   const isOwnRequest = creator && user && (creator as any)._id === user.id;
   const canApprove = user?.role === 'admin';
   const canExecute = user?.role === 'admin' || user?.role === 'user';
-  const canEdit = pr.status === 'pending' && (user?.role === 'admin' || user?.role === 'user');
+  const canEdit = pr.status !== 'executed' && (user?.role === 'admin' || user?.role === 'user');
   const canDelete = pr.status === 'pending' && (user?.role === 'admin' || isOwnRequest);
   const canNotify = pr.status === 'pending';
 
@@ -146,7 +146,13 @@ export default function PaymentRequestDetail() {
 
       <div className="space-y-4">
         <div className="bg-white rounded-lg border border-gray-200 p-5">
-          <div className="grid grid-cols-3 gap-6 text-sm">
+          <div className="grid grid-cols-4 gap-6 text-sm">
+            {pr.entity && typeof pr.entity === 'object' && (
+              <div>
+                <p className="text-xs text-gray-500">Entity</p>
+                <p className="font-medium">{(pr.entity as Entity).code} — {(pr.entity as Entity).name}</p>
+              </div>
+            )}
             <div>
               <p className="text-xs text-gray-500">Created By</p>
               <p className="font-medium">{creator?.name || '—'}</p>

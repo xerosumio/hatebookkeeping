@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useInvoices } from '../api/hooks';
+import { useInvoices, useEntities } from '../api/hooks';
 import { formatMoney } from '../utils/money';
 import { Plus } from 'lucide-react';
-import type { Client } from '../types';
+import type { Client, Entity } from '../types';
 
 const statusColors: Record<string, string> = {
   unpaid: 'bg-red-100 text-red-700',
@@ -13,8 +13,13 @@ const statusColors: Record<string, string> = {
 
 export default function InvoiceList() {
   const [statusFilter, setStatusFilter] = useState('');
+  const [entityFilter, setEntityFilter] = useState('');
+  const { data: entities } = useEntities();
+  const filters: Record<string, string> = {};
+  if (statusFilter) filters.status = statusFilter;
+  if (entityFilter) filters.entity = entityFilter;
   const { data: invoices, isLoading } = useInvoices(
-    statusFilter ? { status: statusFilter } : undefined,
+    Object.keys(filters).length ? filters : undefined,
   );
 
   return (
@@ -29,20 +34,32 @@ export default function InvoiceList() {
         </Link>
       </div>
 
-      <div className="flex gap-2 mb-4">
-        {['', 'unpaid', 'partial', 'paid'].map((s) => (
-          <button
-            key={s}
-            onClick={() => setStatusFilter(s)}
-            className={`px-3 py-1 rounded text-sm ${
-              statusFilter === s
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            {s || 'All'}
-          </button>
-        ))}
+      <div className="flex items-center gap-4 mb-4">
+        <div className="flex gap-2">
+          {['', 'unpaid', 'partial', 'paid'].map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={`px-3 py-1 rounded text-sm ${
+                statusFilter === s
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {s || 'All'}
+            </button>
+          ))}
+        </div>
+        <select
+          value={entityFilter}
+          onChange={(e) => setEntityFilter(e.target.value)}
+          className="border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">All Entities</option>
+          {entities?.map((ent) => (
+            <option key={ent._id} value={ent._id}>{ent.code} — {ent.name}</option>
+          ))}
+        </select>
       </div>
 
       {isLoading ? (
@@ -56,6 +73,7 @@ export default function InvoiceList() {
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Number</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Client</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Entity</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Milestone</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Total</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Due</th>
@@ -72,7 +90,10 @@ export default function InvoiceList() {
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-gray-600">
-                    {typeof inv.client === 'object' ? (inv.client as Client).name : ''}
+                    {inv.client && typeof inv.client === 'object' ? (inv.client as Client).name : ''}
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">
+                    {inv.entity && typeof inv.entity === 'object' ? (inv.entity as Entity).code : ''}
                   </td>
                   <td className="px-4 py-3 text-gray-500">{inv.milestone}</td>
                   <td className="px-4 py-3 text-right font-mono">{formatMoney(inv.total)}</td>

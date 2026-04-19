@@ -10,6 +10,7 @@ export interface IEntity extends Document {
   website: string;
   logoUrl: string;
   bankAccounts: IBankAccount[];
+  brandColor: string;
   companyChopUrl: string;
   signatureUrl: string;
   active: boolean;
@@ -34,6 +35,7 @@ const entitySchema = new Schema<IEntity>(
       }],
       default: [],
     },
+    brandColor: { type: String, default: '' },
     companyChopUrl: { type: String, default: '' },
     signatureUrl: { type: String, default: '' },
     active: { type: Boolean, default: true },

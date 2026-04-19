@@ -1,0 +1,16 @@
+Expense Date,Expense Description,Expense Account,Expense Account Code,Paid Through,Paid Through Account Code,Vendor,Project Name,Entry Number,Currency Code,Exchange Rate,Is Inclusive Tax,Mileage Rate,Mileage Unit,Distance,Start Odometer Reading,End Odometer Reading,Mileage Type,Vehicle Name,Claimant Email,Tax Name,Tax Percentage,Tax Type,Tax Amount,Expense Amount,Total,Reference#,Is Billable,Customer Name,Expense Reference ID,Recurrence Name,ExpenseReport Name,Is Reimbursable
+2026-04-05,March Salary,Salaries and Employee Wages,,Bank Cash,,Honnia Tse,,1,HKD,1.00,false,0.00,,,,,NonMileage,,,,,ItemAmount,0.000000,22000.000000,22000.000,,false,,8665742000000103011,,,false
+2026-04-05,March Salary,Salaries and Employee Wages,,Bank Cash,,Sai Peng,,2,HKD,1.00,false,0.00,,,,,NonMileage,,,,,ItemAmount,0.000000,10000.000000,10000.000,,false,,8665742000000103033,,,false
+2026-04-05,Pen Test Commission,Salaries and Employee Wages,,Bank Cash,,Carol Chow,,3,HKD,1.00,false,0.00,,,,,NonMileage,,,,,ItemAmount,0.000000,9000.000000,9000.000,,false,,8665742000000103055,,,false
+2026-04-30,Beigehill Clients' licenses,Cost of Goods Sold,,Bank Cash,,Microsoft,,4,HKD,1.00,false,0.00,,,,,NonMileage,,,,,ItemAmount,0.000000,5400.000000,5400.000,,false,,8665742000000103077,,,false
+2026-04-05,Meal with Duck Gor + Stamp 144 + 75,Employee Reimbursements,,Bank Cash,,Thomas Pang,,5,HKD,1.00,false,0.00,,,,,NonMileage,,,,,ItemAmount,0.000000,219.000000,219.000,,false,,8665742000000103177,,,false
+2026-04-05,March Salary,Salaries and Employee Wages,,Bank Cash,,Peggy,,6,HKD,1.00,false,0.00,,,,,NonMileage,,,,,ItemAmount,0.000000,10000.000000,10000.000,,false,,8665742000000103217,,,false
+2026-04-05,Computer Reimbursement 2/20,Furniture and Equipment,,Bank Cash,,Honnia Tse,,7,HKD,1.00,false,0.00,,,,,NonMileage,,,,,ItemAmount,0.000000,500.000000,500.000,,false,,8665742000000103239,,,false
+2026-04-05,Computer Reimbursement 2/20,Furniture and Equipment,,Bank Cash,,Sai Peng,,8,HKD,1.00,false,0.00,,,,,NonMileage,,,,,ItemAmount,0.000000,500.000000,500.000,,false,,8665742000000103261,,,false
+2026-04-05,March Network Paid by Thomas,IT and Internet Expenses,,Bank Cash,,HKBN,,9,HKD,1.00,false,0.00,,,,,NonMileage,,,,,ItemAmount,0.000000,574.000000,574.000,,false,,8665742000000103317,,,false
+2026-04-05,GLG Website Referral Commission,Salaries and Employee Wages,,Bank Cash,,Oscar Wong,,10,HKD,1.00,false,0.00,,,,,NonMileage,,,,,ItemAmount,0.000000,1500.000000,1500.000,,false,,8665742000000103357,,,false
+2026-04-05,Felix commission for Sign House,Salaries and Employee Wages,,Bank Cash,,Felix,,16,HKD,1.00,false,0.00,,,,,NonMileage,,,,,ItemAmount,0.000000,22000.000000,22000.000,,false,,8665742000000105082,,,false
+2026-04-30,"Adobe Pro, Dropbox, and O365 License for Beigehill",Cost of Goods Sold,,Bank Cash,,Microsoft,,17,HKD,1.00,false,0.00,,,,,NonMileage,,,,,ItemAmount,0.000000,23500.000000,23500.000,,false,,8665742000000105102,,,false
+2026-04-30,"Windows Server 2025 Standard - 16 Core
+License Pack * 2",Cost of Goods Sold,,Bank Cash,,DYXnet,,18,HKD,1.00,false,0.00,,,,,NonMileage,,,,,ItemAmount,0.000000,18114.000000,18114.000,,false,,8665742000000107409,,,false
+2026-04-05,March Office Rental,Office Expense,,Bank Cash,,KT Office Rental,,19,HKD,1.00,false,0.00,,,,,NonMileage,,,,,ItemAmount,0.000000,2600.000000,2600.000,,false,,8665742000000107476,,,false

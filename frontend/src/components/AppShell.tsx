@@ -16,6 +16,7 @@ import {
   UsersRound,
   PieChart,
   CalendarCheck,
+  Landmark,
 } from 'lucide-react';
 
 const navItems = [
@@ -26,11 +27,12 @@ const navItems = [
   { to: '/receipts', icon: Receipt, label: 'Receipts' },
   { to: '/transactions', icon: ArrowRightLeft, label: 'Transactions' },
   { to: '/payees', icon: UserCheck, label: 'Payees' },
-  { to: '/payment-requests', icon: ClipboardCheck, label: 'Approvals' },
+  { to: '/payment-requests', icon: ClipboardCheck, label: 'Expense Approvals' },
   { to: '/reimbursements', icon: Wallet, label: 'Reimbursements' },
   { to: '/recurring', icon: Repeat, label: 'Recurring' },
   { to: '/shareholders', icon: PieChart, label: 'Shareholders' },
   { to: '/monthly-close', icon: CalendarCheck, label: 'Monthly Close' },
+  { to: '/funds', icon: Landmark, label: 'Funds' },
   { to: '/reports', icon: BarChart3, label: 'Reports' },
 ];
 

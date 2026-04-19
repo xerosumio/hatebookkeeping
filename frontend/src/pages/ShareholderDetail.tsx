@@ -1,5 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useShareholder } from '../api/hooks';
+import type { ShareAdjustmentLog } from '../types';
 import { formatMoney } from '../utils/money';
 
 const TYPE_LABELS: Record<string, string> = {
@@ -83,6 +84,38 @@ export default function ShareholderDetail() {
           </tbody>
         </table>
       </div>
+
+      {shareholder.shareHistory && shareholder.shareHistory.length > 0 && (
+        <div className="mt-6">
+          <h2 className="text-lg font-semibold mb-3">Share Adjustment History</h2>
+          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Date</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-600">From</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-600">To</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Reason</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Changed By</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {[...shareholder.shareHistory].reverse().map((entry: ShareAdjustmentLog, i: number) => (
+                  <tr key={i} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">{new Date(entry.date).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-right font-mono">{entry.previousPercent.toFixed(2)}%</td>
+                    <td className="px-4 py-3 text-right font-mono font-medium">{entry.newPercent.toFixed(2)}%</td>
+                    <td className="px-4 py-3 text-gray-600">{entry.reason || '—'}</td>
+                    <td className="px-4 py-3 text-gray-500">
+                      {typeof entry.changedBy === 'object' ? entry.changedBy.name : ''}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

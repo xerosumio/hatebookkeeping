@@ -18,6 +18,7 @@ router.use(authMiddleware);
 
 const recurringSchema = z.object({
   name: z.string().min(1),
+  entity: z.string().optional(),
   type: z.enum(['income', 'expense']),
   category: z.string().min(1),
   amount: z.number().int().positive(),
@@ -25,7 +26,7 @@ const recurringSchema = z.object({
   client: z.string().optional(),
   payee: z.string().optional(),
   description: z.string().optional().default(''),
-  startDate: z.string(),
+  startDate: z.string().optional(),
   endDate: z.string().optional(),
   active: z.boolean().optional().default(true),
   dueDay: z.number().int().min(1).max(28).optional().default(1),
@@ -52,6 +53,7 @@ async function generateInvoiceForItem(
 
   const invoice = await Invoice.create({
     invoiceNumber,
+    entity: item.entity,
     client: item.client,
     status: 'unpaid',
     lineItems: [{
@@ -78,6 +80,7 @@ async function generateInvoiceForItem(
     category: item.category,
     description: `[Recurring] ${item.name}${item.description ? ' — ' + item.description : ''}`,
     amount: item.amount,
+    entity: item.entity,
     invoice: invoice._id,
     reconciled: false,
     createdBy: userId,
@@ -97,9 +100,13 @@ async function generateInvoiceForItem(
   return { invoice, invoiceNumber, clientName };
 }
 
-router.get('/', async (_req, res, next) => {
+router.get('/', async (req, res, next) => {
   try {
-    const items = await RecurringItem.find()
+    const { entity } = req.query;
+    const filter: Record<string, unknown> = {};
+    if (entity) filter.entity = entity;
+    const items = await RecurringItem.find(filter)
+      .populate('entity', 'code name')
       .populate('client', 'name')
       .populate('payee', 'name')
       .sort({ createdAt: -1 });
@@ -119,7 +126,7 @@ router.post('/', async (req: AuthRequest, res, next) => {
 
     const item = await RecurringItem.create({
       ...data,
-      startDate: new Date(data.startDate),
+      startDate: data.startDate ? new Date(data.startDate) : undefined,
       endDate: data.endDate ? new Date(data.endDate) : undefined,
       client: data.client || undefined,
       payee: data.payee || undefined,
@@ -147,7 +154,7 @@ router.put('/:id', async (req: AuthRequest, res, next) => {
       req.params.id,
       {
         ...data,
-        startDate: new Date(data.startDate),
+        startDate: data.startDate ? new Date(data.startDate) : null,
         endDate: data.endDate ? new Date(data.endDate) : undefined,
         client: data.client || null,
         payee: data.payee || null,
@@ -195,6 +202,7 @@ router.post('/generate', async (req: AuthRequest, res, next) => {
     const results: Array<{ itemName: string; type: string; action: string }> = [];
 
     for (const item of items) {
+      if (!item.startDate) continue;
       if (item.lastGeneratedDate && item.lastGeneratedDate >= monthStart) continue;
 
       const monthsSinceStart = (now.getFullYear() - item.startDate.getFullYear()) * 12 +
@@ -240,6 +248,7 @@ router.post('/generate', async (req: AuthRequest, res, next) => {
 
         const paymentRequest = await PaymentRequest.create({
           requestNumber: payRequestNumber,
+          entity: item.entity,
           description: `[Recurring] ${item.name}${item.description ? ' — ' + item.description : ''}`,
           items: [{
             payee: item.payee || undefined,

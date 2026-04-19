@@ -31,6 +31,7 @@ import MonthlyCloseList from './pages/MonthlyCloseList';
 import MonthlyCloseDetail from './pages/MonthlyCloseDetail';
 import Reports from './pages/Reports';
 import UserList from './pages/UserList';
+import FundList from './pages/FundList';
 import SettingsPage from './pages/Settings';
 
 const queryClient = new QueryClient({
@@ -98,7 +99,8 @@ export default function App() {
               <Route path="shareholders" element={<ShareholderList />} />
               <Route path="shareholders/:id" element={<ShareholderDetail />} />
               <Route path="monthly-close" element={<MonthlyCloseList />} />
-              <Route path="monthly-close/:year/:month" element={<MonthlyCloseDetail />} />
+              <Route path="monthly-close/:entity/:year/:month" element={<MonthlyCloseDetail />} />
+              <Route path="funds" element={<FundList />} />
               <Route path="reports" element={<Reports />} />
               <Route path="users" element={<UserList />} />
               <Route path="settings" element={<SettingsPage />} />

@@ -1,12 +1,18 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useShareholders, useInvestShareholder } from '../api/hooks';
+import { useShareholders, useInvestShareholder, useShareTransfer } from '../api/hooks';
 import { formatMoney } from '../utils/money';
 
 export default function ShareholderList() {
   const navigate = useNavigate();
   const { data: shareholders, isLoading } = useShareholders();
   const investMutation = useInvestShareholder();
+  const transferMutation = useShareTransfer();
+
+  const [transferModal, setTransferModal] = useState<{ fromId: string; fromName: string } | null>(null);
+  const [transferTo, setTransferTo] = useState('');
+  const [transferPercent, setTransferPercent] = useState('');
+  const [transferReason, setTransferReason] = useState('');
 
   const [investModal, setInvestModal] = useState<{ id: string; name: string } | null>(null);
   const [investAmount, setInvestAmount] = useState('');
@@ -15,6 +21,7 @@ export default function ShareholderList() {
 
   const totalEquity = shareholders?.reduce((sum, s) => sum + (s.currentEquity || 0), 0) || 0;
   const totalInvested = shareholders?.reduce((sum, s) => sum + (s.totalInvested || 0), 0) || 0;
+  const valuePerPercent = totalEquity / 100;
 
   async function handleInvest() {
     if (!investModal || !investAmount) return;
@@ -26,6 +33,20 @@ export default function ShareholderList() {
     setInvestModal(null);
     setInvestAmount('');
     setInvestDesc('');
+  }
+
+  async function handleTransfer() {
+    if (!transferModal || !transferTo || !transferPercent) return;
+    await transferMutation.mutateAsync({
+      from: transferModal.fromId,
+      to: transferTo,
+      percent: parseFloat(transferPercent),
+      reason: transferReason || undefined,
+    });
+    setTransferModal(null);
+    setTransferTo('');
+    setTransferPercent('');
+    setTransferReason('');
   }
 
   if (isLoading) return <p className="text-gray-500">Loading...</p>;
@@ -46,8 +67,8 @@ export default function ShareholderList() {
           <div className="text-xl font-bold font-mono">{formatMoney(totalEquity)}</div>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <div className="text-sm text-gray-500">Shareholders</div>
-          <div className="text-xl font-bold">{shareholders?.length || 0}</div>
+          <div className="text-sm text-gray-500">Value per 1%</div>
+          <div className="text-xl font-bold font-mono">{formatMoney(valuePerPercent)}</div>
         </div>
       </div>
 
@@ -57,6 +78,7 @@ export default function ShareholderList() {
             <tr>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Name</th>
               <th className="text-right px-4 py-3 font-medium text-gray-600">Share %</th>
+              <th className="text-right px-4 py-3 font-medium text-gray-600">Share Value (HKD)</th>
               <th className="text-right px-4 py-3 font-medium text-gray-600">Total Invested</th>
               <th className="text-right px-4 py-3 font-medium text-gray-600">Current Equity</th>
               <th className="text-right px-4 py-3 font-medium text-gray-600">Actions</th>
@@ -77,9 +99,23 @@ export default function ShareholderList() {
                   )}
                 </td>
                 <td className="px-4 py-3 text-right font-mono">{sh.sharePercent.toFixed(2)}%</td>
+                <td className="px-4 py-3 text-right font-mono text-gray-600">
+                  {formatMoney(Math.round(sh.sharePercent * valuePerPercent))}
+                </td>
                 <td className="px-4 py-3 text-right font-mono">{formatMoney(sh.totalInvested || 0)}</td>
                 <td className="px-4 py-3 text-right font-mono">{formatMoney(sh.currentEquity || 0)}</td>
                 <td className="px-4 py-3 text-right">
+                  <button
+                    onClick={() => {
+                      setTransferModal({ fromId: sh._id, fromName: sh.name });
+                      setTransferTo('');
+                      setTransferPercent('');
+                      setTransferReason('');
+                    }}
+                    className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded hover:bg-blue-100 mr-1"
+                  >
+                    Transfer %
+                  </button>
                   <button
                     onClick={() => setInvestModal({ id: sh._id, name: sh.name })}
                     className="text-xs bg-green-50 text-green-700 px-2 py-1 rounded hover:bg-green-100"
@@ -139,6 +175,77 @@ export default function ShareholderList() {
               </button>
               <button
                 onClick={() => setInvestModal(null)}
+                className="border border-gray-300 px-4 py-2 rounded text-sm text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {transferModal && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-96">
+            <h3 className="text-lg font-bold mb-4">Transfer Shares</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">From</label>
+                <div className="w-full border border-gray-200 bg-gray-50 rounded px-3 py-2 text-sm font-medium">
+                  {transferModal.fromName}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
+                <select
+                  value={transferTo}
+                  onChange={(e) => setTransferTo(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                >
+                  <option value="">Select shareholder...</option>
+                  {shareholders?.filter((s) => s._id !== transferModal.fromId).map((s) => (
+                    <option key={s._id} value={s._id}>{s.name} ({s.sharePercent.toFixed(2)}%)</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Percentage to Transfer</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={transferPercent}
+                  onChange={(e) => setTransferPercent(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                  placeholder="e.g. 5.00"
+                  autoFocus
+                />
+                {transferPercent && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    Value: {formatMoney(Math.round(parseFloat(transferPercent) * valuePerPercent))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
+                <input
+                  type="text"
+                  value={transferReason}
+                  onChange={(e) => setTransferReason(e.target.value)}
+                  placeholder="Reason for transfer"
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={handleTransfer}
+                disabled={!transferTo || !transferPercent || transferMutation.isPending}
+                className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              >
+                {transferMutation.isPending ? 'Transferring...' : 'Transfer Shares'}
+              </button>
+              <button
+                onClick={() => setTransferModal(null)}
                 className="border border-gray-300 px-4 py-2 rounded text-sm text-gray-600 hover:bg-gray-50"
               >
                 Cancel

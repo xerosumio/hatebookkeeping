@@ -214,7 +214,8 @@ export function buildRecurringReminderEmailHtml(params: {
 export function buildStatusChangeEmailHtml(params: {
   companyName: string;
   requestNumber: string;
-  newStatus: 'approved' | 'rejected' | 'executed';
+  requestLabel?: string;
+  newStatus: 'approved' | 'rejected' | 'executed' | 'pending';
   actorName: string;
   reason?: string;
   bankReference?: string;
@@ -224,6 +225,7 @@ export function buildStatusChangeEmailHtml(params: {
     approved: { color: '#059669', bg: '#d1fae5', label: 'Approved' },
     rejected: { color: '#dc2626', bg: '#fee2e2', label: 'Rejected' },
     executed: { color: '#7c3aed', bg: '#ede9fe', label: 'Executed' },
+    pending: { color: '#d97706', bg: '#fef3c7', label: 'Pending Approval' },
   };
   const { color: statusColor, bg: statusBg, label: statusLabel } = statusMap[params.newStatus];
 
@@ -240,7 +242,7 @@ export function buildStatusChangeEmailHtml(params: {
       <div style="display:inline-block;background:${statusBg};color:${statusColor};padding:8px 20px;border-radius:20px;font-weight:600;font-size:14px;margin-bottom:16px">
         ${statusLabel}
       </div>
-      <h2 style="margin:0 0 8px;font-size:16px;color:#111">Payment Request ${params.requestNumber}</h2>
+      <h2 style="margin:0 0 8px;font-size:16px;color:#111">${params.requestLabel || 'Payment Request'} ${params.requestNumber}</h2>
       <p style="color:#666;font-size:14px;margin:0 0 4px">${statusLabel} by <strong>${params.actorName}</strong></p>
       ${params.reason ? `<p style="color:#92400e;background:#fef3c7;border-radius:6px;padding:10px 16px;font-size:13px;margin:12px 0;text-align:left"><strong>Reason:</strong> ${params.reason}</p>` : ''}
       ${params.bankReference ? `<p style="color:#4338ca;background:#eef2ff;border-radius:6px;padding:10px 16px;font-size:13px;margin:12px 0;text-align:left"><strong>Bank Reference:</strong> ${params.bankReference}</p>` : ''}

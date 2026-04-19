@@ -15,11 +15,18 @@ export interface IPaymentMilestone {
   dueDescription: string;
 }
 
+export interface IQuotationActivityLog {
+  action: 'created' | 'updated' | 'pending_approval' | 'approved' | 'rejected' | 'sent' | 'accepted' | 'client_rejected' | 'notified';
+  user: mongoose.Types.ObjectId;
+  timestamp: Date;
+  note?: string;
+}
+
 export interface IQuotation extends Document {
   quotationNumber: string;
   entity: mongoose.Types.ObjectId;
   client: mongoose.Types.ObjectId;
-  status: 'draft' | 'sent' | 'accepted' | 'rejected';
+  status: 'draft' | 'pending_approval' | 'approved' | 'sent' | 'accepted' | 'rejected';
   title: string;
   lineItems: ILineItem[];
   subtotal: number;
@@ -32,6 +39,11 @@ export interface IQuotation extends Document {
   signatureUrl: string;
   validUntil: Date;
   notes: string;
+  approvedBy?: mongoose.Types.ObjectId;
+  approvedAt?: Date;
+  rejectionReason?: string;
+  notifiedEmails: string[];
+  activityLog: IQuotationActivityLog[];
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -58,6 +70,20 @@ const paymentMilestoneSchema = new Schema<IPaymentMilestone>(
   { _id: false },
 );
 
+const quotationActivityLogSchema = new Schema<IQuotationActivityLog>(
+  {
+    action: {
+      type: String,
+      enum: ['created', 'updated', 'pending_approval', 'approved', 'rejected', 'sent', 'accepted', 'client_rejected', 'notified'],
+      required: true,
+    },
+    user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    timestamp: { type: Date, required: true },
+    note: { type: String },
+  },
+  { _id: false },
+);
+
 const quotationSchema = new Schema<IQuotation>(
   {
     quotationNumber: { type: String, required: true, unique: true },
@@ -65,7 +91,7 @@ const quotationSchema = new Schema<IQuotation>(
     client: { type: Schema.Types.ObjectId, ref: 'Client', required: true },
     status: {
       type: String,
-      enum: ['draft', 'sent', 'accepted', 'rejected'],
+      enum: ['draft', 'pending_approval', 'approved', 'sent', 'accepted', 'rejected'],
       default: 'draft',
     },
     title: { type: String, required: true, trim: true },
@@ -80,6 +106,11 @@ const quotationSchema = new Schema<IQuotation>(
     signatureUrl: { type: String, default: '' },
     validUntil: { type: Date },
     notes: { type: String, default: '' },
+    approvedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    approvedAt: { type: Date },
+    rejectionReason: { type: String },
+    notifiedEmails: [{ type: String }],
+    activityLog: [quotationActivityLogSchema],
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   },
   { timestamps: true },

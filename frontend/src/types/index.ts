@@ -17,6 +17,7 @@ export interface LoginResponse {
 export interface Client {
   _id: string;
   name: string;
+  entity?: string | Entity;
   contactPerson: string;
   email: string;
   phone: string;
@@ -51,11 +52,20 @@ export interface Entity {
   website: string;
   logoUrl: string;
   bankAccounts: BankAccount[];
+  brandColor: string;
   companyChopUrl: string;
   signatureUrl: string;
   active: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ShareAdjustmentLog {
+  previousPercent: number;
+  newPercent: number;
+  date: string;
+  reason: string;
+  changedBy: string | { _id: string; name: string };
 }
 
 export interface Shareholder {
@@ -64,6 +74,7 @@ export interface Shareholder {
   name: string;
   sharePercent: number;
   active: boolean;
+  shareHistory?: ShareAdjustmentLog[];
   currentEquity?: number;
   totalInvested?: number;
   createdAt: string;
@@ -93,6 +104,7 @@ export interface MonthlyCloseDistribution {
 
 export interface MonthlyClose {
   _id?: string;
+  entity: string | Entity;
   year: number;
   month: number;
   status: 'draft' | 'finalized';
@@ -111,12 +123,44 @@ export interface MonthlyClose {
   updatedAt?: string;
 }
 
+export interface Fund {
+  _id: string;
+  name: string;
+  type: 'reserve' | 'bank' | 'petty_cash';
+  entity?: string | Entity;
+  heldIn?: string | { _id: string; name: string; type: string };
+  balance: number;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FundTransfer {
+  _id: string;
+  fromFund?: string | { _id: string; name: string; type: string };
+  toFund?: string | { _id: string; name: string; type: string };
+  amount: number;
+  date: string;
+  description: string;
+  reference?: string;
+  createdBy: string | { _id: string; name: string };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QuotationActivityLog {
+  action: 'created' | 'updated' | 'pending_approval' | 'approved' | 'rejected' | 'sent' | 'accepted' | 'client_rejected' | 'notified';
+  user: string | { _id: string; name: string };
+  timestamp: string;
+  note?: string;
+}
+
 export interface Quotation {
   _id: string;
   quotationNumber: string;
   entity: string | Entity;
   client: string | Client;
-  status: 'draft' | 'sent' | 'accepted' | 'rejected';
+  status: 'draft' | 'pending_approval' | 'approved' | 'sent' | 'accepted' | 'rejected';
   title: string;
   lineItems: LineItem[];
   subtotal: number;
@@ -129,7 +173,12 @@ export interface Quotation {
   signatureUrl: string;
   validUntil: string;
   notes: string;
-  createdBy: string;
+  approvedBy?: string | User;
+  approvedAt?: string;
+  rejectionReason?: string;
+  notifiedEmails?: string[];
+  activityLog?: QuotationActivityLog[];
+  createdBy: string | User;
   createdAt: string;
   updatedAt: string;
 }
@@ -162,12 +211,14 @@ export interface Invoice {
 export interface Receipt {
   _id: string;
   receiptNumber: string;
+  entity?: string | Entity;
   invoice: string | Invoice;
   client: string | Client;
   amount: number;
   paymentMethod: string;
   paymentDate: string;
   bankReference: string;
+  bankAccount: string;
   notes: string;
   companyChopUrl: string;
   signatureUrl: string;
@@ -183,9 +234,11 @@ export interface Transaction {
   category: string;
   description: string;
   amount: number;
-  invoice?: string;
+  entity?: string | Entity;
+  payee?: string | { _id: string; name: string };
+  invoice?: string | { _id: string; invoiceNumber: string; client?: string | { _id: string; name: string } };
   receipt?: string;
-  paymentRequest?: string;
+  paymentRequest?: string | { _id: string; requestNumber: string; items?: Array<{ payee?: string | { _id: string; name: string }; description?: string; amount?: number; category?: string }> };
   bankReference: string;
   bankAccount: string;
   reconciled: boolean;
@@ -197,6 +250,7 @@ export interface Transaction {
 export interface Payee {
   _id: string;
   name: string;
+  entity?: string | Entity;
   bankName: string;
   bankAccountNumber: string;
   bankCode: string;
@@ -223,6 +277,7 @@ export interface ActivityLogEntry {
 export interface PaymentRequest {
   _id: string;
   requestNumber: string;
+  entity?: string | Entity;
   description: string;
   items: PaymentRequestItem[];
   totalAmount: number;
@@ -365,6 +420,7 @@ export interface RecurringHistoryEntry {
 export interface RecurringItem {
   _id: string;
   name: string;
+  entity?: string | Entity;
   type: 'income' | 'expense';
   category: string;
   amount: number;
@@ -372,7 +428,7 @@ export interface RecurringItem {
   client?: string | { _id: string; name: string };
   payee?: string | { _id: string; name: string };
   description: string;
-  startDate: string;
+  startDate?: string;
   endDate?: string;
   active: boolean;
   dueDay: number;

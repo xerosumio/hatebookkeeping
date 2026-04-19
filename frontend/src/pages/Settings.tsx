@@ -176,7 +176,7 @@ function EntityManager() {
   function emptyEntityForm(): EntityForm {
     return {
       code: '', name: '', address: '', phone: '', email: '', website: '',
-      logoUrl: '', companyChopUrl: '', signatureUrl: '',
+      logoUrl: '', brandColor: '', companyChopUrl: '', signatureUrl: '',
       bankAccounts: [],
     };
   }
@@ -186,8 +186,8 @@ function EntityManager() {
     setForm({
       code: entity.code, name: entity.name, address: entity.address,
       phone: entity.phone, email: entity.email, website: entity.website,
-      logoUrl: entity.logoUrl || '', companyChopUrl: entity.companyChopUrl || '',
-      signatureUrl: entity.signatureUrl || '',
+      logoUrl: entity.logoUrl || '', brandColor: entity.brandColor || '',
+      companyChopUrl: entity.companyChopUrl || '', signatureUrl: entity.signatureUrl || '',
       bankAccounts: entity.bankAccounts || [],
     });
     setShowNew(false);
@@ -310,6 +310,7 @@ interface EntityForm {
   email: string;
   website: string;
   logoUrl: string;
+  brandColor: string;
   companyChopUrl: string;
   signatureUrl: string;
   bankAccounts: BankAccount[];
@@ -371,6 +372,26 @@ function EntityFormFields({
         <div>
           <label className="block text-xs text-gray-500 mb-1">Website</label>
           <input type="text" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Brand Color</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="color"
+              value={form.brandColor || '#0369a1'}
+              onChange={(e) => setForm({ ...form, brandColor: e.target.value })}
+              className="w-8 h-8 rounded border border-gray-300 cursor-pointer p-0"
+            />
+            <input
+              type="text"
+              value={form.brandColor}
+              onChange={(e) => setForm({ ...form, brandColor: e.target.value })}
+              placeholder="#0369a1"
+              className="w-28 border border-gray-300 rounded px-2 py-1.5 text-sm font-mono"
+            />
+          </div>
         </div>
       </div>
 

@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   useIncomeStatement, useIncomeStatementTransactions,
-  useCashFlow, useAccountsReceivable, useAccountsPayable,
+  useCashFlow, useAccountsReceivable, useAccountsPayable, useEntities,
 } from '../api/hooks';
 import { formatMoney } from '../utils/money';
 import { ChevronRight, ChevronDown } from 'lucide-react';
-import type { IncomeStatementLine, CashFlowMonth, ARInvoice, APPaymentRequest, APCategoryBreakdown, Transaction } from '../types';
+import type { IncomeStatementLine, CashFlowMonth, ARInvoice, APPaymentRequest, APCategoryBreakdown, Transaction, Entity } from '../types';
 
 const tabs = ['Income Statement', 'Cash Flow', 'Accounts Receivable', 'Accounts Payable'] as const;
 type Tab = (typeof tabs)[number];
@@ -46,6 +46,8 @@ function DateModeBar({ mode, onChange }: { mode: DateMode; onChange: (m: DateMod
 
 export default function Reports() {
   const [activeTab, setActiveTab] = useState<Tab>('Income Statement');
+  const [entityFilter, setEntityFilter] = useState('');
+  const { data: entities } = useEntities();
 
   return (
     <div>
@@ -66,18 +68,31 @@ export default function Reports() {
         ))}
       </div>
 
-      {activeTab === 'Income Statement' && <IncomeStatementTab />}
-      {activeTab === 'Cash Flow' && <CashFlowTab />}
-      {activeTab === 'Accounts Receivable' && <AccountsReceivableTab />}
-      {activeTab === 'Accounts Payable' && <AccountsPayableTab />}
+      <div className="flex items-center gap-4 mb-4">
+        <select
+          value={entityFilter}
+          onChange={(e) => setEntityFilter(e.target.value)}
+          className="border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">All Entities</option>
+          {entities?.map((ent: Entity) => (
+            <option key={ent._id} value={ent._id}>{ent.code} — {ent.name}</option>
+          ))}
+        </select>
+      </div>
+
+      {activeTab === 'Income Statement' && <IncomeStatementTab entity={entityFilter} />}
+      {activeTab === 'Cash Flow' && <CashFlowTab entity={entityFilter} />}
+      {activeTab === 'Accounts Receivable' && <AccountsReceivableTab entity={entityFilter} />}
+      {activeTab === 'Accounts Payable' && <AccountsPayableTab entity={entityFilter} />}
     </div>
   );
 }
 
-function CategoryDrillDown({ type, category, startDate, endDate }: {
-  type: string; category: string; startDate: string; endDate: string;
+function CategoryDrillDown({ type, category, startDate, endDate, entity }: {
+  type: string; category: string; startDate: string; endDate: string; entity?: string;
 }) {
-  const { data: txns, isLoading } = useIncomeStatementTransactions(type, category, startDate, endDate, true);
+  const { data: txns, isLoading } = useIncomeStatementTransactions(type, category, startDate, endDate, true, entity || undefined);
 
   if (isLoading) return <tr><td colSpan={3} className="py-2 pl-8 text-xs text-gray-400">Loading transactions...</td></tr>;
   if (!txns || txns.length === 0) return <tr><td colSpan={3} className="py-2 pl-8 text-xs text-gray-400">No transactions found.</td></tr>;
@@ -115,10 +130,10 @@ function CategoryDrillDown({ type, category, startDate, endDate }: {
   );
 }
 
-function IncomeStatementTab() {
+function IncomeStatementTab({ entity }: { entity: string }) {
   const [startDate, setStartDate] = useState(monthStart());
   const [endDate, setEndDate] = useState(monthEnd());
-  const { data, isLoading } = useIncomeStatement(startDate, endDate);
+  const { data, isLoading } = useIncomeStatement(startDate, endDate, entity || undefined);
   const [expanded, setExpanded] = useState<string | null>(null);
 
   function toggleExpand(key: string) {
@@ -144,7 +159,7 @@ function IncomeStatementTab() {
             <td className="py-2 text-right font-mono w-40">{formatMoney(item.total)}</td>
           </tr>
           {isOpen && (
-            <CategoryDrillDown type={type} category={item.category} startDate={startDate} endDate={endDate} />
+            <CategoryDrillDown type={type} category={item.category} startDate={startDate} endDate={endDate} entity={entity || undefined} />
           )}
         </>
       );
@@ -220,10 +235,10 @@ function IncomeStatementTab() {
   );
 }
 
-function CashFlowTab() {
+function CashFlowTab({ entity }: { entity: string }) {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
-  const { data, isLoading } = useCashFlow(year);
+  const { data, isLoading } = useCashFlow(year, entity || undefined);
 
   const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
@@ -279,14 +294,14 @@ function CashFlowTab() {
   );
 }
 
-function AccountsReceivableTab() {
+function AccountsReceivableTab({ entity }: { entity: string }) {
   const [mode, setMode] = useState<DateMode>('month');
   const [startDate, setStartDate] = useState(monthStart());
   const [endDate, setEndDate] = useState(monthEnd());
 
   const effectiveStart = mode === 'all' ? undefined : mode === 'month' ? monthStart() : startDate;
   const effectiveEnd = mode === 'all' ? undefined : mode === 'month' ? monthEnd() : endDate;
-  const { data, isLoading } = useAccountsReceivable(effectiveStart, effectiveEnd);
+  const { data, isLoading } = useAccountsReceivable(effectiveStart, effectiveEnd, entity || undefined);
 
   return (
     <div className="max-w-4xl">
@@ -386,14 +401,14 @@ function AccountsReceivableTab() {
   );
 }
 
-function AccountsPayableTab() {
+function AccountsPayableTab({ entity }: { entity: string }) {
   const [mode, setMode] = useState<DateMode>('all');
   const [startDate, setStartDate] = useState(monthStart());
   const [endDate, setEndDate] = useState(monthEnd());
 
   const effectiveStart = mode === 'all' ? undefined : mode === 'month' ? monthStart() : startDate;
   const effectiveEnd = mode === 'all' ? undefined : mode === 'month' ? monthEnd() : endDate;
-  const { data, isLoading } = useAccountsPayable(effectiveStart, effectiveEnd);
+  const { data, isLoading } = useAccountsPayable(effectiveStart, effectiveEnd, entity || undefined);
 
   return (
     <div className="max-w-5xl">

@@ -3,7 +3,7 @@ import api from './client';
 import type {
   Client, Quotation, Invoice, Receipt, Transaction, Payee, PaymentRequest, RecurringItem,
   Settings, CashFlowReport, AccountsReceivableReport, IncomeStatementReport, AccountsPayableReport,
-  User, Reimbursement, Entity, Shareholder, EquityTransaction, MonthlyClose,
+  User, Reimbursement, Entity, Shareholder, EquityTransaction, MonthlyClose, Fund, FundTransfer,
 } from '../types';
 
 // Users (admin-only)
@@ -42,10 +42,10 @@ export function useDeactivateUser() {
 }
 
 // Clients
-export function useClients(search?: string) {
+export function useClients(filters?: { search?: string; entity?: string }) {
   return useQuery({
-    queryKey: ['clients', search],
-    queryFn: () => api.get<Client[]>('/clients', { params: { search } }).then((r) => r.data),
+    queryKey: ['clients', filters],
+    queryFn: () => api.get<Client[]>('/clients', { params: filters }).then((r) => r.data),
   });
 }
 
@@ -83,7 +83,7 @@ export function useDeleteClient() {
 }
 
 // Quotations
-export function useQuotations(filters?: { status?: string; client?: string }) {
+export function useQuotations(filters?: { status?: string; client?: string; entity?: string }) {
   return useQuery({
     queryKey: ['quotations', filters],
     queryFn: () => api.get<Quotation[]>('/quotations', { params: filters }).then((r) => r.data),
@@ -125,8 +125,34 @@ export function useUpdateQuotationStatus() {
   });
 }
 
+export function useApproveQuotation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.patch(`/quotations/${id}/approve`).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['quotations'] }),
+  });
+}
+
+export function useRejectQuotation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      api.patch(`/quotations/${id}/reject`, { reason }).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['quotations'] }),
+  });
+}
+
+export function useNotifyQuotation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, emails }: { id: string; emails: string[] }) =>
+      api.post(`/quotations/${id}/notify`, { emails }).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['quotations'] }),
+  });
+}
+
 // Invoices
-export function useInvoices(filters?: { status?: string; client?: string }) {
+export function useInvoices(filters?: { status?: string; client?: string; entity?: string }) {
   return useQuery({
     queryKey: ['invoices', filters],
     queryFn: () => api.get<Invoice[]>('/invoices', { params: filters }).then((r) => r.data),
@@ -172,10 +198,10 @@ export function useConvertQuotationToInvoices() {
 }
 
 // Receipts
-export function useReceipts() {
+export function useReceipts(filters?: { entity?: string }) {
   return useQuery({
-    queryKey: ['receipts'],
-    queryFn: () => api.get<Receipt[]>('/receipts').then((r) => r.data),
+    queryKey: ['receipts', filters],
+    queryFn: () => api.get<Receipt[]>('/receipts', { params: filters }).then((r) => r.data),
   });
 }
 
@@ -234,10 +260,10 @@ export function useDeleteTransaction() {
 }
 
 // Payees
-export function usePayees() {
+export function usePayees(filters?: { entity?: string }) {
   return useQuery({
-    queryKey: ['payees'],
-    queryFn: () => api.get<Payee[]>('/payees').then((r) => r.data),
+    queryKey: ['payees', filters],
+    queryFn: () => api.get<Payee[]>('/payees', { params: filters }).then((r) => r.data),
   });
 }
 
@@ -268,7 +294,7 @@ export function useDeletePayee() {
 }
 
 // Payment Requests
-export function usePaymentRequests(filters?: { status?: string }) {
+export function usePaymentRequests(filters?: { status?: string; entity?: string }) {
   return useQuery({
     queryKey: ['paymentRequests', filters],
     queryFn: () => api.get<PaymentRequest[]>('/payment-requests', { params: filters }).then((r) => r.data),
@@ -349,10 +375,10 @@ export function useExecutePaymentRequest() {
 }
 
 // Recurring Items
-export function useRecurringItems() {
+export function useRecurringItems(filters?: { entity?: string }) {
   return useQuery({
-    queryKey: ['recurring'],
-    queryFn: () => api.get<RecurringItem[]>('/recurring').then((r) => r.data),
+    queryKey: ['recurring', filters],
+    queryFn: () => api.get<RecurringItem[]>('/recurring', { params: filters }).then((r) => r.data),
   });
 }
 
@@ -426,27 +452,27 @@ export function useUpdateSettings() {
 }
 
 // Reports
-export function useCashFlow(year: number) {
+export function useCashFlow(year: number, entity?: string) {
   return useQuery({
-    queryKey: ['reports', 'cash-flow', year],
-    queryFn: () => api.get<CashFlowReport>('/reports/cash-flow', { params: { year } }).then((r) => r.data),
+    queryKey: ['reports', 'cash-flow', year, entity],
+    queryFn: () => api.get<CashFlowReport>('/reports/cash-flow', { params: { year, ...(entity ? { entity } : {}) } }).then((r) => r.data),
   });
 }
 
-export function useAccountsReceivable(startDate?: string, endDate?: string) {
+export function useAccountsReceivable(startDate?: string, endDate?: string, entity?: string) {
   return useQuery({
-    queryKey: ['reports', 'accounts-receivable', startDate, endDate],
+    queryKey: ['reports', 'accounts-receivable', startDate, endDate, entity],
     queryFn: () => api.get<AccountsReceivableReport>('/reports/accounts-receivable', {
-      params: { ...(startDate ? { startDate } : {}), ...(endDate ? { endDate } : {}) },
+      params: { ...(startDate ? { startDate } : {}), ...(endDate ? { endDate } : {}), ...(entity ? { entity } : {}) },
     }).then((r) => r.data),
   });
 }
 
-export function useAccountsPayable(startDate?: string, endDate?: string) {
+export function useAccountsPayable(startDate?: string, endDate?: string, entity?: string) {
   return useQuery({
-    queryKey: ['reports', 'accounts-payable', startDate, endDate],
+    queryKey: ['reports', 'accounts-payable', startDate, endDate, entity],
     queryFn: () => api.get<AccountsPayableReport>('/reports/accounts-payable', {
-      params: { ...(startDate ? { startDate } : {}), ...(endDate ? { endDate } : {}) },
+      params: { ...(startDate ? { startDate } : {}), ...(endDate ? { endDate } : {}), ...(entity ? { entity } : {}) },
     }).then((r) => r.data),
   });
 }
@@ -458,22 +484,22 @@ export function useRecurringOverview() {
   });
 }
 
-export function useIncomeStatement(startDate?: string, endDate?: string) {
+export function useIncomeStatement(startDate?: string, endDate?: string, entity?: string) {
   return useQuery({
-    queryKey: ['reports', 'income-statement', startDate, endDate],
+    queryKey: ['reports', 'income-statement', startDate, endDate, entity],
     queryFn: () =>
-      api.get<IncomeStatementReport>('/reports/income-statement', { params: { startDate, endDate } }).then((r) => r.data),
+      api.get<IncomeStatementReport>('/reports/income-statement', { params: { startDate, endDate, ...(entity ? { entity } : {}) } }).then((r) => r.data),
   });
 }
 
 export function useIncomeStatementTransactions(
-  type: string, category: string, startDate?: string, endDate?: string, enabled = false,
+  type: string, category: string, startDate?: string, endDate?: string, enabled = false, entity?: string,
 ) {
   return useQuery({
-    queryKey: ['reports', 'income-statement-txns', type, category, startDate, endDate],
+    queryKey: ['reports', 'income-statement-txns', type, category, startDate, endDate, entity],
     queryFn: () =>
       api.get<Transaction[]>('/reports/income-statement/transactions', {
-        params: { type, category, startDate, endDate },
+        params: { type, category, startDate, endDate, ...(entity ? { entity } : {}) },
       }).then((r) => r.data),
     enabled,
   });
@@ -599,9 +625,28 @@ export function useCreateShareholder() {
 export function useUpdateShareholder() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { name?: string; sharePercent?: number; active?: boolean } }) =>
-      api.put<Shareholder>(`/shareholders/${id}`, data).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['shareholders'] }),
+    mutationFn: ({
+      id,
+      data,
+    }: {
+      id: string;
+      data: { name?: string; sharePercent?: number; active?: boolean; reason?: string };
+    }) => api.put<Shareholder>(`/shareholders/${id}`, data).then((r) => r.data),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ['shareholders'] });
+      qc.invalidateQueries({ queryKey: ['shareholders', variables.id] });
+    },
+  });
+}
+
+export function useShareTransfer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { from: string; to: string; percent: number; reason?: string }) =>
+      api.post('/shareholders/transfer', data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['shareholders'] });
+    },
   });
 }
 
@@ -615,33 +660,33 @@ export function useInvestShareholder() {
 }
 
 // Monthly Close
-export function useMonthlyCloses() {
+export function useMonthlyCloses(entity?: string) {
   return useQuery({
-    queryKey: ['monthlyClose'],
-    queryFn: () => api.get<MonthlyClose[]>('/monthly-close').then((r) => r.data),
+    queryKey: ['monthlyClose', entity],
+    queryFn: () => api.get<MonthlyClose[]>('/monthly-close', { params: { ...(entity ? { entity } : {}) } }).then((r) => r.data),
   });
 }
 
-export function useMonthlyClose(year: number, month: number) {
+export function useMonthlyClose(entity: string, year: number, month: number) {
   return useQuery({
-    queryKey: ['monthlyClose', year, month],
-    queryFn: () => api.get<MonthlyClose>(`/monthly-close/${year}/${month}`).then((r) => r.data),
-    enabled: year > 0 && month > 0,
+    queryKey: ['monthlyClose', entity, year, month],
+    queryFn: () => api.get<MonthlyClose>(`/monthly-close/${entity}/${year}/${month}`).then((r) => r.data),
+    enabled: !!entity && year > 0 && month > 0,
   });
 }
 
 export function usePreviewMonthlyClose() {
   return useMutation({
-    mutationFn: ({ year, month }: { year: number; month: number }) =>
-      api.post<MonthlyClose>(`/monthly-close/${year}/${month}/preview`).then((r) => r.data),
+    mutationFn: ({ entity, year, month }: { entity: string; year: number; month: number }) =>
+      api.post<MonthlyClose>(`/monthly-close/${entity}/${year}/${month}/preview`).then((r) => r.data),
   });
 }
 
 export function useFinalizeMonthlyClose() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ year, month, notes }: { year: number; month: number; notes?: string }) =>
-      api.post<MonthlyClose>(`/monthly-close/${year}/${month}/finalize`, { notes }).then((r) => r.data),
+    mutationFn: ({ entity, year, month, notes }: { entity: string; year: number; month: number; notes?: string }) =>
+      api.post<MonthlyClose>(`/monthly-close/${entity}/${year}/${month}/finalize`, { notes }).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['monthlyClose'] });
       qc.invalidateQueries({ queryKey: ['shareholders'] });
@@ -652,11 +697,65 @@ export function useFinalizeMonthlyClose() {
 export function useCreateCollectionRequests() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ year, month }: { year: number; month: number }) =>
-      api.post(`/monthly-close/${year}/${month}/create-collection-requests`).then((r) => r.data),
+    mutationFn: ({ entity, year, month }: { entity: string; year: number; month: number }) =>
+      api.post(`/monthly-close/${entity}/${year}/${month}/create-collection-requests`).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['paymentRequests'] });
     },
+  });
+}
+
+// Funds
+export function useFunds() {
+  return useQuery({
+    queryKey: ['funds'],
+    queryFn: () => api.get<Fund[]>('/funds').then((r) => r.data),
+  });
+}
+
+export function useCreateFund() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { name: string; type: string; entity?: string; heldIn?: string; balance?: number }) =>
+      api.post<Fund>('/funds', data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['funds'] }),
+  });
+}
+
+export function useUpdateFund() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { name?: string; type?: string; entity?: string | null; heldIn?: string | null; balance?: number; active?: boolean } }) =>
+      api.put<Fund>(`/funds/${id}`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['funds'] }),
+  });
+}
+
+export function useDeleteFund() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/funds/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['funds'] }),
+  });
+}
+
+export function useFundTransfer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { fromFund?: string; toFund?: string; amount: number; date: string; description: string; reference?: string }) =>
+      api.post<FundTransfer>('/funds/transfer', data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['funds'] });
+      qc.invalidateQueries({ queryKey: ['fundTransfers'] });
+    },
+  });
+}
+
+export function useFundTransactions(fundId: string) {
+  return useQuery({
+    queryKey: ['fundTransfers', fundId],
+    queryFn: () => api.get<FundTransfer[]>(`/funds/${fundId}/transactions`).then((r) => r.data),
+    enabled: !!fundId,
   });
 }
 

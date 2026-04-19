@@ -4,13 +4,14 @@ import { useNavigate } from 'react-router-dom';
 import {
   useRecurringItems, useCreateRecurringItem, useUpdateRecurringItem,
   useDeleteRecurringItem, useGenerateRecurring, useGenerateRecurringInvoice,
-  useSettings, useClients, usePayees,
+  useSettings, useClients, usePayees, useEntities,
 } from '../api/hooks';
 import { formatMoney, decimalToCents, centsToDecimal } from '../utils/money';
 import { Plus, Trash2, Pencil, X, Play, Pause, FileText, ChevronDown, ChevronRight, Bell, Receipt, CreditCard } from 'lucide-react';
-import type { RecurringItem, RecurringHistoryEntry } from '../types';
+import type { RecurringItem, RecurringHistoryEntry, Entity } from '../types';
 
 function getNextDue(item: RecurringItem): Date | null {
+  if (!item.startDate) return null;
   const start = new Date(item.startDate);
   const now = new Date();
   if (item.endDate && new Date(item.endDate) < now) return null;
@@ -71,7 +72,7 @@ interface FormState {
 
 const emptyForm = (): FormState => ({
   name: '', type: 'expense', category: '', amount: '', frequency: 'monthly',
-  client: '', payee: '', description: '', startDate: new Date().toISOString().slice(0, 10),
+  client: '', payee: '', description: '', startDate: '',
   endDate: '', dueDay: '1', alertDaysBefore: '7', paymentTerms: '', bankAccountInfo: '', active: true,
 });
 
@@ -79,7 +80,11 @@ export default function RecurringList() {
   const navigate = useNavigate();
   const { data: settings } = useSettings();
   const categories = (settings?.chartOfAccounts || []).filter((a) => a.active);
-  const { data: items, isLoading } = useRecurringItems();
+  const [entityFilter, setEntityFilter] = useState('');
+  const { data: entities } = useEntities();
+  const { data: items, isLoading } = useRecurringItems(
+    entityFilter ? { entity: entityFilter } : undefined,
+  );
   const { data: clients } = useClients();
   const { data: payees } = usePayees();
   const createItem = useCreateRecurringItem();
@@ -117,7 +122,7 @@ export default function RecurringList() {
       client: f.client || undefined,
       payee: f.payee || undefined,
       description: f.description,
-      startDate: f.startDate,
+      startDate: f.startDate || undefined,
       endDate: f.endDate || undefined,
       dueDay: Number(f.dueDay) || 1,
       alertDaysBefore: Number(f.alertDaysBefore) || 7,
@@ -257,8 +262,8 @@ export default function RecurringList() {
             </div>
           )}
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Start Date *</label>
-            <input type="date" value={f.startDate} onChange={(e) => setF({ ...f, startDate: e.target.value })} required className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
+            <label className="block text-xs font-medium text-gray-600 mb-1">Start Date</label>
+            <input type="date" value={f.startDate} onChange={(e) => setF({ ...f, startDate: e.target.value })} className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">End Date</label>
@@ -356,6 +361,19 @@ export default function RecurringList() {
             <Plus size={16} /> Add
           </button>
         </div>
+      </div>
+
+      <div className="flex items-center gap-4 mb-4">
+        <select
+          value={entityFilter}
+          onChange={(e) => setEntityFilter(e.target.value)}
+          className="border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">All Entities</option>
+          {entities?.map((ent) => (
+            <option key={ent._id} value={ent._id}>{ent.code} — {ent.name}</option>
+          ))}
+        </select>
       </div>
 
       <div className="flex gap-1 mb-4 border-b border-gray-200">

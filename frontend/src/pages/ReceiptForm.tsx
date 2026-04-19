@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useInvoice, useCreateReceipt } from '../api/hooks';
 import { formatMoney, decimalToCents, centsToDecimal } from '../utils/money';
-import type { Client } from '../types';
+import type { Client, Entity } from '../types';
 
 export default function ReceiptForm() {
   const navigate = useNavigate();
@@ -15,6 +15,7 @@ export default function ReceiptForm() {
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('bank_transfer');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
+  const [bankAccount, setBankAccount] = useState('');
   const [bankReference, setBankReference] = useState('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
@@ -26,6 +27,8 @@ export default function ReceiptForm() {
   }, [invoice]);
 
   const client = invoice && typeof invoice.client === 'object' ? (invoice.client as Client) : null;
+  const entityObj = invoice && typeof invoice.entity === 'object' ? (invoice.entity as Entity) : null;
+  const bankAccountOptions = entityObj?.bankAccounts || [];
   const amountCents = decimalToCents(Number(amount) || 0);
   const isFullPayment = invoice && amountCents === invoice.amountDue;
   const isOverpay = invoice && amountCents > invoice.amountDue;
@@ -43,6 +46,7 @@ export default function ReceiptForm() {
         amount: amountCents,
         paymentMethod,
         paymentDate,
+        bankAccount,
         bankReference,
         notes,
       });
@@ -143,15 +147,32 @@ export default function ReceiptForm() {
           </div>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Bank Reference</label>
-          <input
-            type="text"
-            value={bankReference}
-            onChange={(e) => setBankReference(e.target.value)}
-            placeholder="Transaction ID or reference number"
-            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Deposit Account</label>
+            <select
+              value={bankAccount}
+              onChange={(e) => setBankAccount(e.target.value)}
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select account...</option>
+              {bankAccountOptions.map((acc, i) => (
+                <option key={i} value={acc.name}>
+                  {acc.name}{acc.bankName ? ` (${acc.bankName})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Bank Reference</label>
+            <input
+              type="text"
+              value={bankReference}
+              onChange={(e) => setBankReference(e.target.value)}
+              placeholder="Transaction ID or reference number"
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
         </div>
 
         <div>

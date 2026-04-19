@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useClient, useCreateClient, useUpdateClient } from '../api/hooks';
+import { useClient, useCreateClient, useUpdateClient, useEntities } from '../api/hooks';
 
 export default function ClientForm() {
   const { id } = useParams();
@@ -10,9 +10,11 @@ export default function ClientForm() {
   const { data: existing } = useClient(id || '');
   const createClient = useCreateClient();
   const updateClient = useUpdateClient();
+  const { data: entities } = useEntities();
 
   const [form, setForm] = useState({
     name: '',
+    entity: '',
     contactPerson: '',
     email: '',
     phone: '',
@@ -25,6 +27,7 @@ export default function ClientForm() {
     if (existing) {
       setForm({
         name: existing.name,
+        entity: existing.entity ? (typeof existing.entity === 'object' ? existing.entity._id : existing.entity) : '',
         contactPerson: existing.contactPerson,
         email: existing.email,
         phone: existing.phone,
@@ -66,6 +69,20 @@ export default function ClientForm() {
             required
             className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Entity</label>
+          <select
+            value={form.entity}
+            onChange={(e) => setForm({ ...form, entity: e.target.value })}
+            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">No entity</option>
+            {entities?.map((ent) => (
+              <option key={ent._id} value={ent._id}>{ent.code} — {ent.name}</option>
+            ))}
+          </select>
         </div>
 
         <div>

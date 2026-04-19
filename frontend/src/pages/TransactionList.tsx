@@ -1,16 +1,19 @@
 import { useState } from 'react';
-import { useTransactions, useDeleteTransaction } from '../api/hooks';
+import { useTransactions, useDeleteTransaction, useEntities } from '../api/hooks';
 import { formatMoney } from '../utils/money';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import TransactionForm from './TransactionForm';
-import type { Transaction } from '../types';
+import type { Transaction, Entity } from '../types';
 
 export default function TransactionList() {
   const [typeFilter, setTypeFilter] = useState('');
+  const [entityFilter, setEntityFilter] = useState('');
+  const { data: entities } = useEntities();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Transaction | null>(null);
   const filters: Record<string, string> = {};
   if (typeFilter) filters.type = typeFilter;
+  if (entityFilter) filters.entity = entityFilter;
 
   const { data: transactions, isLoading } = useTransactions(Object.keys(filters).length ? filters : undefined);
   const deleteTransaction = useDeleteTransaction();
@@ -33,6 +36,18 @@ export default function TransactionList() {
 
   const isManual = (t: Transaction) => !t.invoice && !t.receipt && !t.paymentRequest;
 
+  function getPayeePayer(t: Transaction): string {
+    if (t.payee && typeof t.payee === 'object') return t.payee.name;
+    if (t.invoice && typeof t.invoice === 'object' && t.invoice.client && typeof t.invoice.client === 'object') {
+      return t.invoice.client.name;
+    }
+    if (t.paymentRequest && typeof t.paymentRequest === 'object' && t.paymentRequest.items?.length) {
+      const firstPayee = t.paymentRequest.items[0]?.payee;
+      if (firstPayee && typeof firstPayee === 'object') return firstPayee.name;
+    }
+    return '';
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -53,18 +68,30 @@ export default function TransactionList() {
         </div>
       )}
 
-      <div className="flex gap-2 mb-4">
-        {['', 'income', 'expense'].map((t) => (
-          <button
-            key={t}
-            onClick={() => setTypeFilter(t)}
-            className={`px-3 py-1 rounded text-sm ${
-              typeFilter === t ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >
-            {t || 'All'}
-          </button>
-        ))}
+      <div className="flex items-center gap-4 mb-4">
+        <div className="flex gap-2">
+          {['', 'income', 'expense'].map((t) => (
+            <button
+              key={t}
+              onClick={() => setTypeFilter(t)}
+              className={`px-3 py-1 rounded text-sm ${
+                typeFilter === t ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {t || 'All'}
+            </button>
+          ))}
+        </div>
+        <select
+          value={entityFilter}
+          onChange={(e) => setEntityFilter(e.target.value)}
+          className="border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">All Entities</option>
+          {entities?.map((ent) => (
+            <option key={ent._id} value={ent._id}>{ent.code} — {ent.name}</option>
+          ))}
+        </select>
       </div>
 
       {isLoading ? (
@@ -78,7 +105,9 @@ export default function TransactionList() {
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Date</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Type</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Entity</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Category</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Payee / Payer</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Description</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Amount</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Account</th>
@@ -97,7 +126,11 @@ export default function TransactionList() {
                       {t.type}
                     </span>
                   </td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">
+                    {t.entity && typeof t.entity === 'object' ? (t.entity as Entity).code : ''}
+                  </td>
                   <td className="px-4 py-3 text-gray-600">{t.category.replace(/_/g, ' ')}</td>
+                  <td className="px-4 py-3 text-gray-600 text-xs">{getPayeePayer(t) || '—'}</td>
                   <td className="px-4 py-3">{t.description}</td>
                   <td className={`px-4 py-3 text-right font-mono tabular-nums ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
                     {t.type === 'income' ? '+' : '-'}{formatMoney(t.amount)}
@@ -113,15 +146,13 @@ export default function TransactionList() {
                       >
                         <Pencil size={14} />
                       </button>
-                      {isManual(t) && (
-                        <button
-                          onClick={() => handleDelete(t)}
-                          className="text-gray-400 hover:text-red-600 p-1"
-                          title="Delete"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleDelete(t)}
+                        className="text-gray-400 hover:text-red-600 p-1"
+                        title="Delete"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   </td>
                 </tr>

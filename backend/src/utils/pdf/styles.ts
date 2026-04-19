@@ -13,13 +13,20 @@ Font.register({
   ],
 });
 
-const ACCENT = '#0369a1';
+const DEFAULT_ACCENT = '#0369a1';
 const TEXT = '#1e293b';
 const MUTED = '#64748b';
 const BORDER = '#cbd5e1';
 const LIGHT_BG = '#f8fafc';
 
-export const styles = StyleSheet.create({
+export function createStyles(accent: string = DEFAULT_ACCENT) {
+  return StyleSheet.create(buildStyles(accent));
+}
+
+export const styles = StyleSheet.create(buildStyles(DEFAULT_ACCENT));
+
+function buildStyles(ACCENT: string) {
+  return {
   page: {
     padding: 48,
     paddingBottom: 60,
@@ -33,18 +40,18 @@ export const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: 28,
   },
   headerLeft: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 10,
     flex: 1,
   },
   logo: {
-    width: 60,
-    height: 60,
+    width: 90,
+    height: 90,
     objectFit: 'contain',
   },
   companyBlock: {
@@ -63,6 +70,7 @@ export const styles = StyleSheet.create({
   },
   headerRight: {
     alignItems: 'flex-end',
+    justifyContent: 'center',
   },
   docTitleWrap: {
     marginBottom: 4,
@@ -261,15 +269,16 @@ export const styles = StyleSheet.create({
   },
 
   footer: {
-    position: 'absolute',
+    position: 'absolute' as const,
     bottom: 24,
     left: 48,
     right: 48,
     fontSize: 7,
     color: MUTED,
-    textAlign: 'center',
+    textAlign: 'center' as const,
     paddingTop: 8,
     borderTopWidth: 0.5,
     borderTopColor: BORDER,
   },
-});
+  } satisfies Record<string, any>;
+}

@@ -2,29 +2,32 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMonthlyClose, useFinalizeMonthlyClose, useCreateCollectionRequests } from '../api/hooks';
 import { formatMoney } from '../utils/money';
+import type { Entity } from '../types';
 
 const MONTH_NAMES = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 export default function MonthlyCloseDetail() {
-  const { year: yearStr, month: monthStr } = useParams();
+  const { entity: entityId, year: yearStr, month: monthStr } = useParams();
   const navigate = useNavigate();
   const year = parseInt(yearStr || '0');
   const month = parseInt(monthStr || '0');
 
-  const { data, isLoading, refetch } = useMonthlyClose(year, month);
+  const { data, isLoading, refetch } = useMonthlyClose(entityId || '', year, month);
   const finalizeMutation = useFinalizeMonthlyClose();
   const collectionMutation = useCreateCollectionRequests();
   const [notes, setNotes] = useState('');
 
   async function handleFinalize() {
+    if (!entityId) return;
     if (!confirm(`Finalize ${MONTH_NAMES[month]} ${year}? This will create equity transactions for all shareholders.`)) return;
-    await finalizeMutation.mutateAsync({ year, month, notes });
+    await finalizeMutation.mutateAsync({ entity: entityId, year, month, notes });
     refetch();
   }
 
   async function handleCreateCollections() {
+    if (!entityId) return;
     if (!confirm('Create payment requests to collect from shareholders?')) return;
-    await collectionMutation.mutateAsync({ year, month });
+    await collectionMutation.mutateAsync({ entity: entityId, year, month });
     alert('Collection payment requests created.');
   }
 
@@ -32,6 +35,8 @@ export default function MonthlyCloseDetail() {
   if (!data) return <p className="text-gray-500">No data</p>;
 
   const isFinalized = data.status === 'finalized';
+  const entityName = data.entity && typeof data.entity === 'object' ? (data.entity as Entity).name : '';
+  const entityCode = data.entity && typeof data.entity === 'object' ? (data.entity as Entity).code : '';
 
   return (
     <div>
@@ -42,13 +47,13 @@ export default function MonthlyCloseDetail() {
       <div className="flex justify-between items-start mb-6">
         <div>
           <h1 className="text-2xl font-bold">{MONTH_NAMES[month]} {year}</h1>
+          {entityCode && <span className="text-sm text-gray-500 mr-2">{entityCode} — {entityName}</span>}
           <span className={`text-xs px-2 py-0.5 rounded mt-1 inline-block ${isFinalized ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
             {isFinalized ? 'Finalized' : 'Draft Preview'}
           </span>
         </div>
       </div>
 
-      {/* P&L Summary */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-white border border-gray-200 rounded-lg p-4">
           <div className="text-sm text-gray-500">Total Income</div>
@@ -66,7 +71,6 @@ export default function MonthlyCloseDetail() {
         </div>
       </div>
 
-      {/* Distribution Breakdown */}
       {!data.isLoss && data.netProfit > 0 && (
         <div className="grid grid-cols-3 gap-4 mb-6">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -84,7 +88,6 @@ export default function MonthlyCloseDetail() {
         </div>
       )}
 
-      {/* Per-Shareholder Breakdown */}
       <h2 className="text-lg font-semibold mb-3">
         {data.isLoss ? 'Collection from Shareholders' : 'Distribution to Shareholders'}
       </h2>
@@ -114,7 +117,6 @@ export default function MonthlyCloseDetail() {
         </table>
       </div>
 
-      {/* Actions */}
       {!isFinalized && (
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
           <div className="mb-3">

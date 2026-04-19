@@ -23,6 +23,7 @@ const receiptSchema = z.object({
   paymentMethod: z.string().optional().default('bank_transfer'),
   paymentDate: z.string(),
   bankReference: z.string().optional().default(''),
+  bankAccount: z.string().optional().default(''),
   notes: z.string().optional().default(''),
   companyChopUrl: z.string().optional().default(''),
   signatureUrl: z.string().optional().default(''),
@@ -30,7 +31,11 @@ const receiptSchema = z.object({
 
 router.get('/', async (req, res, next) => {
   try {
-    const receipts = await Receipt.find()
+    const { entity } = req.query;
+    const filter: Record<string, unknown> = {};
+    if (entity) filter.entity = entity;
+    const receipts = await Receipt.find(filter)
+      .populate('entity', 'code name')
       .populate('client', 'name')
       .populate('invoice', 'invoiceNumber total')
       .sort({ createdAt: -1 });
@@ -56,6 +61,7 @@ router.post('/', async (req: AuthRequest, res, next) => {
     const receipt = await Receipt.create({
       ...data,
       receiptNumber,
+      entity: invoice.entity,
       client: invoice.client,
       createdBy: req.user!._id,
     });
@@ -73,8 +79,10 @@ router.post('/', async (req: AuthRequest, res, next) => {
       category: 'revenue',
       description: `Payment received — ${invoice.invoiceNumber}`,
       amount: data.amount,
+      entity: invoice.entity,
       invoice: invoice._id,
       receipt: receipt._id,
+      bankAccount: data.bankAccount,
       bankReference: data.bankReference,
       reconciled: !!data.bankReference,
       createdBy: req.user!._id,
@@ -117,7 +125,7 @@ router.get('/:id/pdf', async (req, res, next) => {
     const invoiceEntity = (receipt.invoice as any)?.entity;
     const settings = await getSettings();
     const company = invoiceEntity
-      ? { companyName: invoiceEntity.name, companyAddress: invoiceEntity.address, companyPhone: invoiceEntity.phone, companyEmail: invoiceEntity.email, companyWebsite: invoiceEntity.website, logoUrl: invoiceEntity.logoUrl, companyChopUrl: invoiceEntity.companyChopUrl, signatureUrl: invoiceEntity.signatureUrl, bankAccounts: invoiceEntity.bankAccounts }
+      ? { companyName: invoiceEntity.name, companyAddress: invoiceEntity.address, companyPhone: invoiceEntity.phone, companyEmail: invoiceEntity.email, companyWebsite: invoiceEntity.website, logoUrl: invoiceEntity.logoUrl, brandColor: invoiceEntity.brandColor, companyChopUrl: invoiceEntity.companyChopUrl, signatureUrl: invoiceEntity.signatureUrl, bankAccounts: invoiceEntity.bankAccounts }
       : { ...settings.toObject() } as any;
     for (const field of ['logoUrl', 'companyChopUrl', 'signatureUrl'] as const) {
       if (company[field]) {

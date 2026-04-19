@@ -57,10 +57,11 @@ function computeDueDate(terms: string, fromDate?: Date): Date | undefined {
 
 router.get('/', async (req, res, next) => {
   try {
-    const { status, client } = req.query;
+    const { status, client, entity } = req.query;
     const filter: Record<string, unknown> = {};
     if (status) filter.status = status;
     if (client) filter.client = client;
+    if (entity) filter.entity = entity;
 
     const invoices = await Invoice.find(filter)
       .populate('client', 'name')
@@ -198,7 +199,7 @@ router.get('/:id/pdf', async (req, res, next) => {
     const entityObj = (invoice as any).entity;
     const settings = await getSettings();
     const company = entityObj
-      ? { companyName: entityObj.name, companyAddress: entityObj.address, companyPhone: entityObj.phone, companyEmail: entityObj.email, companyWebsite: entityObj.website, logoUrl: entityObj.logoUrl, companyChopUrl: entityObj.companyChopUrl, signatureUrl: entityObj.signatureUrl, bankAccounts: entityObj.bankAccounts }
+      ? { companyName: entityObj.name, companyAddress: entityObj.address, companyPhone: entityObj.phone, companyEmail: entityObj.email, companyWebsite: entityObj.website, logoUrl: entityObj.logoUrl, brandColor: entityObj.brandColor, companyChopUrl: entityObj.companyChopUrl, signatureUrl: entityObj.signatureUrl, bankAccounts: entityObj.bankAccounts }
       : { ...settings.toObject() } as any;
     for (const field of ['logoUrl', 'companyChopUrl', 'signatureUrl'] as const) {
       if (company[field]) {

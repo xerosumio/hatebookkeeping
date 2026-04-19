@@ -13,6 +13,7 @@ const transactionSchema = z.object({
   category: z.string().min(1),
   description: z.string().min(1),
   amount: z.number().int().positive(),
+  entity: z.string().optional(),
   bankReference: z.string().optional().default(''),
   bankAccount: z.string().optional().default(''),
   reconciled: z.boolean().optional().default(false),
@@ -20,10 +21,11 @@ const transactionSchema = z.object({
 
 router.get('/', async (req, res, next) => {
   try {
-    const { type, category, startDate, endDate, reconciled } = req.query;
+    const { type, category, startDate, endDate, reconciled, entity } = req.query;
     const filter: Record<string, unknown> = {};
     if (type) filter.type = type;
     if (category) filter.category = category;
+    if (entity) filter.entity = entity;
     if (reconciled !== undefined) filter.reconciled = reconciled === 'true';
     if (startDate || endDate) {
       filter.date = {};
@@ -31,7 +33,12 @@ router.get('/', async (req, res, next) => {
       if (endDate) (filter.date as Record<string, unknown>).$lte = new Date(endDate as string);
     }
 
-    const transactions = await Transaction.find(filter).sort({ date: -1 });
+    const transactions = await Transaction.find(filter)
+      .populate('entity', 'code name')
+      .populate('payee', 'name')
+      .populate({ path: 'invoice', select: 'invoiceNumber client', populate: { path: 'client', select: 'name' } })
+      .populate({ path: 'paymentRequest', select: 'requestNumber items', populate: { path: 'items.payee', select: 'name' } })
+      .sort({ date: -1 });
     res.json(transactions);
   } catch (error) {
     next(error);

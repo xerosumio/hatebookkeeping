@@ -21,6 +21,7 @@ import uploadRoutes from './routes/uploads.js';
 import entityRoutes from './routes/entities.js';
 import shareholderRoutes from './routes/shareholders.js';
 import monthlyCloseRoutes from './routes/monthlyClose.js';
+import fundsRouter from './routes/funds.js';
 import { startScheduler } from './scheduler.js';
 
 const app = express();
@@ -46,6 +47,7 @@ app.use('/api/uploads', uploadRoutes);
 app.use('/api/entities', entityRoutes);
 app.use('/api/shareholders', shareholderRoutes);
 app.use('/api/monthly-close', monthlyCloseRoutes);
+app.use('/api/funds', fundsRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });

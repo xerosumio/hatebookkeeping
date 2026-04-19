@@ -1,6 +1,6 @@
 import React from 'react';
 import { Document, Page, Text, View, Image, Link } from '@react-pdf/renderer';
-import { styles } from './styles.js';
+import { styles as defaultStyles, createStyles } from './styles.js';
 import { formatMoney } from './formatMoney.js';
 import type { IInvoice } from '../../models/Invoice.js';
 
@@ -27,6 +27,7 @@ export interface CompanyInfo {
   companyEmail: string;
   companyWebsite: string;
   logoUrl: string;
+  brandColor?: string;
 }
 
 interface Props {
@@ -35,6 +36,7 @@ interface Props {
 }
 
 export function InvoicePDF({ invoice: inv, company }: Props) {
+  const styles = company.brandColor ? createStyles(company.brandColor) : defaultStyles;
   const fmtDate = (d: string | Date) =>
     new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 

@@ -8,6 +8,7 @@ export interface IDistributionEntry {
 }
 
 export interface IMonthlyClose extends Document {
+  entity: mongoose.Types.ObjectId;
   year: number;
   month: number;
   status: 'draft' | 'finalized';
@@ -38,6 +39,7 @@ const distributionEntrySchema = new Schema<IDistributionEntry>(
 
 const monthlyCloseSchema = new Schema<IMonthlyClose>(
   {
+    entity: { type: Schema.Types.ObjectId, ref: 'Entity', required: true },
     year: { type: Number, required: true },
     month: { type: Number, required: true, min: 1, max: 12 },
     status: {
@@ -60,6 +62,6 @@ const monthlyCloseSchema = new Schema<IMonthlyClose>(
   { timestamps: true },
 );
 
-monthlyCloseSchema.index({ year: 1, month: 1 }, { unique: true });
+monthlyCloseSchema.index({ entity: 1, year: 1, month: 1 }, { unique: true });
 
 export const MonthlyClose = mongoose.model<IMonthlyClose>('MonthlyClose', monthlyCloseSchema);

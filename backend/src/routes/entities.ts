@@ -20,6 +20,7 @@ const entitySchema = z.object({
     bankName: z.string().optional().default(''),
     accountNumber: z.string().optional().default(''),
   })).optional().default([]),
+  brandColor: z.string().optional().default(''),
   companyChopUrl: z.string().optional().default(''),
   signatureUrl: z.string().optional().default(''),
   active: z.boolean().optional().default(true),

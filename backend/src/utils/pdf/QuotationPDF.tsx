@@ -1,6 +1,6 @@
 import React from 'react';
 import { Document, Page, Text, View, Image, Link } from '@react-pdf/renderer';
-import { styles } from './styles.js';
+import { styles as defaultStyles, createStyles } from './styles.js';
 import { formatMoney } from './formatMoney.js';
 import type { IQuotation } from '../../models/Quotation.js';
 
@@ -11,6 +11,7 @@ export interface CompanyInfo {
   companyEmail: string;
   companyWebsite: string;
   logoUrl: string;
+  brandColor?: string;
 }
 
 interface Props {
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export function QuotationPDF({ quotation: q, company }: Props) {
+  const styles = company.brandColor ? createStyles(company.brandColor) : defaultStyles;
   const fmtDate = (d: string | Date) =>
     new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
@@ -88,7 +90,7 @@ export function QuotationPDF({ quotation: q, company }: Props) {
 
         {/* ── Line Items Table ── */}
         <View style={styles.table}>
-          <View style={styles.tableHeader}>
+          <View style={[styles.tableHeader, { minPresenceAhead: 30 }]} wrap={false}>
             <Text style={[styles.colNum, styles.tableHeaderText]}>#</Text>
             <Text style={[styles.colDesc, styles.tableHeaderText]}>Item & Description</Text>
             <Text style={[styles.colQty, styles.tableHeaderText]}>Qty</Text>
@@ -96,7 +98,7 @@ export function QuotationPDF({ quotation: q, company }: Props) {
             <Text style={[styles.colAmount, styles.tableHeaderText]}>Amount</Text>
           </View>
           {q.lineItems.map((item, i) => (
-            <View key={i} style={styles.tableRow}>
+            <View key={i} wrap={false} style={styles.tableRow}>
               <Text style={styles.colNum}>{i + 1}</Text>
               <Text style={styles.colDesc}>{item.description}</Text>
               <Text style={styles.colQty}>{item.quantity}</Text>
@@ -128,10 +130,10 @@ export function QuotationPDF({ quotation: q, company }: Props) {
 
         {/* ── Payment Schedule ── */}
         {q.paymentSchedule.length > 0 && (
-          <View>
-            <Text style={styles.sectionTitle}>Payment Schedule</Text>
+          <View wrap={q.paymentSchedule.length > 6}>
+            <Text style={[styles.sectionTitle, { minPresenceAhead: 40 }]}>Payment Schedule</Text>
             <View style={styles.table}>
-              <View style={styles.tableHeader}>
+              <View style={[styles.tableHeader, { minPresenceAhead: 30 }]} wrap={false}>
                 <Text style={[styles.colNum, styles.tableHeaderText]}>#</Text>
                 <Text style={[{ flex: 1 }, styles.tableHeaderText]}>Milestone</Text>
                 <Text style={[{ width: 35, textAlign: 'right' }, styles.tableHeaderText]}>%</Text>
@@ -139,7 +141,7 @@ export function QuotationPDF({ quotation: q, company }: Props) {
                 <Text style={[{ width: 120, paddingLeft: 10 }, styles.tableHeaderText]}>Due</Text>
               </View>
               {q.paymentSchedule.map((m, i) => (
-                <View key={i} style={styles.tableRow}>
+                <View key={i} wrap={false} style={styles.tableRow}>
                   <Text style={styles.colNum}>{i + 1}</Text>
                   <Text style={[{ flex: 1 }, styles.medium]}>{m.milestone}</Text>
                   <Text style={{ width: 35, textAlign: 'right' }}>{m.percentage}%</Text>
@@ -161,29 +163,59 @@ export function QuotationPDF({ quotation: q, company }: Props) {
 
         {/* ── Terms & Conditions ── */}
         {q.termsAndConditions && (
-          <View style={{ marginTop: 16 }}>
+          <View wrap={false} style={{ marginTop: 16 }}>
             <Text style={styles.sectionTitle}>Terms & Conditions</Text>
             <Text style={styles.bodyText}>{q.termsAndConditions}</Text>
           </View>
         )}
 
-        {/* ── Company Chop / Signature ── */}
-        {(q.companyChopUrl || q.signatureUrl) && (
-          <View wrap={false} style={styles.signatureArea}>
-            {q.companyChopUrl && (
-              <View>
-                <Text style={{ marginBottom: 4, fontSize: 8, color: '#64748b' }}>Company Chop</Text>
-                <Image src={q.companyChopUrl} style={styles.stampImage} />
-              </View>
-            )}
-            {q.signatureUrl && (
-              <View>
-                <Text style={{ marginBottom: 4, fontSize: 8, color: '#64748b' }}>Authorized Signature</Text>
-                <Image src={q.signatureUrl} style={styles.sigImage} />
-              </View>
-            )}
+        {/* ── Signature Area: Authorized By (left) + Accepted By (right) ── */}
+        <View wrap={false} style={styles.signatureArea}>
+          <View style={{ width: '48%', justifyContent: 'space-between' }}>
+            <View>
+              <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#1e293b', marginBottom: 12 }}>Authorized By</Text>
+              {q.companyChopUrl && (
+                <View style={{ marginBottom: 8 }}>
+                  <Text style={{ marginBottom: 4, fontSize: 8, color: '#64748b' }}>Company Chop</Text>
+                  <Image src={q.companyChopUrl} style={styles.stampImage} />
+                </View>
+              )}
+              {q.signatureUrl && (
+                <View style={{ marginBottom: 8 }}>
+                  <Text style={{ marginBottom: 4, fontSize: 8, color: '#64748b' }}>Signature</Text>
+                  <Image src={q.signatureUrl} style={styles.sigImage} />
+                </View>
+              )}
+              {!q.companyChopUrl && !q.signatureUrl && (
+                <View style={{ height: 80 }} />
+              )}
+            </View>
+            <View>
+              <View style={{ borderBottomWidth: 0.5, borderBottomColor: '#94a3b8', borderStyle: 'dashed', marginBottom: 6, width: 180 }} />
+              <Text style={{ fontSize: 8, color: '#64748b' }}>Name: ___________________________</Text>
+              <Text style={{ fontSize: 8, color: '#64748b', marginTop: 8 }}>Date: ___________________________</Text>
+            </View>
           </View>
-        )}
+
+          <View style={{ width: '48%', justifyContent: 'space-between' }}>
+            <View>
+              <Text style={{ fontSize: 9, fontWeight: 'bold', color: '#1e293b', marginBottom: 12 }}>Accepted By</Text>
+              <View style={{ marginBottom: 8 }}>
+                <Text style={{ marginBottom: 4, fontSize: 8, color: '#64748b' }}>Company Chop</Text>
+                <View style={{ width: 90, height: 90, borderWidth: 0.5, borderColor: '#cbd5e1', borderStyle: 'dashed', borderRadius: 3 }} />
+              </View>
+              <View style={{ marginBottom: 8 }}>
+                <Text style={{ marginBottom: 4, fontSize: 8, color: '#64748b' }}>Signature</Text>
+                <View style={{ width: 150, height: 55, borderWidth: 0.5, borderColor: '#cbd5e1', borderStyle: 'dashed', borderRadius: 3 }} />
+              </View>
+            </View>
+            <View>
+              <View style={{ borderBottomWidth: 0.5, borderBottomColor: '#94a3b8', borderStyle: 'dashed', marginBottom: 6, width: 180 }} />
+              <Text style={{ fontSize: 8, color: '#64748b' }}>Name: ___________________________</Text>
+              <Text style={{ fontSize: 8, color: '#64748b', marginTop: 8 }}>Date: ___________________________</Text>
+            </View>
+          </View>
+        </View>
 
         {/* ── Footer ── */}
         <Text style={styles.footer} fixed>

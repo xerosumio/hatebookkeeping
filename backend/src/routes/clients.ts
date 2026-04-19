@@ -9,6 +9,7 @@ router.use(authMiddleware);
 
 const clientSchema = z.object({
   name: z.string().min(1),
+  entity: z.string().optional(),
   contactPerson: z.string().optional().default(''),
   email: z.string().optional().default(''),
   phone: z.string().optional().default(''),
@@ -18,11 +19,11 @@ const clientSchema = z.object({
 
 router.get('/', async (req, res, next) => {
   try {
-    const { search } = req.query;
-    const filter = search
-      ? { $text: { $search: search as string } }
-      : {};
-    const clients = await Client.find(filter).sort({ createdAt: -1 });
+    const { search, entity } = req.query;
+    const filter: Record<string, unknown> = {};
+    if (search) filter.$text = { $search: search as string };
+    if (entity) filter.entity = entity;
+    const clients = await Client.find(filter).populate('entity', 'code name').sort({ createdAt: -1 });
     res.json(clients);
   } catch (error) {
     next(error);
@@ -41,7 +42,7 @@ router.post('/', async (req: AuthRequest, res, next) => {
 
 router.get('/:id', async (req, res, next) => {
   try {
-    const client = await Client.findById(req.params.id);
+    const client = await Client.findById(req.params.id).populate('entity', 'code name');
     if (!client) throw new AppError(404, 'Client not found');
     res.json(client);
   } catch (error) {

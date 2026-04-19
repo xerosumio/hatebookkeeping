@@ -1,10 +1,14 @@
 import { useState } from 'react';
-import { usePayees, useCreatePayee, useUpdatePayee, useDeletePayee } from '../api/hooks';
+import { usePayees, useCreatePayee, useUpdatePayee, useDeletePayee, useEntities } from '../api/hooks';
 import { Plus, Pencil, Trash2, Check, X } from 'lucide-react';
-import type { Payee } from '../types';
+import type { Payee, Entity } from '../types';
 
 export default function PayeeList() {
-  const { data: payees, isLoading } = usePayees();
+  const [entityFilter, setEntityFilter] = useState('');
+  const { data: entities } = useEntities();
+  const { data: payees, isLoading } = usePayees(
+    entityFilter ? { entity: entityFilter } : undefined,
+  );
   const createPayee = useCreatePayee();
   const updatePayee = useUpdatePayee();
   const deletePayee = useDeletePayee();
@@ -67,6 +71,19 @@ export default function PayeeList() {
             <Plus size={16} /> Add Payee
           </button>
         )}
+      </div>
+
+      <div className="flex items-center gap-4 mb-4">
+        <select
+          value={entityFilter}
+          onChange={(e) => setEntityFilter(e.target.value)}
+          className="border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">All Entities</option>
+          {entities?.map((ent) => (
+            <option key={ent._id} value={ent._id}>{ent.code} — {ent.name}</option>
+          ))}
+        </select>
       </div>
 
       {showForm && (
@@ -146,6 +163,7 @@ export default function PayeeList() {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Name</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Entity</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Bank</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Account</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">SWIFT / Code</th>
@@ -157,6 +175,9 @@ export default function PayeeList() {
               {payees.map((p) => (
                 <tr key={p._id} className="border-b border-gray-100 hover:bg-gray-50 group">
                   <td className="px-4 py-3 font-medium">{p.name}</td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">
+                    {p.entity && typeof p.entity === 'object' ? (p.entity as Entity).code : ''}
+                  </td>
                   <td className="px-4 py-3 text-gray-600">{p.bankName || '—'}</td>
                   <td className="px-4 py-3 text-gray-600 font-mono text-xs">{p.bankAccountNumber || '—'}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{p.bankCode || '—'}</td>

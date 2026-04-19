@@ -9,15 +9,19 @@ router.use(authMiddleware);
 
 const payeeSchema = z.object({
   name: z.string().min(1),
+  entity: z.string().optional(),
   bankName: z.string().optional().default(''),
   bankAccountNumber: z.string().optional().default(''),
   bankCode: z.string().optional().default(''),
   notes: z.string().optional().default(''),
 });
 
-router.get('/', async (_req, res, next) => {
+router.get('/', async (req, res, next) => {
   try {
-    const payees = await Payee.find().sort({ name: 1 });
+    const { entity } = req.query;
+    const filter: Record<string, unknown> = {};
+    if (entity) filter.entity = entity;
+    const payees = await Payee.find(filter).populate('entity', 'code name').sort({ name: 1 });
     res.json(payees);
   } catch (error) {
     next(error);

@@ -19,7 +19,7 @@ router.get('/', async (_req, res, next) => {
         const lastTxn = await EquityTransaction.findOne({ shareholder: sh._id })
           .sort({ date: -1, createdAt: -1 });
         const totalInvested = await EquityTransaction.aggregate([
-          { $match: { shareholder: sh._id, type: 'investment' } },
+          { $match: { shareholder: sh._id, type: { $in: ['investment', 'collection'] } } },
           { $group: { _id: null, total: { $sum: '$amount' } } },
         ]);
         return {
@@ -72,7 +72,8 @@ router.get('/summary', async (_req, res, next) => {
 router.get('/:id', async (req, res, next) => {
   try {
     const shareholder = await Shareholder.findById(req.params.id)
-      .populate('user', 'name email role');
+      .populate('user', 'name email role')
+      .populate('shareHistory.changedBy', 'name');
     if (!shareholder) throw new AppError(404, 'Shareholder not found');
 
     const transactions = await EquityTransaction.find({ shareholder: shareholder._id })
@@ -80,6 +81,17 @@ router.get('/:id', async (req, res, next) => {
       .populate('createdBy', 'name');
 
     res.json({ shareholder, transactions });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/:id/history', async (req, res, next) => {
+  try {
+    const shareholder = await Shareholder.findById(req.params.id)
+      .populate('shareHistory.changedBy', 'name');
+    if (!shareholder) throw new AppError(404, 'Shareholder not found');
+    res.json(shareholder.shareHistory);
   } catch (error) {
     next(error);
   }
@@ -100,6 +112,58 @@ router.post('/', async (req: AuthRequest, res, next) => {
   }
 });
 
+router.post('/transfer', async (req: AuthRequest, res, next) => {
+  try {
+    if (req.user!.role !== 'admin') throw new AppError(403, 'Admin only');
+    const data = z.object({
+      from: z.string().min(1),
+      to: z.string().min(1),
+      percent: z.number().positive().max(100),
+      reason: z.string().optional().default(''),
+    }).parse(req.body);
+
+    if (data.from === data.to) throw new AppError(400, 'Cannot transfer to the same shareholder');
+
+    const fromSh = await Shareholder.findById(data.from);
+    if (!fromSh) throw new AppError(404, 'Source shareholder not found');
+
+    const toSh = await Shareholder.findById(data.to);
+    if (!toSh) throw new AppError(404, 'Destination shareholder not found');
+
+    if (fromSh.sharePercent < data.percent) {
+      throw new AppError(400, `${fromSh.name} only has ${fromSh.sharePercent.toFixed(2)}% — cannot transfer ${data.percent.toFixed(2)}%`);
+    }
+
+    const now = new Date();
+    const reasonText = data.reason || `Transfer ${data.percent.toFixed(2)}%`;
+
+    fromSh.shareHistory.push({
+      previousPercent: fromSh.sharePercent,
+      newPercent: fromSh.sharePercent - data.percent,
+      date: now,
+      reason: `${reasonText} (transferred to ${toSh.name})`,
+      changedBy: req.user!._id,
+    } as any);
+    fromSh.sharePercent -= data.percent;
+
+    toSh.shareHistory.push({
+      previousPercent: toSh.sharePercent,
+      newPercent: toSh.sharePercent + data.percent,
+      date: now,
+      reason: `${reasonText} (received from ${fromSh.name})`,
+      changedBy: req.user!._id,
+    } as any);
+    toSh.sharePercent += data.percent;
+
+    await fromSh.save();
+    await toSh.save();
+
+    res.json({ from: fromSh, to: toSh });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.put('/:id', async (req: AuthRequest, res, next) => {
   try {
     if (req.user!.role !== 'admin') throw new AppError(403, 'Admin only');
@@ -107,9 +171,27 @@ router.put('/:id', async (req: AuthRequest, res, next) => {
       name: z.string().min(1).optional(),
       sharePercent: z.number().min(0).max(100).optional(),
       active: z.boolean().optional(),
+      reason: z.string().optional(),
     }).parse(req.body);
-    const shareholder = await Shareholder.findByIdAndUpdate(req.params.id, data, { new: true });
+
+    const shareholder = await Shareholder.findById(req.params.id);
     if (!shareholder) throw new AppError(404, 'Shareholder not found');
+
+    if (data.sharePercent !== undefined && data.sharePercent !== shareholder.sharePercent) {
+      shareholder.shareHistory.push({
+        previousPercent: shareholder.sharePercent,
+        newPercent: data.sharePercent,
+        date: new Date(),
+        reason: data.reason || '',
+        changedBy: req.user!._id,
+      } as any);
+      shareholder.sharePercent = data.sharePercent;
+    }
+
+    if (data.name !== undefined) shareholder.name = data.name;
+    if (data.active !== undefined) shareholder.active = data.active;
+
+    await shareholder.save();
     res.json(shareholder);
   } catch (error) {
     next(error);

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import mongoose from 'mongoose';
 import { Transaction } from '../models/Transaction.js';
 import { Invoice } from '../models/Invoice.js';
 import { PaymentRequest } from '../models/PaymentRequest.js';
@@ -13,6 +14,7 @@ router.get('/cash-flow', async (req, res, next) => {
   try {
     const year = parseInt(req.query.year as string) || new Date().getFullYear();
     const month = req.query.month !== undefined ? parseInt(req.query.month as string) : undefined;
+    const entity = req.query.entity as string | undefined;
 
     const matchStage: Record<string, unknown> = {
       date: {
@@ -20,6 +22,7 @@ router.get('/cash-flow', async (req, res, next) => {
         $lte: new Date(year, month !== undefined ? month + 1 : 12, 0),
       },
     };
+    if (entity) matchStage.entity = new mongoose.Types.ObjectId(entity);
 
     const result = await Transaction.aggregate([
       { $match: matchStage },
@@ -69,6 +72,8 @@ router.get('/cash-flow', async (req, res, next) => {
 router.get('/accounts-receivable', async (req, res, next) => {
   try {
     const filter: Record<string, unknown> = { status: { $in: ['unpaid', 'partial'] } };
+
+    if (req.query.entity) filter.entity = req.query.entity;
 
     if (req.query.startDate || req.query.endDate) {
       const dueDateFilter: Record<string, Date> = {};
@@ -145,9 +150,10 @@ router.get('/income-statement', async (req, res, next) => {
     const endDate = req.query.endDate
       ? new Date(req.query.endDate as string)
       : new Date();
+    const entity = req.query.entity as string | undefined;
 
     const result = await Transaction.aggregate([
-      { $match: { date: { $gte: startDate, $lte: endDate } } },
+      { $match: { date: { $gte: startDate, $lte: endDate }, ...(entity ? { entity: new mongoose.Types.ObjectId(entity) } : {}) } },
       {
         $group: {
           _id: { type: '$type', category: '$category' },
@@ -196,11 +202,13 @@ router.get('/income-statement/transactions', async (req, res, next) => {
     const endDate = req.query.endDate
       ? new Date(req.query.endDate as string)
       : new Date();
+    const entity = req.query.entity as string | undefined;
 
     const transactions = await Transaction.find({
       type: type as string,
       category: category as string,
       date: { $gte: startDate, $lte: endDate },
+      ...(entity ? { entity } : {}),
     })
       .populate('invoice', 'invoiceNumber')
       .populate('paymentRequest', 'requestNumber')
@@ -216,6 +224,8 @@ router.get('/income-statement/transactions', async (req, res, next) => {
 router.get('/accounts-payable', async (req, res, next) => {
   try {
     const filter: Record<string, unknown> = { status: { $in: ['pending', 'approved'] } };
+
+    if (req.query.entity) filter.entity = req.query.entity;
 
     if (req.query.startDate || req.query.endDate) {
       const dateFilter: Record<string, Date> = {};

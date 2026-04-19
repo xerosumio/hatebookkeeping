@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import mongoose from 'mongoose';
 import { z } from 'zod';
 import { MonthlyClose } from '../models/MonthlyClose.js';
 import { Transaction } from '../models/Transaction.js';
@@ -6,6 +7,8 @@ import { Shareholder } from '../models/Shareholder.js';
 import { EquityTransaction } from '../models/EquityTransaction.js';
 import { Payee } from '../models/Payee.js';
 import { PaymentRequest } from '../models/PaymentRequest.js';
+import { Fund } from '../models/Fund.js';
+import { FundTransfer } from '../models/FundTransfer.js';
 import { getNextSequence } from '../models/Counter.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
@@ -13,12 +16,12 @@ import { AppError } from '../middleware/errorHandler.js';
 const router = Router();
 router.use(authMiddleware);
 
-async function computeMonthlyFigures(year: number, month: number) {
+async function computeMonthlyFigures(year: number, month: number, entityId: string) {
   const startDate = new Date(year, month - 1, 1);
   const endDate = new Date(year, month, 1);
 
   const results = await Transaction.aggregate([
-    { $match: { date: { $gte: startDate, $lt: endDate } } },
+    { $match: { date: { $gte: startDate, $lt: endDate }, entity: new mongoose.Types.ObjectId(entityId) } },
     { $group: { _id: '$type', total: { $sum: '$amount' } } },
   ]);
 
@@ -43,7 +46,7 @@ function computeDistribution(netProfit: number, shareholders: Array<{ _id: any; 
     companyReserve = Math.round(netProfit * 0.20);
     staffReserve = netProfit - shareholderPool - companyReserve;
   } else {
-    shareholderPool = netProfit; // full loss covered by shareholders
+    shareholderPool = netProfit;
   }
 
   const distributions = shareholders.map((sh) => ({
@@ -52,7 +55,6 @@ function computeDistribution(netProfit: number, shareholders: Array<{ _id: any; 
     amount: Math.round(Math.abs(shareholderPool) * sh.sharePercent / 100) * (isLoss ? -1 : 1),
   }));
 
-  // Fix rounding: assign remainder to largest shareholder
   const distributedTotal = distributions.reduce((sum, d) => sum + Math.abs(d.amount), 0);
   const remainder = Math.abs(shareholderPool) - distributedTotal;
   if (remainder !== 0 && distributions.length > 0) {
@@ -63,32 +65,66 @@ function computeDistribution(netProfit: number, shareholders: Array<{ _id: any; 
   return { shareholderPool: Math.abs(shareholderPool), companyReserve, staffReserve, isLoss, distributions };
 }
 
-router.get('/', async (_req, res, next) => {
+// List all closes, optionally filter by entity
+router.get('/', async (req, res, next) => {
   try {
-    const closes = await MonthlyClose.find()
+    const filter: Record<string, unknown> = {};
+    if (req.query.entity) filter.entity = req.query.entity;
+    const closes = await MonthlyClose.find(filter)
       .sort({ year: -1, month: -1 })
-      .populate('closedBy', 'name');
+      .populate('closedBy', 'name')
+      .populate('entity', 'code name');
     res.json(closes);
   } catch (error) {
     next(error);
   }
 });
 
-router.get('/:year/:month', async (req, res, next) => {
+// Group summary for a year/month across all entities
+router.get('/summary/:year/:month', async (req, res, next) => {
   try {
     const year = parseInt(req.params.year as string);
     const month = parseInt(req.params.month as string);
-    const existing = await MonthlyClose.findOne({ year, month })
+    const closes = await MonthlyClose.find({ year, month })
+      .populate('entity', 'code name');
+    const totalIncome = closes.reduce((s, c) => s + c.totalIncome, 0);
+    const totalExpense = closes.reduce((s, c) => s + c.totalExpense, 0);
+    res.json({
+      year,
+      month,
+      totalIncome,
+      totalExpense,
+      netProfit: totalIncome - totalExpense,
+      entities: closes.map((c) => ({
+        entity: c.entity,
+        totalIncome: c.totalIncome,
+        totalExpense: c.totalExpense,
+        netProfit: c.netProfit,
+        status: c.status,
+      })),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/:entity/:year/:month', async (req, res, next) => {
+  try {
+    const entityId = req.params.entity as string;
+    const year = parseInt(req.params.year as string);
+    const month = parseInt(req.params.month as string);
+    const existing = await MonthlyClose.findOne({ entity: entityId, year, month })
       .populate('distributions.shareholder', 'name sharePercent')
-      .populate('closedBy', 'name');
+      .populate('closedBy', 'name')
+      .populate('entity', 'code name');
     if (existing) return res.json(existing);
 
-    // Return preview
-    const figures = await computeMonthlyFigures(year, month);
+    const figures = await computeMonthlyFigures(year, month, entityId);
     const shareholders = await Shareholder.find({ active: true }).sort({ sharePercent: -1 });
     const dist = computeDistribution(figures.netProfit, shareholders);
 
     res.json({
+      entity: entityId,
       year,
       month,
       status: 'draft',
@@ -107,16 +143,18 @@ router.get('/:year/:month', async (req, res, next) => {
   }
 });
 
-router.post('/:year/:month/preview', async (req, res, next) => {
+router.post('/:entity/:year/:month/preview', async (req, res, next) => {
   try {
+    const entityId = req.params.entity as string;
     const year = parseInt(req.params.year as string);
     const month = parseInt(req.params.month as string);
 
-    const figures = await computeMonthlyFigures(year, month);
+    const figures = await computeMonthlyFigures(year, month, entityId);
     const shareholders = await Shareholder.find({ active: true }).sort({ sharePercent: -1 });
     const dist = computeDistribution(figures.netProfit, shareholders);
 
     res.json({
+      entity: entityId,
       year,
       month,
       ...figures,
@@ -134,22 +172,22 @@ router.post('/:year/:month/preview', async (req, res, next) => {
   }
 });
 
-router.post('/:year/:month/finalize', async (req: AuthRequest, res, next) => {
+router.post('/:entity/:year/:month/finalize', async (req: AuthRequest, res, next) => {
   try {
     if (req.user!.role !== 'admin') throw new AppError(403, 'Admin only');
 
+    const entityId = req.params.entity as string;
     const year = parseInt(req.params.year as string);
     const month = parseInt(req.params.month as string);
     const { notes } = z.object({ notes: z.string().optional().default('') }).parse(req.body);
 
-    const existing = await MonthlyClose.findOne({ year, month });
+    const existing = await MonthlyClose.findOne({ entity: entityId, year, month });
     if (existing?.status === 'finalized') throw new AppError(400, 'Month already finalized');
 
-    const figures = await computeMonthlyFigures(year, month);
+    const figures = await computeMonthlyFigures(year, month, entityId);
     const shareholders = await Shareholder.find({ active: true }).sort({ sharePercent: -1 });
     const dist = computeDistribution(figures.netProfit, shareholders);
 
-    // Create the MonthlyClose document first (or update draft)
     const closeDoc = existing
       ? await MonthlyClose.findByIdAndUpdate(existing._id, {
           ...figures,
@@ -163,6 +201,7 @@ router.post('/:year/:month/finalize', async (req: AuthRequest, res, next) => {
           notes,
         }, { new: true })
       : await MonthlyClose.create({
+          entity: entityId,
           year,
           month,
           ...figures,
@@ -177,7 +216,6 @@ router.post('/:year/:month/finalize', async (req: AuthRequest, res, next) => {
           distributions: [],
         });
 
-    // Create equity transactions for each shareholder
     const distributions = [];
     for (const d of dist.distributions) {
       const lastTxn = await EquityTransaction.findOne({ shareholder: d.shareholder })
@@ -216,23 +254,55 @@ router.post('/:year/:month/finalize', async (req: AuthRequest, res, next) => {
     closeDoc!.distributions = distributions;
     await closeDoc!.save();
 
+    // Auto-create fund transfers for reserves (profit scenario)
+    if (!dist.isLoss && dist.companyReserve > 0) {
+      const companyReserveFund = await Fund.findOne({ name: 'Company Reserve' });
+      if (companyReserveFund) {
+        await Fund.findByIdAndUpdate(companyReserveFund._id, { $inc: { balance: dist.companyReserve } });
+        await FundTransfer.create({
+          toFund: companyReserveFund._id,
+          amount: dist.companyReserve,
+          date: new Date(year, month - 1, 28),
+          description: `Company reserve allocation — ${new Date(year, month - 1).toLocaleString('en', { month: 'long' })} ${year}`,
+          reference: `monthly-close:${closeDoc!._id}`,
+          createdBy: req.user!._id,
+        });
+      }
+    }
+    if (!dist.isLoss && dist.staffReserve > 0) {
+      const staffReserveFund = await Fund.findOne({ name: 'Staff Reserve' });
+      if (staffReserveFund) {
+        await Fund.findByIdAndUpdate(staffReserveFund._id, { $inc: { balance: dist.staffReserve } });
+        await FundTransfer.create({
+          toFund: staffReserveFund._id,
+          amount: dist.staffReserve,
+          date: new Date(year, month - 1, 28),
+          description: `Staff reserve allocation — ${new Date(year, month - 1).toLocaleString('en', { month: 'long' })} ${year}`,
+          reference: `monthly-close:${closeDoc!._id}`,
+          createdBy: req.user!._id,
+        });
+      }
+    }
+
     const result = await MonthlyClose.findById(closeDoc!._id)
       .populate('distributions.shareholder', 'name sharePercent')
-      .populate('closedBy', 'name');
+      .populate('closedBy', 'name')
+      .populate('entity', 'code name');
     res.json(result);
   } catch (error) {
     next(error);
   }
 });
 
-router.post('/:year/:month/create-collection-requests', async (req: AuthRequest, res, next) => {
+router.post('/:entity/:year/:month/create-collection-requests', async (req: AuthRequest, res, next) => {
   try {
     if (req.user!.role !== 'admin') throw new AppError(403, 'Admin only');
 
+    const entityId = req.params.entity as string;
     const year = parseInt(req.params.year as string);
     const month = parseInt(req.params.month as string);
 
-    const close = await MonthlyClose.findOne({ year, month, status: 'finalized' })
+    const close = await MonthlyClose.findOne({ entity: entityId, year, month, status: 'finalized' })
       .populate('distributions.shareholder');
     if (!close) throw new AppError(404, 'No finalized close for this month');
     if (!close.isLoss) throw new AppError(400, 'Month is not a loss — no collection needed');
@@ -268,6 +338,7 @@ router.post('/:year/:month/create-collection-requests', async (req: AuthRequest,
       totalAmount: items.reduce((sum, i) => sum + i.amount, 0),
       sourceBankAccount: '',
       status: 'pending',
+      entity: entityId,
       createdBy: req.user!._id,
       activityLog: [{ action: 'created', user: req.user!._id, timestamp: new Date() }],
     });

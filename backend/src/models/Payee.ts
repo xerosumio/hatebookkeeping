@@ -2,6 +2,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IPayee extends Document {
   name: string;
+  entity?: mongoose.Types.ObjectId;
   bankName: string;
   bankAccountNumber: string;
   bankCode: string;
@@ -14,6 +15,7 @@ export interface IPayee extends Document {
 const payeeSchema = new Schema<IPayee>(
   {
     name: { type: String, required: true, trim: true },
+    entity: { type: Schema.Types.ObjectId, ref: 'Entity' },
     bankName: { type: String, default: '' },
     bankAccountNumber: { type: String, default: '' },
     bankCode: { type: String, default: '' },
