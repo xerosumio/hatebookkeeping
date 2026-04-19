@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
-import { useCreateTransaction, useUpdateTransaction, useSettings } from '../api/hooks';
+import { useCreateTransaction, useUpdateTransaction, useSettings, useEntities } from '../api/hooks';
 import { decimalToCents, centsToDecimal } from '../utils/money';
-import type { Transaction } from '../types';
+import type { Transaction, Entity } from '../types';
 
 interface Props {
   onDone: () => void;
@@ -13,6 +13,7 @@ export default function TransactionForm({ onDone, existing }: Props) {
   const createTransaction = useCreateTransaction();
   const updateTransaction = useUpdateTransaction();
   const { data: settings } = useSettings();
+  const { data: entities } = useEntities();
   const isEdit = !!existing;
 
   const categories = (settings?.chartOfAccounts || []).filter((a) => a.active);
@@ -23,6 +24,7 @@ export default function TransactionForm({ onDone, existing }: Props) {
     category: '',
     description: '',
     amount: '',
+    entity: '',
     bankReference: '',
     bankAccount: '',
   });
@@ -30,17 +32,24 @@ export default function TransactionForm({ onDone, existing }: Props) {
 
   useEffect(() => {
     if (existing) {
+      const entId = existing.entity && typeof existing.entity === 'object'
+        ? (existing.entity as Entity)._id
+        : (existing.entity || '');
       setForm({
         date: existing.date.slice(0, 10),
         type: existing.type,
         category: existing.category,
         description: existing.description,
         amount: String(centsToDecimal(existing.amount)),
+        entity: entId,
         bankReference: existing.bankReference || '',
         bankAccount: existing.bankAccount || '',
       });
     }
   }, [existing]);
+
+  const selectedEntity = entities?.find((e) => e._id === form.entity);
+  const bankAccountOptions = selectedEntity?.bankAccounts || [];
 
   const isPending = createTransaction.isPending || updateTransaction.isPending;
 
@@ -50,6 +59,7 @@ export default function TransactionForm({ onDone, existing }: Props) {
     const payload = {
       ...form,
       amount: decimalToCents(Number(form.amount)),
+      entity: form.entity || undefined,
     };
     try {
       if (isEdit) {
@@ -117,7 +127,7 @@ export default function TransactionForm({ onDone, existing }: Props) {
           />
         </div>
       </div>
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-5 gap-3">
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Description</label>
           <input
@@ -129,14 +139,32 @@ export default function TransactionForm({ onDone, existing }: Props) {
           />
         </div>
         <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Entity</label>
+          <select
+            value={form.entity}
+            onChange={(e) => setForm({ ...form, entity: e.target.value, bankAccount: '' })}
+            className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+          >
+            <option value="">Select entity...</option>
+            {entities?.map((ent) => (
+              <option key={ent._id} value={ent._id}>{ent.code} — {ent.name}</option>
+            ))}
+          </select>
+        </div>
+        <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Bank Account</label>
-          <input
-            type="text"
+          <select
             value={form.bankAccount}
             onChange={(e) => setForm({ ...form, bankAccount: e.target.value })}
-            placeholder="e.g. HSBC HKD"
             className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
-          />
+          >
+            <option value="">Select account...</option>
+            {bankAccountOptions.map((acc, i) => (
+              <option key={i} value={acc.name}>
+                {acc.name}{acc.bankName ? ` (${acc.bankName})` : ''}
+              </option>
+            ))}
+          </select>
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Bank Reference</label>

@@ -238,7 +238,7 @@ export function useCreateTransaction() {
   return useMutation({
     mutationFn: (data: Partial<Transaction>) =>
       api.post<Transaction>('/transactions', data).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['transactions'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['transactions'] }); qc.invalidateQueries({ queryKey: ['funds'] }); },
   });
 }
 
@@ -247,7 +247,7 @@ export function useUpdateTransaction() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<Transaction> }) =>
       api.put<Transaction>(`/transactions/${id}`, data).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['transactions'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['transactions'] }); qc.invalidateQueries({ queryKey: ['funds'] }); },
   });
 }
 
@@ -255,7 +255,7 @@ export function useDeleteTransaction() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.delete(`/transactions/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['transactions'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['transactions'] }); qc.invalidateQueries({ queryKey: ['funds'] }); },
   });
 }
 
