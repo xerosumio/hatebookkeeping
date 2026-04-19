@@ -73,6 +73,8 @@ export interface Shareholder {
   user: string | { _id: string; name: string; email: string; role: string };
   name: string;
   sharePercent: number;
+  sharePurchaseOwed: number;
+  sharePurchasePaid: number;
   active: boolean;
   shareHistory?: ShareAdjustmentLog[];
   currentEquity?: number;

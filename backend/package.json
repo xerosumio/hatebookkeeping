@@ -12,7 +12,8 @@
     "seed:recurring": "tsx src/seed-recurring-income.ts",
     "seed:backfill-entity": "tsx src/seed-backfill-entity.ts",
     "seed:classify": "tsx src/seed-classify-transactions.ts",
-    "seed:recompute-funds": "tsx src/seed-recompute-fund-balances.ts"
+    "seed:recompute-funds": "tsx src/seed-recompute-fund-balances.ts",
+    "seed:shareholder-liability": "tsx src/seed-shareholder-liability.ts"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",

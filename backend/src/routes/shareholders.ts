@@ -170,6 +170,7 @@ router.put('/:id', async (req: AuthRequest, res, next) => {
     const data = z.object({
       name: z.string().min(1).optional(),
       sharePercent: z.number().min(0).max(100).optional(),
+      sharePurchaseOwed: z.number().int().min(0).optional(),
       active: z.boolean().optional(),
       reason: z.string().optional(),
     }).parse(req.body);
@@ -190,6 +191,7 @@ router.put('/:id', async (req: AuthRequest, res, next) => {
 
     if (data.name !== undefined) shareholder.name = data.name;
     if (data.active !== undefined) shareholder.active = data.active;
+    if (data.sharePurchaseOwed !== undefined) shareholder.sharePurchaseOwed = data.sharePurchaseOwed;
 
     await shareholder.save();
     res.json(shareholder);
@@ -209,6 +211,46 @@ router.post('/:id/invest', async (req: AuthRequest, res, next) => {
 
     const shareholder = await Shareholder.findById(req.params.id);
     if (!shareholder) throw new AppError(404, 'Shareholder not found');
+
+    const lastTxn = await EquityTransaction.findOne({ shareholder: shareholder._id })
+      .sort({ date: -1, createdAt: -1 });
+    const currentBalance = lastTxn?.balanceAfter ?? 0;
+
+    const txn = await EquityTransaction.create({
+      type: 'investment',
+      shareholder: shareholder._id,
+      amount: data.amount,
+      date: new Date(data.date),
+      description: data.description,
+      balanceAfter: currentBalance + data.amount,
+      createdBy: req.user!._id,
+    });
+
+    res.status(201).json(txn);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/:id/pay-liability', async (req: AuthRequest, res, next) => {
+  try {
+    if (req.user!.role !== 'admin') throw new AppError(403, 'Admin only');
+    const data = z.object({
+      amount: z.number().int().positive(),
+      date: z.string(),
+      description: z.string().optional().default('Share purchase payment'),
+    }).parse(req.body);
+
+    const shareholder = await Shareholder.findById(req.params.id);
+    if (!shareholder) throw new AppError(404, 'Shareholder not found');
+
+    const outstanding = shareholder.sharePurchaseOwed - shareholder.sharePurchasePaid;
+    if (data.amount > outstanding) {
+      throw new AppError(400, `Payment exceeds outstanding liability (${outstanding / 100})`);
+    }
+
+    shareholder.sharePurchasePaid += data.amount;
+    await shareholder.save();
 
     const lastTxn = await EquityTransaction.findOne({ shareholder: shareholder._id })
       .sort({ date: -1, createdAt: -1 });

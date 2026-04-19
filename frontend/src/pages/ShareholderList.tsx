@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useShareholders, useInvestShareholder, useShareTransfer } from '../api/hooks';
+import { useShareholders, useInvestShareholder, useShareTransfer, usePayShareholderLiability, useUpdateShareholder } from '../api/hooks';
 import { formatMoney } from '../utils/money';
 
 export default function ShareholderList() {
@@ -8,6 +8,8 @@ export default function ShareholderList() {
   const { data: shareholders, isLoading } = useShareholders();
   const investMutation = useInvestShareholder();
   const transferMutation = useShareTransfer();
+  const payLiabilityMutation = usePayShareholderLiability();
+  const updateMutation = useUpdateShareholder();
 
   const [transferModal, setTransferModal] = useState<{ fromId: string; fromName: string } | null>(null);
   const [transferTo, setTransferTo] = useState('');
@@ -18,6 +20,14 @@ export default function ShareholderList() {
   const [investAmount, setInvestAmount] = useState('');
   const [investDate, setInvestDate] = useState(new Date().toISOString().slice(0, 10));
   const [investDesc, setInvestDesc] = useState('');
+
+  const [payModal, setPayModal] = useState<{ id: string; name: string; outstanding: number } | null>(null);
+  const [payAmount, setPayAmount] = useState('');
+  const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10));
+  const [payDesc, setPayDesc] = useState('');
+
+  const [liabilityModal, setLiabilityModal] = useState<{ id: string; name: string; current: number } | null>(null);
+  const [liabilityAmount, setLiabilityAmount] = useState('');
 
   const totalEquity = shareholders?.reduce((sum, s) => sum + (s.currentEquity || 0), 0) || 0;
   const totalInvested = shareholders?.reduce((sum, s) => sum + (s.totalInvested || 0), 0) || 0;
@@ -48,6 +58,31 @@ export default function ShareholderList() {
     setTransferPercent('');
     setTransferReason('');
   }
+
+  async function handlePayLiability() {
+    if (!payModal || !payAmount) return;
+    const cents = Math.round(parseFloat(payAmount) * 100);
+    await payLiabilityMutation.mutateAsync({
+      id: payModal.id,
+      data: { amount: cents, date: payDate, description: payDesc || undefined },
+    });
+    setPayModal(null);
+    setPayAmount('');
+    setPayDesc('');
+  }
+
+  async function handleSetLiability() {
+    if (!liabilityModal) return;
+    const cents = Math.round(parseFloat(liabilityAmount || '0') * 100);
+    await updateMutation.mutateAsync({
+      id: liabilityModal.id,
+      data: { sharePurchaseOwed: cents },
+    });
+    setLiabilityModal(null);
+    setLiabilityAmount('');
+  }
+
+  const shareholdersWithLiability = shareholders?.filter((s) => s.sharePurchaseOwed > 0) || [];
 
   if (isLoading) return <p className="text-gray-500">Loading...</p>;
 
@@ -128,6 +163,62 @@ export default function ShareholderList() {
           </tbody>
         </table>
       </div>
+
+      {shareholdersWithLiability.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-lg font-bold mb-3">Share Purchase Liabilities</h2>
+          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Name</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-600">Total Owed</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-600">Already Paid</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-600">Outstanding</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-600">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {shareholdersWithLiability.map((sh) => {
+                  const outstanding = sh.sharePurchaseOwed - sh.sharePurchasePaid;
+                  return (
+                    <tr key={sh._id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 font-medium">{sh.name}</td>
+                      <td className="px-4 py-3 text-right font-mono">{formatMoney(sh.sharePurchaseOwed)}</td>
+                      <td className="px-4 py-3 text-right font-mono text-green-600">{formatMoney(sh.sharePurchasePaid)}</td>
+                      <td className="px-4 py-3 text-right font-mono text-red-600 font-semibold">{formatMoney(outstanding)}</td>
+                      <td className="px-4 py-3 text-right">
+                        {outstanding > 0 && (
+                          <button
+                            onClick={() => {
+                              setPayModal({ id: sh._id, name: sh.name, outstanding });
+                              setPayAmount('');
+                              setPayDate(new Date().toISOString().slice(0, 10));
+                              setPayDesc('');
+                            }}
+                            className="text-xs bg-green-50 text-green-700 px-2 py-1 rounded hover:bg-green-100 mr-1"
+                          >
+                            Pay
+                          </button>
+                        )}
+                        <button
+                          onClick={() => {
+                            setLiabilityModal({ id: sh._id, name: sh.name, current: sh.sharePurchaseOwed });
+                            setLiabilityAmount((sh.sharePurchaseOwed / 100).toFixed(2));
+                          }}
+                          className="text-xs bg-gray-50 text-gray-600 px-2 py-1 rounded hover:bg-gray-100"
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {investModal && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
@@ -246,6 +337,100 @@ export default function ShareholderList() {
               </button>
               <button
                 onClick={() => setTransferModal(null)}
+                className="border border-gray-300 px-4 py-2 rounded text-sm text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {payModal && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-96">
+            <h3 className="text-lg font-bold mb-4">Pay Liability — {payModal.name}</h3>
+            <p className="text-sm text-gray-500 mb-3">
+              Outstanding: <span className="font-mono font-semibold text-red-600">{formatMoney(payModal.outstanding)}</span>
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Amount (HKD)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <input
+                  type="date"
+                  value={payDate}
+                  onChange={(e) => setPayDate(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <input
+                  type="text"
+                  value={payDesc}
+                  onChange={(e) => setPayDesc(e.target.value)}
+                  placeholder="Share purchase payment"
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={handlePayLiability}
+                disabled={!payAmount || payLiabilityMutation.isPending}
+                className="bg-green-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+              >
+                {payLiabilityMutation.isPending ? 'Processing...' : 'Record Payment'}
+              </button>
+              <button
+                onClick={() => setPayModal(null)}
+                className="border border-gray-300 px-4 py-2 rounded text-sm text-gray-600 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {liabilityModal && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-96">
+            <h3 className="text-lg font-bold mb-4">Set Liability — {liabilityModal.name}</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Total Owed (HKD)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={liabilityAmount}
+                  onChange={(e) => setLiabilityAmount(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={handleSetLiability}
+                disabled={updateMutation.isPending}
+                className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              >
+                {updateMutation.isPending ? 'Saving...' : 'Save'}
+              </button>
+              <button
+                onClick={() => setLiabilityModal(null)}
                 className="border border-gray-300 px-4 py-2 rounded text-sm text-gray-600 hover:bg-gray-50"
               >
                 Cancel

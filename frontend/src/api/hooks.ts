@@ -630,7 +630,7 @@ export function useUpdateShareholder() {
       data,
     }: {
       id: string;
-      data: { name?: string; sharePercent?: number; active?: boolean; reason?: string };
+      data: { name?: string; sharePercent?: number; sharePurchaseOwed?: number; active?: boolean; reason?: string };
     }) => api.put<Shareholder>(`/shareholders/${id}`, data).then((r) => r.data),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ['shareholders'] });
@@ -655,6 +655,15 @@ export function useInvestShareholder() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: { amount: number; date: string; description?: string } }) =>
       api.post(`/shareholders/${id}/invest`, data).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['shareholders'] }),
+  });
+}
+
+export function usePayShareholderLiability() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { amount: number; date: string; description?: string } }) =>
+      api.post(`/shareholders/${id}/pay-liability`, data).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['shareholders'] }),
   });
 }
