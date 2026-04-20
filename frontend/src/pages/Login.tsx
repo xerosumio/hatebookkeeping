@@ -3,51 +3,8 @@ import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
-function AccountingIllustration() {
-  return (
-    <svg viewBox="0 0 400 300" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full max-w-md opacity-90">
-      {/* Calculator body */}
-      <rect x="140" y="60" width="120" height="160" rx="12" fill="white" fillOpacity="0.15" stroke="white" strokeOpacity="0.3" strokeWidth="2" />
-      <rect x="155" y="75" width="90" height="30" rx="4" fill="white" fillOpacity="0.2" />
-      <text x="235" y="96" fill="white" fillOpacity="0.7" fontSize="14" fontFamily="monospace" textAnchor="end">1,250.00</text>
-      {/* Calculator buttons */}
-      {[0, 1, 2, 3].map((row) =>
-        [0, 1, 2].map((col) => (
-          <rect key={`${row}-${col}`} x={155 + col * 30} y={115 + row * 25} width="24" height="18" rx="3" fill="white" fillOpacity={col === 2 && row === 3 ? 0.3 : 0.12} />
-        ))
-      )}
-
-      {/* Bar chart */}
-      <g transform="translate(30, 100)">
-        <rect x="0" y="80" width="20" height="60" rx="3" fill="white" fillOpacity="0.2" />
-        <rect x="28" y="50" width="20" height="90" rx="3" fill="white" fillOpacity="0.25" />
-        <rect x="56" y="30" width="20" height="110" rx="3" fill="white" fillOpacity="0.3" />
-        <rect x="84" y="60" width="20" height="80" rx="3" fill="white" fillOpacity="0.2" />
-        <line x1="0" y1="140" x2="104" y2="140" stroke="white" strokeOpacity="0.2" strokeWidth="1" />
-      </g>
-
-      {/* Document / receipt */}
-      <g transform="translate(290, 80)">
-        <rect x="0" y="0" width="70" height="90" rx="6" fill="white" fillOpacity="0.15" stroke="white" strokeOpacity="0.25" strokeWidth="1.5" />
-        <line x1="12" y1="20" x2="58" y2="20" stroke="white" strokeOpacity="0.2" strokeWidth="1.5" />
-        <line x1="12" y1="32" x2="50" y2="32" stroke="white" strokeOpacity="0.15" strokeWidth="1.5" />
-        <line x1="12" y1="44" x2="54" y2="44" stroke="white" strokeOpacity="0.15" strokeWidth="1.5" />
-        <line x1="12" y1="56" x2="42" y2="56" stroke="white" strokeOpacity="0.15" strokeWidth="1.5" />
-        <line x1="30" y1="70" x2="58" y2="70" stroke="white" strokeOpacity="0.3" strokeWidth="2" />
-      </g>
-
-      {/* Coin stack */}
-      <g transform="translate(50, 50)">
-        {[0, 1, 2].map((i) => (
-          <ellipse key={i} cx="20" cy={30 - i * 8} rx="18" ry="6" fill="white" fillOpacity={0.1 + i * 0.05} stroke="white" strokeOpacity="0.2" strokeWidth="1" />
-        ))}
-      </g>
-
-      {/* Trend line */}
-      <polyline points="50,260 120,240 200,250 280,220 350,200" fill="none" stroke="white" strokeOpacity="0.25" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="350" cy="200" r="4" fill="white" fillOpacity="0.4" />
-    </svg>
-  );
+function BrandIllustration() {
+  return <span className="text-[10rem] leading-none select-none" role="img" aria-label="middle finger">🖕</span>;
 }
 
 export default function Login() {
@@ -85,7 +42,7 @@ export default function Login() {
           <div className="absolute bottom-20 right-10 w-96 h-96 bg-blue-400 rounded-full blur-3xl" />
         </div>
         <div className="relative z-10 flex flex-col items-center text-center">
-          <AccountingIllustration />
+          <BrandIllustration />
           <h2 className="text-3xl font-bold text-white mt-8">HateBookkeeping</h2>
           <p className="text-blue-200 mt-3 text-lg max-w-sm leading-relaxed">
             Financial management made simple. Track invoices, expenses, and cash flow all in one place.
