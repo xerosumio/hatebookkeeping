@@ -23,6 +23,7 @@ function termsLabel(terms: string): string {
 }
 
 const statusColors: Record<string, string> = {
+  draft: 'bg-gray-100 text-gray-700',
   unpaid: 'bg-red-100 text-red-700',
   partial: 'bg-amber-100 text-amber-700',
   paid: 'bg-green-100 text-green-700',
@@ -107,11 +108,20 @@ export default function InvoiceDetail() {
             onChange={(e) => updateStatus.mutate({ id: inv._id, data: { status: e.target.value } })}
             className={`px-3 py-1 rounded text-sm font-medium border-0 cursor-pointer ${statusColors[inv.status]}`}
           >
+            <option value="draft">Draft</option>
             <option value="unpaid">Unpaid</option>
             <option value="partial">Partial</option>
             <option value="paid">Paid</option>
           </select>
-          {inv.status !== 'paid' && (
+          {inv.status === 'draft' && (
+            <button
+              onClick={() => updateStatus.mutate({ id: inv._id, data: { status: 'unpaid' } })}
+              className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700"
+            >
+              Mark as Sent
+            </button>
+          )}
+          {(!inv.receipts || inv.receipts.length === 0) && inv.status !== 'draft' && (
             <Link
               to={`/receipts/new?invoiceId=${inv._id}`}
               className="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700"
@@ -190,6 +200,25 @@ export default function InvoiceDetail() {
             <div>
               <h3 className="text-sm font-medium text-gray-500 mb-1">Notes</h3>
               <p className="text-sm whitespace-pre-line">{inv.notes}</p>
+            </div>
+          )}
+
+          {inv.receipts && inv.receipts.length > 0 && (
+            <div>
+              <h3 className="text-sm font-medium text-gray-500 mb-2">Receipts</h3>
+              <div className="space-y-2">
+                {inv.receipts.map((r) => (
+                  <div key={r._id} className="flex items-center justify-between border border-gray-100 rounded p-3 bg-gray-50">
+                    <div className="flex items-center gap-4">
+                      <Link to={`/receipts/${r._id}`} className="text-blue-600 hover:underline font-medium text-sm">{r.receiptNumber}</Link>
+                      <span className="text-sm text-gray-600">{formatMoney(r.amount)}</span>
+                      <span className="text-xs text-gray-400">{new Date(r.paymentDate).toLocaleDateString()}</span>
+                      {r.paymentMethod && <span className="text-xs text-gray-400 capitalize">{r.paymentMethod.replace(/_/g, ' ')}</span>}
+                    </div>
+                    <Link to={`/receipts/${r._id}`} className="text-xs text-blue-600 hover:underline">View</Link>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>

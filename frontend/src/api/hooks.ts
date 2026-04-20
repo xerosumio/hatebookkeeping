@@ -4,6 +4,7 @@ import type {
   Client, Quotation, Invoice, Receipt, Transaction, Payee, PaymentRequest, RecurringItem,
   Settings, CashFlowReport, AccountsReceivableReport, IncomeStatementReport, AccountsPayableReport,
   Reimbursement, Entity, Shareholder, ShareLiabilityEntry, EquityTransaction, MonthlyClose, Fund, FundTransfer,
+  FundLedgerResponse,
 } from '../types';
 
 // Users (admin-only)
@@ -872,7 +873,7 @@ export function useFundTransfer() {
 export function useFundTransactions(fundId: string) {
   return useQuery({
     queryKey: ['fundTransfers', fundId],
-    queryFn: () => api.get<FundTransfer[]>(`/funds/${fundId}/transactions`).then((r) => r.data),
+    queryFn: () => api.get<FundLedgerResponse>(`/funds/${fundId}/transactions`).then((r) => r.data),
     enabled: !!fundId,
   });
 }

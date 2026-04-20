@@ -53,7 +53,8 @@ router.post('/', async (req: AuthRequest, res, next) => {
     // Validate invoice
     const invoice = await Invoice.findById(data.invoice);
     if (!invoice) throw new AppError(404, 'Invoice not found');
-    if (invoice.status === 'paid') {
+    const existingReceipts = await Receipt.countDocuments({ invoice: invoice._id });
+    if (invoice.status === 'paid' && existingReceipts > 0) {
       throw new AppError(400, 'Invoice is already fully paid');
     }
 

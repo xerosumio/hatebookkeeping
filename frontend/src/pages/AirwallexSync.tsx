@@ -1,6 +1,9 @@
-import { useAirwallexStatus, useAirwallexSyncLogs, useTriggerSync } from '../api/hooks';
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useAirwallexStatus, useAirwallexSyncLogs, useTriggerSync, usePendingBankTransactions } from '../api/hooks';
 import { formatMoney } from '../utils/money';
-import { RefreshCw, CheckCircle, XCircle, AlertTriangle, Clock, Loader2 } from 'lucide-react';
+import { FUND_NAMES, ENTITY_LABELS } from '../utils/bankAccounts';
+import { RefreshCw, CheckCircle, XCircle, AlertTriangle, Clock, Loader2, ChevronDown, ChevronUp, ExternalLink, Search, History, Settings, ArrowRight } from 'lucide-react';
 import PendingBankTransactions from '../components/PendingBankTransactions';
 
 interface TokenInfo {
@@ -28,9 +31,15 @@ interface EntityStatus {
   lastSync: SyncLog | null;
   systemBalance: number;
   bankBalance: number | null;
+  fundId: string | null;
 }
 
-const ENTITY_LABELS: Record<string, string> = { ax: 'Axilogy', nt: 'Naton' };
+interface PendingItem {
+  _id: string;
+  entity: 'ax' | 'nt';
+  type: 'income' | 'expense';
+  amount: number;
+}
 
 function relativeTime(ts: number): string {
   const diff = ts - Date.now();
@@ -81,7 +90,122 @@ function SyncStatusBadge({ status }: { status: string }) {
   return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700"><Loader2 size={12} className="animate-spin" /> Running</span>;
 }
 
-function EntityCard({ entityKey, data, onSync, isSyncing }: { entityKey: string; data: EntityStatus; onSync: () => void; isSyncing: boolean }) {
+function DiscrepancyActions({
+  entityKey, discrepancy, pendingItems, fundId, onSync, isSyncing,
+}: {
+  entityKey: string;
+  discrepancy: number;
+  pendingItems: PendingItem[];
+  fundId: string | null;
+  onSync: () => void;
+  isSyncing: boolean;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const entityPending = pendingItems.filter((p) => p.entity === entityKey);
+  const pendingExpenseTotal = entityPending.filter((p) => p.type === 'expense').reduce((s, p) => s + p.amount, 0);
+  const pendingIncomeTotal = entityPending.filter((p) => p.type === 'income').reduce((s, p) => s + p.amount, 0);
+  const pendingNetEffect = pendingIncomeTotal - pendingExpenseTotal;
+  const pendingMatchesDiscrepancy = entityPending.length > 0 && Math.abs(discrepancy + pendingNetEffect) < 2;
+
+  return (
+    <div className="mt-3 border border-red-200 bg-red-50 rounded-lg overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium text-red-800 hover:bg-red-100 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <AlertTriangle size={14} />
+          <span>Discrepancy of {formatMoney(discrepancy)} detected</span>
+        </div>
+        {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+      </button>
+
+      {expanded && (
+        <div className="px-4 pb-4 space-y-3">
+          <div className="text-xs text-red-700 space-y-1.5 bg-white/60 rounded p-3">
+            {discrepancy < 0 ? (
+              <p>The bank balance is <strong>lower</strong> than the system by {formatMoney(Math.abs(discrepancy))}. This typically means expenses on the bank side have not been recorded in the system yet.</p>
+            ) : (
+              <p>The bank balance is <strong>higher</strong> than the system by {formatMoney(discrepancy)}. This typically means income received at the bank has not been recorded in the system yet.</p>
+            )}
+            {entityPending.length > 0 && (
+              <p className="mt-1">
+                There are <strong>{entityPending.length} pending bank transaction{entityPending.length !== 1 ? 's' : ''}</strong> for {ENTITY_LABELS[entityKey]} that have not been booked.
+                {pendingExpenseTotal > 0 && <span> Pending expenses: <strong>{formatMoney(pendingExpenseTotal)}</strong>.</span>}
+                {pendingIncomeTotal > 0 && <span> Pending income: <strong>{formatMoney(pendingIncomeTotal)}</strong>.</span>}
+              </p>
+            )}
+            {pendingMatchesDiscrepancy && (
+              <p className="text-green-700 font-medium mt-1">
+                Resolving all pending transactions would fix this discrepancy.
+              </p>
+            )}
+          </div>
+
+          <div className="text-xs font-medium text-red-800 mb-1">Action Checklist</div>
+          <div className="space-y-1.5">
+            <a
+              href="#pending-review"
+              onClick={(e) => {
+                e.preventDefault();
+                document.getElementById('pending-review')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="flex items-center gap-2 px-3 py-2 bg-white rounded border border-red-100 text-sm text-gray-700 hover:bg-red-50 transition-colors"
+            >
+              <Search size={13} className="text-red-500 shrink-0" />
+              <span className="flex-1">Review pending bank transactions</span>
+              {entityPending.length > 0 && (
+                <span className="text-xs font-medium text-red-600 bg-red-100 px-1.5 py-0.5 rounded">{entityPending.length}</span>
+              )}
+              <ArrowRight size={12} className="text-gray-400" />
+            </a>
+
+            <button
+              onClick={onSync}
+              disabled={isSyncing}
+              className="w-full flex items-center gap-2 px-3 py-2 bg-white rounded border border-red-100 text-sm text-gray-700 hover:bg-red-50 transition-colors disabled:opacity-50"
+            >
+              {isSyncing ? <Loader2 size={13} className="text-red-500 shrink-0 animate-spin" /> : <RefreshCw size={13} className="text-red-500 shrink-0" />}
+              <span className="flex-1 text-left">{isSyncing ? 'Syncing...' : 'Re-sync from Airwallex'}</span>
+              <ArrowRight size={12} className="text-gray-400" />
+            </button>
+
+            <Link
+              to="/transactions"
+              className="flex items-center gap-2 px-3 py-2 bg-white rounded border border-red-100 text-sm text-gray-700 hover:bg-red-50 transition-colors"
+            >
+              <ExternalLink size={13} className="text-red-500 shrink-0" />
+              <span className="flex-1">Check transactions for missing entries</span>
+              <ArrowRight size={12} className="text-gray-400" />
+            </Link>
+
+            {fundId && (
+              <Link
+                to={`/funds/${fundId}`}
+                className="flex items-center gap-2 px-3 py-2 bg-white rounded border border-red-100 text-sm text-gray-700 hover:bg-red-50 transition-colors"
+              >
+                <History size={13} className="text-red-500 shrink-0" />
+                <span className="flex-1">View {FUND_NAMES[entityKey] || 'fund'} history</span>
+                <ArrowRight size={12} className="text-gray-400" />
+              </Link>
+            )}
+
+            <Link
+              to="/funds"
+              className="flex items-center gap-2 px-3 py-2 bg-white rounded border border-red-100 text-sm text-gray-700 hover:bg-red-50 transition-colors"
+            >
+              <Settings size={13} className="text-red-500 shrink-0" />
+              <span className="flex-1">Manually adjust fund balance</span>
+              <ArrowRight size={12} className="text-gray-400" />
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EntityCard({ entityKey, data, onSync, isSyncing, pendingItems }: { entityKey: string; data: EntityStatus; onSync: () => void; isSyncing: boolean; pendingItems: PendingItem[] }) {
   const discrepancy = data.bankBalance !== null ? data.bankBalance - data.systemBalance : null;
 
   return (
@@ -140,6 +264,17 @@ function EntityCard({ entityKey, data, onSync, isSyncing }: { entityKey: string;
           </div>
         )}
       </div>
+
+      {discrepancy !== null && discrepancy !== 0 && (
+        <DiscrepancyActions
+          entityKey={entityKey}
+          discrepancy={discrepancy}
+          pendingItems={pendingItems}
+          fundId={data.fundId}
+          onSync={onSync}
+          isSyncing={isSyncing}
+        />
+      )}
     </div>
   );
 }
@@ -148,6 +283,7 @@ export default function AirwallexSync() {
   const { data: status, isLoading: statusLoading } = useAirwallexStatus();
   const { data: logs, isLoading: logsLoading } = useAirwallexSyncLogs(30);
   const triggerSync = useTriggerSync();
+  const { data: pendingItems } = usePendingBankTransactions();
 
   return (
     <div>
@@ -164,17 +300,19 @@ export default function AirwallexSync() {
             data={status.ax}
             onSync={() => triggerSync.mutate('ax')}
             isSyncing={triggerSync.isPending && triggerSync.variables === 'ax'}
+            pendingItems={(pendingItems as PendingItem[]) || []}
           />
           <EntityCard
             entityKey="nt"
             data={status.nt}
             onSync={() => triggerSync.mutate('nt')}
             isSyncing={triggerSync.isPending && triggerSync.variables === 'nt'}
+            pendingItems={(pendingItems as PendingItem[]) || []}
           />
         </div>
       ) : null}
 
-      <div className="mb-8">
+      <div id="pending-review" className="mb-8">
         <h2 className="text-lg font-semibold mb-3">Pending Review</h2>
         <PendingBankTransactions />
       </div>

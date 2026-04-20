@@ -32,6 +32,7 @@ import MonthlyCloseDetail from './pages/MonthlyCloseDetail';
 import Reports from './pages/Reports';
 import UserList from './pages/UserList';
 import FundList from './pages/FundList';
+import FundDetail from './pages/FundDetail';
 import SettingsPage from './pages/Settings';
 import AirwallexSync from './pages/AirwallexSync';
 import Endpoint from './pages/Endpoint';
@@ -94,6 +95,7 @@ export default function App() {
               <Route path="monthly-close" element={<MonthlyCloseList />} />
               <Route path="monthly-close/:entity/:year/:month" element={<MonthlyCloseDetail />} />
               <Route path="funds" element={<FundList />} />
+              <Route path="funds/:id" element={<FundDetail />} />
               <Route path="reports" element={<Reports />} />
               <Route path="users" element={<UserList />} />
               <Route path="settings" element={<SettingsPage />} />

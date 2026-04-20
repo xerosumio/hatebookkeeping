@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useTransactions, useDeleteTransaction, useEntities } from '../api/hooks';
 import { formatMoney, titleCase } from '../utils/money';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
@@ -35,16 +36,36 @@ export default function TransactionList() {
     }
   }
 
-  function getPayeePayer(t: Transaction): string {
-    if (t.payee && typeof t.payee === 'object') return t.payee.name;
+  function getPayeePayer(t: Transaction): { name: string; link?: string } {
+    if (t.payee && typeof t.payee === 'object') {
+      return { name: t.payee.name, link: `/payees` };
+    }
+    if (t.client && typeof t.client === 'object') {
+      return { name: t.client.name, link: `/clients` };
+    }
     if (t.invoice && typeof t.invoice === 'object' && t.invoice.client && typeof t.invoice.client === 'object') {
-      return t.invoice.client.name;
+      return { name: t.invoice.client.name, link: `/clients` };
     }
     if (t.paymentRequest && typeof t.paymentRequest === 'object' && t.paymentRequest.items?.length) {
       const firstPayee = t.paymentRequest.items[0]?.payee;
-      if (firstPayee && typeof firstPayee === 'object') return firstPayee.name;
+      if (firstPayee && typeof firstPayee === 'object') return { name: firstPayee.name, link: `/payees` };
     }
-    return '';
+    return { name: '' };
+  }
+
+  function getLinkedDocs(t: Transaction) {
+    const docs: { label: string; link: string; color: string }[] = [];
+    if (t.invoice && typeof t.invoice === 'object') {
+      docs.push({ label: t.invoice.invoiceNumber, link: `/invoices/${t.invoice._id}`, color: 'bg-blue-50 text-blue-700' });
+    }
+    if (t.receipt && typeof t.receipt === 'object') {
+      const r = t.receipt as { _id: string; receiptNumber: string };
+      docs.push({ label: r.receiptNumber, link: `/receipts/${r._id}`, color: 'bg-green-50 text-green-700' });
+    }
+    if (t.paymentRequest && typeof t.paymentRequest === 'object') {
+      docs.push({ label: t.paymentRequest.requestNumber, link: `/payment-requests/${t.paymentRequest._id}`, color: 'bg-purple-50 text-purple-700' });
+    }
+    return docs;
   }
 
   return (
@@ -113,6 +134,7 @@ export default function TransactionList() {
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Amount</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Account</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Ref</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Links</th>
                 <th className="w-20 px-4 py-3"></th>
               </tr>
             </thead>
@@ -131,13 +153,34 @@ export default function TransactionList() {
                     {t.entity && typeof t.entity === 'object' ? (t.entity as Entity).code : ''}
                   </td>
                   <td className="px-4 py-3 text-gray-600">{t.category.replace(/_/g, ' ')}</td>
-                  <td className="px-4 py-3 text-gray-600 text-xs">{getPayeePayer(t) || '—'}</td>
+                  <td className="px-4 py-3 text-gray-600 text-xs">
+                    {(() => {
+                      const pp = getPayeePayer(t);
+                      if (!pp.name) return '—';
+                      return pp.link ? (
+                        <Link to={pp.link} className="text-blue-600 hover:underline">{pp.name}</Link>
+                      ) : pp.name;
+                    })()}
+                  </td>
                   <td className="px-4 py-3">{t.description}</td>
                   <td className={`px-4 py-3 text-right font-mono tabular-nums ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
                     {t.type === 'income' ? '+' : '-'}{formatMoney(t.amount)}
                   </td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{t.bankAccount || '—'}</td>
                   <td className="px-4 py-3 text-gray-400 text-xs">{t.bankReference}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {getLinkedDocs(t).map((d) => (
+                        <Link
+                          key={d.link}
+                          to={d.link}
+                          className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${d.color} hover:opacity-80`}
+                        >
+                          {d.label}
+                        </Link>
+                      ))}
+                    </div>
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button

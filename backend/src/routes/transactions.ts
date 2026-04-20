@@ -15,10 +15,19 @@ const transactionSchema = z.object({
   description: z.string().min(1),
   amount: z.number().int().positive(),
   entity: z.string().optional(),
+  client: z.string().optional(),
+  payee: z.string().optional(),
+  invoice: z.string().optional(),
+  receipt: z.string().optional(),
+  paymentRequest: z.string().optional(),
   bankReference: z.string().optional().default(''),
   bankAccount: z.string().optional().default(''),
   reconciled: z.boolean().optional().default(false),
 });
+
+function refOrUnset(value: string | undefined) {
+  return value ? value : undefined;
+}
 
 router.get('/', async (req, res, next) => {
   try {
@@ -36,8 +45,10 @@ router.get('/', async (req, res, next) => {
 
     const transactions = await Transaction.find(filter)
       .populate('entity', 'code name')
+      .populate('client', 'name')
       .populate('payee', 'name')
       .populate({ path: 'invoice', select: 'invoiceNumber client', populate: { path: 'client', select: 'name' } })
+      .populate('receipt', 'receiptNumber')
       .populate({ path: 'paymentRequest', select: 'requestNumber items', populate: { path: 'items.payee', select: 'name' } })
       .sort({ date: -1 });
     res.json(transactions);
@@ -52,6 +63,11 @@ router.post('/', roleGuard('admin', 'user'), async (req: AuthRequest, res, next)
     const transaction = await Transaction.create({
       ...data,
       date: new Date(data.date),
+      client: refOrUnset(data.client),
+      payee: refOrUnset(data.payee),
+      invoice: refOrUnset(data.invoice),
+      receipt: refOrUnset(data.receipt),
+      paymentRequest: refOrUnset(data.paymentRequest),
       createdBy: req.user!._id,
     });
 
@@ -68,7 +84,13 @@ router.post('/', roleGuard('admin', 'user'), async (req: AuthRequest, res, next)
 
 router.get('/:id', async (req, res, next) => {
   try {
-    const transaction = await Transaction.findById(req.params.id);
+    const transaction = await Transaction.findById(req.params.id)
+      .populate('entity', 'code name')
+      .populate('client', 'name')
+      .populate('payee', 'name')
+      .populate({ path: 'invoice', select: 'invoiceNumber client', populate: { path: 'client', select: 'name' } })
+      .populate('receipt', 'receiptNumber')
+      .populate({ path: 'paymentRequest', select: 'requestNumber items', populate: { path: 'items.payee', select: 'name' } });
     if (!transaction) throw new AppError(404, 'Transaction not found');
     res.json(transaction);
   } catch (error) {
@@ -88,9 +110,23 @@ router.put('/:id', roleGuard('admin', 'user'), async (req, res, next) => {
       await adjustFundBalance(old.bankAccount, oldDelta);
     }
 
+    const refFields = ['client', 'payee', 'invoice', 'receipt', 'paymentRequest'] as const;
+    const $set: Record<string, unknown> = { ...data, date: new Date(data.date) };
+    const $unset: Record<string, 1> = {};
+    for (const f of refFields) {
+      if (data[f]) {
+        $set[f] = data[f];
+      } else {
+        delete $set[f];
+        $unset[f] = 1;
+      }
+    }
+    const update: Record<string, unknown> = { $set };
+    if (Object.keys($unset).length) update.$unset = $unset;
+
     const transaction = await Transaction.findByIdAndUpdate(
       req.params.id,
-      { ...data, date: new Date(data.date) },
+      update,
       { new: true },
     );
 

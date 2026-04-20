@@ -15,18 +15,19 @@ export default function PayeeList() {
 
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Payee | null>(null);
-  const [form, setForm] = useState({ name: '', bankName: '', bankAccountNumber: '', bankCode: '', notes: '' });
+  const [form, setForm] = useState({ name: '', entity: '', bankName: '', bankAccountNumber: '', bankCode: '', notes: '' });
   const [error, setError] = useState('');
 
   function startCreate() {
     setEditing(null);
-    setForm({ name: '', bankName: '', bankAccountNumber: '', bankCode: '', notes: '' });
+    setForm({ name: '', entity: '', bankName: '', bankAccountNumber: '', bankCode: '', notes: '' });
     setShowForm(true);
   }
 
   function startEdit(p: Payee) {
     setEditing(p);
-    setForm({ name: p.name, bankName: p.bankName, bankAccountNumber: p.bankAccountNumber, bankCode: p.bankCode, notes: p.notes });
+    const entId = p.entity && typeof p.entity === 'object' ? (p.entity as Entity)._id : (p.entity as string || '');
+    setForm({ name: p.name, entity: entId, bankName: p.bankName, bankAccountNumber: p.bankAccountNumber, bankCode: p.bankCode, notes: p.notes });
     setShowForm(true);
   }
 
@@ -39,11 +40,12 @@ export default function PayeeList() {
   async function handleSubmit() {
     setError('');
     if (!form.name.trim()) { setError('Name is required'); return; }
+    const payload = { ...form, entity: form.entity || undefined };
     try {
       if (editing) {
-        await updatePayee.mutateAsync({ id: editing._id, data: form });
+        await updatePayee.mutateAsync({ id: editing._id, data: payload });
       } else {
-        await createPayee.mutateAsync(form);
+        await createPayee.mutateAsync(payload);
       }
       cancel();
     } catch {
@@ -90,7 +92,7 @@ export default function PayeeList() {
         <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6 space-y-3">
           <h3 className="text-sm font-semibold text-gray-700">{editing ? 'Edit Payee' : 'New Payee'}</h3>
           {error && <div className="bg-red-50 text-red-600 text-sm p-2 rounded">{error}</div>}
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-5 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Name *</label>
               <input
@@ -99,6 +101,19 @@ export default function PayeeList() {
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
               />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Entity</label>
+              <select
+                value={form.entity}
+                onChange={(e) => setForm({ ...form, entity: e.target.value })}
+                className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+              >
+                <option value="">Select entity...</option>
+                {entities?.map((ent) => (
+                  <option key={ent._id} value={ent._id}>{ent.code} — {ent.name}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Bank Name</label>

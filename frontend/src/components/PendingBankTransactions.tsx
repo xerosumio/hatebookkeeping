@@ -9,6 +9,7 @@ import {
   useEntities,
 } from '../api/hooks';
 import { formatMoney, titleCase } from '../utils/money';
+import { FUND_NAMES, ENTITY_LABELS } from '../utils/bankAccounts';
 import { Link2, Plus, X, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface PendingItem {
@@ -24,17 +25,12 @@ interface PendingItem {
   transactionType: string;
 }
 
-const ENTITY_LABELS: Record<string, string> = { ax: 'Axilogy', nt: 'Naton' };
-
 function MatchModal({ item, onClose }: { item: PendingItem; onClose: () => void }) {
   const matchMutation = useMatchPending();
   const { data: txns, isLoading } = useTransactions({ reconciled: 'false', type: item.type });
 
   const candidates = (txns || []).filter((t) => {
-    const bankMatch = item.entity === 'ax'
-      ? t.bankAccount === 'Axilogy Airwallex'
-      : t.bankAccount === 'Naton Airwallex';
-    return bankMatch;
+    return t.bankAccount === FUND_NAMES[item.entity];
   });
 
   function handleMatch(txnId: string) {

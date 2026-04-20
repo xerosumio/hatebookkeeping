@@ -15,6 +15,7 @@ import { Fund } from '../models/Fund.js';
 import { PendingBankTransaction } from '../models/PendingBankTransaction.js';
 import { Transaction } from '../models/Transaction.js';
 import { adjustFundBalance } from '../utils/fundBalance.js';
+import { FUND_NAME } from '../config/bankAccounts.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -84,8 +85,8 @@ router.get('/status', async (_req, res, next) => {
     ]);
 
     const [fundAx, fundNt] = await Promise.all([
-      Fund.findOne({ name: 'Axilogy Airwallex' }).select('balance'),
-      Fund.findOne({ name: 'Naton Airwallex' }).select('balance'),
+      Fund.findOne({ name: FUND_NAME.ax }).select('balance'),
+      Fund.findOne({ name: FUND_NAME.nt }).select('balance'),
     ]);
 
     let liveAx = null;
@@ -107,12 +108,14 @@ router.get('/status', async (_req, res, next) => {
         lastSync: latestAx,
         systemBalance: fundAx?.balance ?? 0,
         bankBalance: liveAx,
+        fundId: fundAx?._id?.toString() ?? null,
       },
       nt: {
         token: tokens.nt,
         lastSync: latestNt,
         systemBalance: fundNt?.balance ?? 0,
         bankBalance: liveNt,
+        fundId: fundNt?._id?.toString() ?? null,
       },
     });
   } catch (error) {
@@ -141,11 +144,6 @@ router.get('/sync-logs', async (req, res, next) => {
     next(error);
   }
 });
-
-const FUND_NAME: Record<string, string> = {
-  ax: 'Axilogy Airwallex',
-  nt: 'Naton Airwallex',
-};
 
 router.get('/pending', async (req, res, next) => {
   try {

@@ -7,11 +7,7 @@ import {
   getFinancialTransactions,
   getBalances,
 } from './airwallex.js';
-
-const FUND_NAME: Record<EntityKey, string> = {
-  ax: 'Axilogy Airwallex',
-  nt: 'Naton Airwallex',
-};
+import { FUND_NAME } from '../config/bankAccounts.js';
 
 const CUTOFF: Record<EntityKey, string> = {
   ax: '2026-03-02T00:00:00Z',

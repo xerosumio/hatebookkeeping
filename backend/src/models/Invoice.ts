@@ -12,7 +12,7 @@ export interface IInvoice extends Document {
   entity: mongoose.Types.ObjectId;
   quotation?: mongoose.Types.ObjectId;
   client: mongoose.Types.ObjectId;
-  status: 'unpaid' | 'partial' | 'paid';
+  status: 'draft' | 'unpaid' | 'partial' | 'paid';
   lineItems: IInvoiceLineItem[];
   subtotal: number;
   discount: number;
@@ -50,8 +50,8 @@ const invoiceSchema = new Schema<IInvoice>(
     client: { type: Schema.Types.ObjectId, ref: 'Client', required: true },
     status: {
       type: String,
-      enum: ['unpaid', 'partial', 'paid'],
-      default: 'unpaid',
+      enum: ['draft', 'unpaid', 'partial', 'paid'],
+      default: 'draft',
     },
     lineItems: [lineItemSchema],
     subtotal: { type: Number, required: true },

@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { RecurringItem } from '../models/RecurringItem.js';
-import { Transaction } from '../models/Transaction.js';
 import { Invoice } from '../models/Invoice.js';
 import { PaymentRequest } from '../models/PaymentRequest.js';
 import { User } from '../models/User.js';
@@ -94,7 +93,7 @@ async function generateInvoiceForItem(
     invoiceNumber,
     entity: entityId,
     client: item.client,
-    status: 'unpaid',
+    status: 'draft',
     lineItems: [{
       description: item.name + (item.description ? ` — ${item.description}` : ''),
       quantity: 1,
@@ -110,18 +109,6 @@ async function generateInvoiceForItem(
     bankAccountInfo,
     dueDate,
     notes: '',
-    createdBy: userId,
-  });
-
-  await Transaction.create({
-    date: now,
-    type: 'income',
-    category: item.category,
-    description: `[Recurring] ${item.name}${item.description ? ' — ' + item.description : ''}`,
-    amount: item.amount,
-    entity: item.entity,
-    invoice: invoice._id,
-    reconciled: false,
     createdBy: userId,
   });
 

@@ -159,14 +159,81 @@ router.post('/transfer', async (req: AuthRequest, res, next) => {
 router.get('/:id/transactions', async (req, res, next) => {
   try {
     const fundId = req.params.id;
-    const transfers = await FundTransfer.find({
-      $or: [{ fromFund: fundId }, { toFund: fundId }],
-    })
-      .populate('fromFund', 'name type')
-      .populate('toFund', 'name type')
-      .populate('createdBy', 'name')
-      .sort({ date: -1, createdAt: -1 });
-    res.json(transfers);
+    const fund = await Fund.findById(fundId);
+    if (!fund) throw new AppError(404, 'Fund not found');
+
+    const [transfers, transactions] = await Promise.all([
+      FundTransfer.find({ $or: [{ fromFund: fundId }, { toFund: fundId }] })
+        .populate('fromFund', 'name type')
+        .populate('toFund', 'name type')
+        .lean(),
+      Transaction.find({ bankAccount: fund.name })
+        .select('date type category description amount bankReference createdAt')
+        .lean(),
+    ]);
+
+    interface LedgerEntry {
+      _id: string;
+      date: string;
+      createdAt: string;
+      description: string;
+      amount: number;
+      type: 'transfer' | 'transaction';
+      direction: string;
+      reference?: string;
+      runningBalance: number;
+    }
+
+    const entries: LedgerEntry[] = [];
+
+    for (const t of transfers) {
+      const isInflow = t.toFund && String((t.toFund as any)._id ?? t.toFund) === fundId;
+      const signed = isInflow ? t.amount : -t.amount;
+      const fromName = t.fromFund && typeof t.fromFund === 'object' ? (t.fromFund as any).name : 'External';
+      const toName = t.toFund && typeof t.toFund === 'object' ? (t.toFund as any).name : 'External';
+      entries.push({
+        _id: String(t._id),
+        date: new Date(t.date).toISOString(),
+        createdAt: new Date(t.createdAt).toISOString(),
+        description: t.description,
+        amount: signed,
+        type: 'transfer',
+        direction: isInflow ? `From ${fromName}` : `To ${toName}`,
+        reference: t.reference || undefined,
+        runningBalance: 0,
+      });
+    }
+
+    for (const tx of transactions) {
+      const signed = tx.type === 'income' ? tx.amount : -tx.amount;
+      entries.push({
+        _id: String(tx._id),
+        date: new Date(tx.date).toISOString(),
+        createdAt: new Date(tx.createdAt).toISOString(),
+        description: tx.description,
+        amount: signed,
+        type: 'transaction',
+        direction: tx.type === 'income' ? `Income — ${tx.category}` : `Expense — ${tx.category}`,
+        reference: tx.bankReference || undefined,
+        runningBalance: 0,
+      });
+    }
+
+    entries.sort((a, b) => {
+      const d = new Date(a.date).getTime() - new Date(b.date).getTime();
+      if (d !== 0) return d;
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
+
+    let balance = fund.openingBalance;
+    for (const e of entries) {
+      balance += e.amount;
+      e.runningBalance = balance;
+    }
+
+    entries.reverse();
+
+    res.json({ openingBalance: fund.openingBalance, entries });
   } catch (error) {
     next(error);
   }

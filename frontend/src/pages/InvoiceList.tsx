@@ -7,7 +7,6 @@ import type { Client, Entity } from '../types';
 
 const statusColors: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-700',
-  sent: 'bg-blue-100 text-blue-700',
   unpaid: 'bg-red-100 text-red-700',
   partial: 'bg-amber-100 text-amber-700',
   paid: 'bg-green-100 text-green-700',
@@ -39,7 +38,7 @@ export default function InvoiceList() {
 
       <div className="flex items-center gap-4 mb-4">
         <div className="flex gap-2">
-          {['', 'unpaid', 'partial', 'paid', 'sent'].map((s) => (
+          {['', 'draft', 'unpaid', 'partial', 'paid'].map((s) => (
             <button
               key={s}
               onClick={() => setStatusFilter(s)}
@@ -102,22 +101,31 @@ export default function InvoiceList() {
                   <td className="px-4 py-3 text-right font-mono">{formatMoney(inv.total)}</td>
                   <td className="px-4 py-3 text-right font-mono">{formatMoney(inv.amountDue)}</td>
                   <td className="px-4 py-3">
-                    <select
-                      value={inv.status}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => {
-                        e.preventDefault();
-                        updateStatus.mutate({ id: inv._id, data: { status: e.target.value } });
-                      }}
-                      className={`appearance-none px-2 py-0.5 pr-5 rounded text-xs font-medium border-0 cursor-pointer bg-[length:12px_12px] bg-[right_4px_center] bg-no-repeat ${statusColors[inv.status] || 'bg-gray-100 text-gray-700'}`}
-                      style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")` }}
-                    >
-                      <option value="draft">Draft</option>
-                      <option value="sent">Sent</option>
-                      <option value="unpaid">Unpaid</option>
-                      <option value="partial">Partial</option>
-                      <option value="paid">Paid</option>
-                    </select>
+                    <div className="flex items-center gap-1.5">
+                      <select
+                        value={inv.status}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          e.preventDefault();
+                          updateStatus.mutate({ id: inv._id, data: { status: e.target.value } });
+                        }}
+                        className={`appearance-none px-2 py-0.5 pr-5 rounded text-xs font-medium border-0 cursor-pointer bg-[length:12px_12px] bg-[right_4px_center] bg-no-repeat ${statusColors[inv.status] || 'bg-gray-100 text-gray-700'}`}
+                        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")` }}
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="unpaid">Unpaid</option>
+                        <option value="partial">Partial</option>
+                        <option value="paid">Paid</option>
+                      </select>
+                      {inv.status === 'draft' && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); updateStatus.mutate({ id: inv._id, data: { status: 'unpaid' } }); }}
+                          className="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 whitespace-nowrap"
+                        >
+                          Mark as Sent
+                        </button>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-gray-500">
                     {new Date(inv.createdAt).toLocaleDateString()}

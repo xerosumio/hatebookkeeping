@@ -164,6 +164,22 @@ export interface FundTransfer {
   updatedAt: string;
 }
 
+export interface FundLedgerEntry {
+  _id: string;
+  date: string;
+  description: string;
+  amount: number;
+  type: 'transfer' | 'transaction';
+  direction: string;
+  reference?: string;
+  runningBalance: number;
+}
+
+export interface FundLedgerResponse {
+  openingBalance: number;
+  entries: FundLedgerEntry[];
+}
+
 export interface QuotationActivityLog {
   action: 'created' | 'updated' | 'pending_approval' | 'approved' | 'rejected' | 'sent' | 'accepted' | 'client_rejected' | 'notified';
   user: string | { _id: string; name: string };
@@ -205,7 +221,7 @@ export interface Invoice {
   entity: string | Entity;
   quotation?: string | { _id: string; quotationNumber: string; title: string };
   client: string | Client;
-  status: 'unpaid' | 'partial' | 'paid';
+  status: 'draft' | 'unpaid' | 'partial' | 'paid';
   lineItems: LineItem[];
   subtotal: number;
   discount: number;
@@ -220,6 +236,7 @@ export interface Invoice {
   bankAccountInfo: string;
   companyChopUrl: string;
   signatureUrl: string;
+  receipts?: { _id: string; receiptNumber: string; amount: number; paymentDate: string; paymentMethod: string; bankReference: string }[];
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -252,9 +269,10 @@ export interface Transaction {
   description: string;
   amount: number;
   entity?: string | Entity;
+  client?: string | { _id: string; name: string };
   payee?: string | { _id: string; name: string };
   invoice?: string | { _id: string; invoiceNumber: string; client?: string | { _id: string; name: string } };
-  receipt?: string;
+  receipt?: string | { _id: string; receiptNumber: string };
   paymentRequest?: string | { _id: string; requestNumber: string; items?: Array<{ payee?: string | { _id: string; name: string }; description?: string; amount?: number; category?: string }> };
   bankReference: string;
   bankAccount: string;

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { useFunds, useCreateFund, useUpdateFund, useDeleteFund, useFundTransfer, useFundTransactions, useEntities } from '../api/hooks';
+import { Link } from 'react-router-dom';
+import { useFunds, useCreateFund, useUpdateFund, useDeleteFund, useFundTransfer, useEntities } from '../api/hooks';
 import { formatMoney } from '../utils/money';
 import { Pencil, Trash2 } from 'lucide-react';
-import type { Fund, FundTransfer, Entity } from '../types';
+import type { Fund, Entity } from '../types';
 
 const typeLabels: Record<string, string> = {
   reserve: 'Reserve',
@@ -34,7 +35,6 @@ export default function FundList() {
   const [createForm, setCreateForm] = useState({ name: '', type: 'reserve' as string, entity: '', heldIn: '', balance: '' });
   const [showTransfer, setShowTransfer] = useState(false);
   const [transferForm, setTransferForm] = useState({ fromFund: '', toFund: '', amount: '', description: '', date: new Date().toISOString().split('T')[0] });
-  const [detailFund, setDetailFund] = useState<Fund | null>(null);
   const [editingFund, setEditingFund] = useState<Fund | null>(null);
   const [editForm, setEditForm] = useState({ name: '', type: 'reserve' as string, entity: '', heldIn: '', balance: '' });
 
@@ -164,14 +164,14 @@ export default function FundList() {
                   <span className="font-mono font-bold text-blue-800">{formatMoney(bank.balance)}</span>
                   <button onClick={() => openEdit(bank)} className="text-xs text-gray-500 hover:text-blue-600"><Pencil size={12} className="inline" /></button>
                   <button onClick={() => handleDeleteFund(bank)} className="text-xs text-gray-500 hover:text-red-600"><Trash2 size={12} className="inline" /></button>
-                  <button onClick={() => setDetailFund(bank)} className="text-xs text-blue-600 hover:underline">History</button>
+                  <Link to={`/funds/${bank._id}`} className="text-xs text-blue-600 hover:underline">History</Link>
                   <FundStatusToggle fund={bank} onToggle={updateMutation} />
                 </div>
               </div>
               <table className="w-full text-sm">
                 <tbody className="divide-y divide-gray-100">
                   {children.map((child) => (
-                    <FundSubRow key={child._id} fund={child} onDetail={setDetailFund} onToggle={updateMutation} onEdit={openEdit} onDelete={handleDeleteFund} />
+                    <FundSubRow key={child._id} fund={child} onToggle={updateMutation} onEdit={openEdit} onDelete={handleDeleteFund} />
                   ))}
                   <tr className="bg-gray-50">
                     <td className="px-4 py-2.5 pl-8 text-gray-600 italic">Operating Balance</td>
@@ -192,7 +192,7 @@ export default function FundList() {
             <table className="w-full text-sm">
               <tbody className="divide-y divide-gray-100">
                 {standaloneFunds.map((fund) => (
-                  <FundSubRow key={fund._id} fund={fund} onDetail={setDetailFund} onToggle={updateMutation} onEdit={openEdit} onDelete={handleDeleteFund} />
+                  <FundSubRow key={fund._id} fund={fund} onToggle={updateMutation} onEdit={openEdit} onDelete={handleDeleteFund} />
                 ))}
               </tbody>
             </table>
@@ -362,12 +362,11 @@ export default function FundList() {
         </div>
       )}
 
-      {detailFund && <FundDetailModal fund={detailFund} onClose={() => setDetailFund(null)} />}
     </div>
   );
 }
 
-function FundSubRow({ fund, onDetail, onToggle, onEdit, onDelete }: { fund: Fund; onDetail: (f: Fund) => void; onToggle: ReturnType<typeof useUpdateFund>; onEdit: (f: Fund) => void; onDelete: (f: Fund) => void }) {
+function FundSubRow({ fund, onToggle, onEdit, onDelete }: { fund: Fund; onToggle: ReturnType<typeof useUpdateFund>; onEdit: (f: Fund) => void; onDelete: (f: Fund) => void }) {
   const entObj = fund.entity && typeof fund.entity === 'object' ? fund.entity as Entity : null;
   return (
     <tr className="hover:bg-gray-50 group">
@@ -385,7 +384,7 @@ function FundSubRow({ fund, onDetail, onToggle, onEdit, onDelete }: { fund: Fund
       <td className="px-4 py-2.5 text-right w-44 space-x-2">
         <button onClick={() => onEdit(fund)} className="text-xs text-gray-500 hover:text-blue-600"><Pencil size={12} className="inline" /></button>
         <button onClick={() => onDelete(fund)} className="text-xs text-gray-500 hover:text-red-600"><Trash2 size={12} className="inline" /></button>
-        <button onClick={() => onDetail(fund)} className="text-xs text-blue-600 hover:underline">History</button>
+        <Link to={`/funds/${fund._id}`} className="text-xs text-blue-600 hover:underline">History</Link>
         <FundStatusToggle fund={fund} onToggle={onToggle} />
       </td>
     </tr>
@@ -405,66 +404,3 @@ function FundStatusToggle({ fund, onToggle }: { fund: Fund; onToggle: ReturnType
   );
 }
 
-function FundDetailModal({ fund, onClose }: { fund: Fund; onClose: () => void }) {
-  const { data: transfers, isLoading } = useFundTransactions(fund._id);
-
-  return (
-    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-lg p-6 w-[600px] max-h-[80vh] overflow-y-auto">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <h3 className="text-lg font-bold">{fund.name}</h3>
-            <span className={`text-xs px-2 py-0.5 rounded ${typeColors[fund.type]}`}>{typeLabels[fund.type]}</span>
-          </div>
-          <div className="text-right">
-            <div className="text-sm text-gray-500">Balance</div>
-            <div className={`text-lg font-bold font-mono ${fund.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {formatMoney(fund.balance)}
-            </div>
-          </div>
-        </div>
-
-        <h4 className="text-sm font-semibold text-gray-700 mb-2">Transaction History</h4>
-        {isLoading ? (
-          <p className="text-gray-400 text-sm">Loading...</p>
-        ) : transfers && transfers.length > 0 ? (
-          <table className="w-full text-xs">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-3 py-2 font-medium text-gray-600">Date</th>
-                <th className="text-left px-3 py-2 font-medium text-gray-600">Description</th>
-                <th className="text-right px-3 py-2 font-medium text-gray-600">Amount</th>
-                <th className="text-left px-3 py-2 font-medium text-gray-600">Direction</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {transfers.map((t: FundTransfer) => {
-                const isInflow = typeof t.toFund === 'object' ? t.toFund._id === fund._id : t.toFund === fund._id;
-                const fromName = t.fromFund && typeof t.fromFund === 'object' ? t.fromFund.name : 'External';
-                const toName = t.toFund && typeof t.toFund === 'object' ? t.toFund.name : 'External';
-                return (
-                  <tr key={t._id}>
-                    <td className="px-3 py-2">{new Date(t.date).toLocaleDateString()}</td>
-                    <td className="px-3 py-2 text-gray-600">{t.description}</td>
-                    <td className={`px-3 py-2 text-right font-mono ${isInflow ? 'text-green-600' : 'text-red-600'}`}>
-                      {isInflow ? '+' : '-'}{formatMoney(t.amount)}
-                    </td>
-                    <td className="px-3 py-2 text-gray-500">
-                      {isInflow ? `From ${fromName}` : `To ${toName}`}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        ) : (
-          <p className="text-gray-400 text-sm">No transactions yet.</p>
-        )}
-
-        <div className="mt-4 text-right">
-          <button onClick={onClose} className="border border-gray-300 px-4 py-2 rounded text-sm text-gray-600 hover:bg-gray-50">Close</button>
-        </div>
-      </div>
-    </div>
-  );
-}

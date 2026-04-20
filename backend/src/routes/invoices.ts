@@ -107,7 +107,14 @@ router.get('/:id', async (req, res, next) => {
       .populate('entity')
       .populate('quotation', 'quotationNumber');
     if (!invoice) throw new AppError(404, 'Invoice not found');
-    res.json(invoice);
+
+    const receipts = await Receipt.find({ invoice: invoice._id })
+      .select('receiptNumber amount paymentDate paymentMethod bankReference')
+      .sort({ createdAt: -1 });
+
+    const obj = invoice.toObject();
+    (obj as any).receipts = receipts;
+    res.json(obj);
   } catch (error) {
     next(error);
   }
@@ -135,7 +142,7 @@ router.put('/:id', async (req, res, next) => {
 router.patch('/:id/status', async (req, res, next) => {
   try {
     const { status } = z.object({
-      status: z.enum(['unpaid', 'partial', 'paid']),
+      status: z.enum(['draft', 'unpaid', 'partial', 'paid']),
     }).parse(req.body);
 
     const invoice = await Invoice.findById(req.params.id);

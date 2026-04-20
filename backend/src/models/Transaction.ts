@@ -7,6 +7,7 @@ export interface ITransaction extends Document {
   description: string;
   amount: number;
   entity?: mongoose.Types.ObjectId;
+  client?: mongoose.Types.ObjectId;
   payee?: mongoose.Types.ObjectId;
   invoice?: mongoose.Types.ObjectId;
   receipt?: mongoose.Types.ObjectId;
@@ -27,6 +28,7 @@ const transactionSchema = new Schema<ITransaction>(
     description: { type: String, required: true },
     amount: { type: Number, required: true },
     entity: { type: Schema.Types.ObjectId, ref: 'Entity' },
+    client: { type: Schema.Types.ObjectId, ref: 'Client' },
     payee: { type: Schema.Types.ObjectId, ref: 'Payee' },
     invoice: { type: Schema.Types.ObjectId, ref: 'Invoice' },
     receipt: { type: Schema.Types.ObjectId, ref: 'Receipt' },
