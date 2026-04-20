@@ -112,6 +112,34 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const receipt = await Receipt.findById(req.params.id);
+    if (!receipt) throw new AppError(404, 'Receipt not found');
+
+    // Reverse invoice payment
+    const invoice = await Invoice.findById(receipt.invoice);
+    if (invoice) {
+      invoice.amountPaid = Math.max(0, invoice.amountPaid - receipt.amount);
+      invoice.amountDue = invoice.total - invoice.amountPaid;
+      invoice.status = invoice.amountPaid <= 0 ? 'unpaid' : invoice.amountDue <= 0 ? 'paid' : 'partial';
+      await invoice.save();
+    }
+
+    // Delete associated transaction and reverse fund balance
+    const txn = await Transaction.findOne({ receipt: receipt._id });
+    if (txn) {
+      await adjustFundBalance(txn.bankAccount, -txn.amount);
+      await Transaction.deleteOne({ _id: txn._id });
+    }
+
+    await Receipt.deleteOne({ _id: receipt._id });
+    res.json({ message: 'Receipt deleted' });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/:id/pdf', async (req, res, next) => {
   try {
     const receipt = await Receipt.findById(req.params.id)

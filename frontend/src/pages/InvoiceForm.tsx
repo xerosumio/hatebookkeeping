@@ -65,8 +65,8 @@ export default function InvoiceForm() {
 
   useEffect(() => {
     if (isEdit && existing && !loaded) {
-      setEntity(typeof existing.entity === 'object' ? (existing.entity as any)._id : existing.entity);
-      const clientId = typeof existing.client === 'object' ? (existing.client as Client)._id : existing.client;
+      setEntity(existing.entity && typeof existing.entity === 'object' ? (existing.entity as any)._id : (existing.entity || ''));
+      const clientId = existing.client && typeof existing.client === 'object' ? (existing.client as Client)._id : (existing.client || '');
       setClient(clientId);
       setLineItems(existing.lineItems);
       setDiscount(centsToDecimal(existing.discount));

@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { useInvoice, useUpdateInvoiceStatus, fetchPdfBlob } from '../api/hooks';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useInvoice, useUpdateInvoiceStatus, useDeleteInvoice, fetchPdfBlob } from '../api/hooks';
 import { formatMoney } from '../utils/money';
-import { FileText, Pencil, ArrowLeft } from 'lucide-react';
+import { FileText, Pencil, ArrowLeft, Trash2 } from 'lucide-react';
 import PdfInlinePreview from '../components/PdfPreviewModal';
 import type { Client } from '../types';
 
@@ -30,8 +30,10 @@ const statusColors: Record<string, string> = {
 
 export default function InvoiceDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { data: inv, isLoading } = useInvoice(id || '');
   const updateStatus = useUpdateInvoiceStatus();
+  const deleteInvoice = useDeleteInvoice();
 
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -74,6 +76,16 @@ export default function InvoiceDetail() {
           >
             <Pencil size={14} /> Edit
           </Link>
+          <button
+            onClick={() => {
+              if (confirm(`Delete invoice ${inv.invoiceNumber}?`)) {
+                deleteInvoice.mutate(inv._id, { onSuccess: () => navigate('/invoices') });
+              }
+            }}
+            className="flex items-center gap-1 border border-red-300 text-red-600 px-3 py-1.5 rounded text-sm hover:bg-red-50"
+          >
+            <Trash2 size={14} /> Delete
+          </button>
           {pdfBlobUrl ? (
             <button
               onClick={hidePdfPreview}

@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { useReceipt, fetchPdfBlob } from '../api/hooks';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useReceipt, useDeleteReceipt, fetchPdfBlob } from '../api/hooks';
 import { formatMoney } from '../utils/money';
-import { FileText, ArrowLeft } from 'lucide-react';
+import { FileText, ArrowLeft, Trash2 } from 'lucide-react';
 import PdfInlinePreview from '../components/PdfPreviewModal';
 import type { Client, Invoice } from '../types';
 
@@ -16,7 +16,9 @@ const methodLabels: Record<string, string> = {
 
 export default function ReceiptDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { data: receipt, isLoading } = useReceipt(id || '');
+  const deleteReceipt = useDeleteReceipt();
 
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -68,6 +70,16 @@ export default function ReceiptDetail() {
               <FileText size={14} /> {pdfLoading ? 'Loading...' : 'Preview PDF'}
             </button>
           )}
+          <button
+            onClick={() => {
+              if (confirm(`Delete receipt ${receipt.receiptNumber}? This will reverse the payment on the linked invoice.`)) {
+                deleteReceipt.mutate(receipt._id, { onSuccess: () => navigate('/receipts') });
+              }
+            }}
+            className="flex items-center gap-1 border border-red-300 text-red-600 px-3 py-1.5 rounded text-sm hover:bg-red-50"
+          >
+            <Trash2 size={14} /> Delete
+          </button>
         </div>
       </div>
 

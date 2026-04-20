@@ -3,13 +3,13 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   useQuotation, useUpdateQuotationStatus, useConvertQuotationToInvoices,
   useApproveQuotation, useRejectQuotation, useNotifyQuotation, useUsers,
-  fetchPdfBlob,
+  useInvoices, fetchPdfBlob,
 } from '../api/hooks';
 import { useAuth } from '../contexts/AuthContext';
 import { formatMoney } from '../utils/money';
 import { FileText, Calendar, ArrowLeft, Plus, Pencil, CheckCircle, XCircle, Send, Clock, Mail } from 'lucide-react';
 import PdfInlinePreview from '../components/PdfPreviewModal';
-import type { Client, User, QuotationActivityLog } from '../types';
+import type { Client, User, QuotationActivityLog, Invoice } from '../types';
 
 const statusColors: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-700',
@@ -47,6 +47,7 @@ export default function QuotationDetail() {
   const reject = useRejectQuotation();
   const notify = useNotifyQuotation();
   const { data: allUsers } = useUsers();
+  const { data: linkedInvoices } = useInvoices(id ? { quotation: id } : undefined);
 
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -312,6 +313,46 @@ export default function QuotationDetail() {
                         <td className="py-2 text-right">{m.percentage}%</td>
                         <td className="py-2 text-right tabular-nums">{formatMoney(m.amount)}</td>
                         <td className="py-2 text-gray-600 pl-4">{m.dueDescription}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {linkedInvoices && linkedInvoices.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium text-gray-500 mb-2">Linked Invoices</h3>
+                <table className="w-full text-sm">
+                  <thead className="border-b border-gray-200">
+                    <tr>
+                      <th className="text-left py-2 font-medium text-gray-600">Invoice #</th>
+                      <th className="text-right py-2 font-medium text-gray-600 w-32">Total</th>
+                      <th className="text-right py-2 font-medium text-gray-600 w-32">Paid</th>
+                      <th className="text-right py-2 font-medium text-gray-600 w-32">Due</th>
+                      <th className="text-center py-2 font-medium text-gray-600 w-24">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {linkedInvoices.map((inv: Invoice) => (
+                      <tr key={inv._id} className="border-b border-gray-100">
+                        <td className="py-2">
+                          <Link to={`/invoices/${inv._id}`} className="text-blue-600 hover:underline">
+                            {inv.invoiceNumber}
+                          </Link>
+                        </td>
+                        <td className="py-2 text-right tabular-nums">{formatMoney(inv.total)}</td>
+                        <td className="py-2 text-right tabular-nums">{formatMoney(inv.amountPaid)}</td>
+                        <td className="py-2 text-right tabular-nums">{formatMoney(inv.amountDue)}</td>
+                        <td className="py-2 text-center">
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                            inv.status === 'paid' ? 'bg-green-100 text-green-700' :
+                            inv.status === 'partial' ? 'bg-amber-100 text-amber-700' :
+                            'bg-gray-100 text-gray-600'
+                          }`}>
+                            {inv.status}
+                          </span>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

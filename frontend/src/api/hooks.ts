@@ -152,7 +152,7 @@ export function useNotifyQuotation() {
 }
 
 // Invoices
-export function useInvoices(filters?: { status?: string; client?: string; entity?: string }) {
+export function useInvoices(filters?: { status?: string; client?: string; entity?: string; quotation?: string }) {
   return useQuery({
     queryKey: ['invoices', filters],
     queryFn: () => api.get<Invoice[]>('/invoices', { params: filters }).then((r) => r.data),
@@ -194,6 +194,19 @@ export function useUpdateInvoiceStatus() {
   });
 }
 
+export function useDeleteInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/invoices/${id}`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+      qc.invalidateQueries({ queryKey: ['receipts'] });
+      qc.invalidateQueries({ queryKey: ['transactions'] });
+      qc.invalidateQueries({ queryKey: ['funds'] });
+    },
+  });
+}
+
 export function useConvertQuotationToInvoices() {
   const qc = useQueryClient();
   return useMutation({
@@ -230,6 +243,19 @@ export function useCreateReceipt() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['receipts'] });
       qc.invalidateQueries({ queryKey: ['invoices'] });
+    },
+  });
+}
+
+export function useDeleteReceipt() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/receipts/${id}`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['receipts'] });
+      qc.invalidateQueries({ queryKey: ['invoices'] });
+      qc.invalidateQueries({ queryKey: ['funds'] });
+      qc.invalidateQueries({ queryKey: ['transactions'] });
     },
   });
 }

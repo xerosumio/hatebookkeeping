@@ -5,8 +5,11 @@ import fs from 'fs';
 import React from 'react';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { Invoice } from '../models/Invoice.js';
+import { Receipt } from '../models/Receipt.js';
+import { Transaction } from '../models/Transaction.js';
 import { Quotation } from '../models/Quotation.js';
 import { Entity } from '../models/Entity.js';
+import { adjustFundBalance } from '../utils/fundBalance.js';
 import { getNextSequence } from '../models/Counter.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
@@ -57,11 +60,12 @@ function computeDueDate(terms: string, fromDate?: Date): Date | undefined {
 
 router.get('/', async (req, res, next) => {
   try {
-    const { status, client, entity } = req.query;
+    const { status, client, entity, quotation } = req.query;
     const filter: Record<string, unknown> = {};
     if (status) filter.status = status;
     if (client) filter.client = client;
     if (entity) filter.entity = entity;
+    if (quotation) filter.quotation = quotation;
 
     const invoices = await Invoice.find(filter)
       .populate('client', 'name')
@@ -141,6 +145,35 @@ router.patch('/:id/status', async (req, res, next) => {
     }
     await invoice.save();
     res.json(invoice);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const invoice = await Invoice.findById(req.params.id);
+    if (!invoice) throw new AppError(404, 'Invoice not found');
+
+    const receipts = await Receipt.find({ invoice: invoice._id });
+    for (const receipt of receipts) {
+      const txn = await Transaction.findOne({ receipt: receipt._id });
+      if (txn) {
+        await adjustFundBalance(txn.bankAccount, -txn.amount);
+        await Transaction.deleteOne({ _id: txn._id });
+      }
+      await Receipt.deleteOne({ _id: receipt._id });
+    }
+
+    const txns = await Transaction.find({ invoice: invoice._id });
+    for (const txn of txns) {
+      const delta = txn.type === 'income' ? -txn.amount : txn.amount;
+      await adjustFundBalance(txn.bankAccount, delta);
+      await Transaction.deleteOne({ _id: txn._id });
+    }
+
+    await Invoice.deleteOne({ _id: invoice._id });
+    res.json({ message: 'Invoice deleted' });
   } catch (error) {
     next(error);
   }
