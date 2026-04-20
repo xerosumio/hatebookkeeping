@@ -45,7 +45,7 @@ export default function Login() {
           <BrandIllustration />
           <h2 className="text-3xl font-bold text-white mt-8">HateBookkeeping</h2>
           <p className="text-blue-200 mt-3 text-lg max-w-sm leading-relaxed">
-            Financial management made simple. Track invoices, expenses, and cash flow all in one place.
+            Don't fucking show me excel sheet and zoho books anymore.
           </p>
         </div>
       </div>
