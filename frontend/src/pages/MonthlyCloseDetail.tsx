@@ -39,7 +39,7 @@ export default function MonthlyCloseDetail() {
   const entityCode = data.entity && typeof data.entity === 'object' ? (data.entity as Entity).code : '';
 
   return (
-    <div>
+    <div className="max-w-5xl">
       <button onClick={() => navigate('/monthly-close')} className="text-sm text-blue-600 hover:underline mb-4">
         &larr; Back to Monthly Close
       </button>

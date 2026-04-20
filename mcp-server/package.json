@@ -1,0 +1,23 @@
+{
+  "name": "hatebookkeeping-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for HateBookkeeping — exposes all bookkeeping endpoints to Claude/AI agents",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "hatebookkeeping-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "tsx": "^4.19.0",
+    "@types/node": "^22.0.0"
+  }
+}

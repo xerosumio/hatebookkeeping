@@ -116,7 +116,7 @@ export default function FundList() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Funds</h1>
         <div className="flex gap-2">
-          <button onClick={() => setShowTransfer(true)} className="bg-green-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-green-700">
+          <button onClick={() => setShowTransfer(true)} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700">
             Transfer
           </button>
           <button onClick={() => setShowCreate(true)} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700">
@@ -294,7 +294,7 @@ export default function FundList() {
             <div className="flex gap-3 mt-4">
               <button onClick={handleTransfer}
                 disabled={!transferForm.amount || !transferForm.description || (!transferForm.fromFund && !transferForm.toFund) || transferMutation.isPending}
-                className="bg-green-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+                className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
                 {transferMutation.isPending ? 'Transferring...' : 'Transfer'}
               </button>
               <button onClick={() => setShowTransfer(false)} className="border border-gray-300 px-4 py-2 rounded text-sm text-gray-600 hover:bg-gray-50">Cancel</button>

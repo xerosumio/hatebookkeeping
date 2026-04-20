@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { formatMoney } from '../utils/money';
 import { FileText, Calendar, ArrowLeft, Plus, Pencil, CheckCircle, XCircle, Send, Clock, Mail } from 'lucide-react';
 import PdfInlinePreview from '../components/PdfPreviewModal';
-import type { Client, User, QuotationActivityLog, Invoice } from '../types';
+import type { Client, QuotationActivityLog, Invoice } from '../types';
 
 const statusColors: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-700',

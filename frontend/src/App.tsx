@@ -33,6 +33,8 @@ import Reports from './pages/Reports';
 import UserList from './pages/UserList';
 import FundList from './pages/FundList';
 import SettingsPage from './pages/Settings';
+import AirwallexSync from './pages/AirwallexSync';
+import AIAgent from './pages/AIAgent';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -44,15 +46,6 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   return <>{children}</>;
-}
-
-function Placeholder({ title }: { title: string }) {
-  return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">{title}</h1>
-      <p className="text-gray-500">Coming soon.</p>
-    </div>
-  );
 }
 
 export default function App() {
@@ -104,6 +97,8 @@ export default function App() {
               <Route path="reports" element={<Reports />} />
               <Route path="users" element={<UserList />} />
               <Route path="settings" element={<SettingsPage />} />
+              <Route path="airwallex-sync" element={<AirwallexSync />} />
+              <Route path="ai-agent" element={<AIAgent />} />
             </Route>
           </Routes>
         </HashRouter>

@@ -11,4 +11,11 @@ export const env = {
   emailApiUrl: process.env.EMAIL_API_URL || 'https://zog8wc804808wcgosgsgcs00.prod.wellplay.io',
   emailApiKey: process.env.EMAIL_API_KEY || '',
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
+
+  airwallexAxClientId: process.env.AIRWALLEX_AX_CLIENT_ID || '',
+  airwallexAxApiKey: process.env.AIRWALLEX_AX_API_KEY || '',
+  airwallexAxAccountId: process.env.AIRWALLEX_AX_ACCOUNT_ID || '',
+  airwallexNtClientId: process.env.AIRWALLEX_NT_CLIENT_ID || '',
+  airwallexNtApiKey: process.env.AIRWALLEX_NT_API_KEY || '',
+  airwallexNtAccountId: process.env.AIRWALLEX_NT_ACCOUNT_ID || '',
 };

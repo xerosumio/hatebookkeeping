@@ -3,6 +3,7 @@ import { useTransactions, useDeleteTransaction, useEntities } from '../api/hooks
 import { formatMoney } from '../utils/money';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import TransactionForm from './TransactionForm';
+import { PendingBanner } from '../components/PendingBankTransactions';
 import type { Transaction, Entity } from '../types';
 
 export default function TransactionList() {
@@ -33,8 +34,6 @@ export default function TransactionList() {
       deleteTransaction.mutate(t._id);
     }
   }
-
-  const isManual = (t: Transaction) => !t.invoice && !t.receipt && !t.paymentRequest;
 
   function getPayeePayer(t: Transaction): string {
     if (t.payee && typeof t.payee === 'object') return t.payee.name;
@@ -67,6 +66,8 @@ export default function TransactionList() {
           <TransactionForm onDone={handleDone} existing={editing} />
         </div>
       )}
+
+      <PendingBanner />
 
       <div className="flex items-center gap-4 mb-4">
         <div className="flex gap-2">

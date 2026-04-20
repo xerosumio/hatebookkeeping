@@ -4,6 +4,7 @@ import { Transaction } from '../models/Transaction.js';
 import { Invoice } from '../models/Invoice.js';
 import { PaymentRequest } from '../models/PaymentRequest.js';
 import { RecurringItem } from '../models/RecurringItem.js';
+import { Fund } from '../models/Fund.js';
 import { authMiddleware } from '../middleware/auth.js';
 
 const router = Router();
@@ -267,6 +268,165 @@ router.get('/accounts-payable', async (req, res, next) => {
         approvedCount: approvedRequests.length,
       },
       categoryBreakdown,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Balance sheet — snapshot of financial position
+router.get('/balance-sheet', async (req, res, next) => {
+  try {
+    const entity = req.query.entity as string | undefined;
+
+    const fundFilter: Record<string, unknown> = { active: true };
+    if (entity) fundFilter.entity = new mongoose.Types.ObjectId(entity);
+    const funds = await Fund.find(fundFilter).populate('entity', 'code name').sort({ type: 1, name: 1 });
+
+    const cashBreakdown = funds.map((f) => ({ name: f.name, type: f.type, balance: f.balance }));
+    const totalCash = funds.reduce((s, f) => s + f.balance, 0);
+
+    const arFilter: Record<string, unknown> = { status: { $in: ['unpaid', 'partial', 'sent'] } };
+    if (entity) arFilter.entity = new mongoose.Types.ObjectId(entity);
+    const arResult = await Invoice.aggregate([
+      { $match: arFilter },
+      { $group: { _id: null, total: { $sum: '$amountDue' }, count: { $sum: 1 } } },
+    ]);
+    const accountsReceivable = arResult[0]?.total || 0;
+    const arCount = arResult[0]?.count || 0;
+
+    const apFilter: Record<string, unknown> = { status: { $in: ['pending', 'approved'] } };
+    if (entity) apFilter.entity = new mongoose.Types.ObjectId(entity);
+    const apResult = await PaymentRequest.aggregate([
+      { $match: apFilter },
+      { $group: { _id: null, total: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
+    ]);
+    const accountsPayable = apResult[0]?.total || 0;
+    const apCount = apResult[0]?.count || 0;
+
+    const totalAssets = totalCash + accountsReceivable;
+    const totalLiabilities = accountsPayable;
+    const netPosition = totalAssets - totalLiabilities;
+
+    res.json({
+      assets: {
+        cash: { total: totalCash, breakdown: cashBreakdown },
+        accountsReceivable: { total: accountsReceivable, count: arCount },
+        total: totalAssets,
+      },
+      liabilities: {
+        accountsPayable: { total: accountsPayable, count: apCount },
+        total: totalLiabilities,
+      },
+      netPosition,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Monthly summary — opening/closing positions and operations
+router.get('/monthly-summary', async (req, res, next) => {
+  try {
+    const year = parseInt(req.query.year as string) || new Date().getFullYear();
+    const month = parseInt(req.query.month as string) || (new Date().getMonth() + 1);
+    const entity = req.query.entity as string | undefined;
+
+    const monthStart = new Date(year, month - 1, 1);
+    const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
+
+    const entityMatch = entity ? { entity: new mongoose.Types.ObjectId(entity) } : {};
+
+    const fundFilter: Record<string, unknown> = { active: true };
+    if (entity) fundFilter.entity = new mongoose.Types.ObjectId(entity);
+    const funds = await Fund.find(fundFilter);
+    const totalOpeningBalance = funds.reduce((s, f) => s + f.openingBalance, 0);
+
+    const preMonthTxns = await Transaction.aggregate([
+      { $match: { date: { $lt: monthStart }, ...entityMatch } },
+      { $group: { _id: '$type', total: { $sum: '$amount' } } },
+    ]);
+    let preIncome = 0, preExpense = 0;
+    for (const r of preMonthTxns) {
+      if (r._id === 'income') preIncome = r.total;
+      else preExpense = r.total;
+    }
+    const openingCash = totalOpeningBalance + preIncome - preExpense;
+
+    const monthTxns = await Transaction.aggregate([
+      { $match: { date: { $gte: monthStart, $lte: monthEnd }, ...entityMatch } },
+      { $group: { _id: '$type', total: { $sum: '$amount' }, count: { $sum: 1 } } },
+    ]);
+    let monthIncome = 0, monthExpense = 0;
+    for (const r of monthTxns) {
+      if (r._id === 'income') monthIncome = r.total;
+      else monthExpense = r.total;
+    }
+    const closingCash = openingCash + monthIncome - monthExpense;
+
+    const arFilter: Record<string, unknown> = { status: { $in: ['unpaid', 'partial', 'sent'] } };
+    if (entity) arFilter.entity = new mongoose.Types.ObjectId(entity);
+
+    const openingArResult = await Invoice.aggregate([
+      { $match: { ...arFilter, createdAt: { $lt: monthStart } } },
+      { $group: { _id: null, total: { $sum: '$amountDue' } } },
+    ]);
+    const openingAR = openingArResult[0]?.total || 0;
+
+    const closingArResult = await Invoice.aggregate([
+      { $match: { ...arFilter, createdAt: { $lte: monthEnd } } },
+      { $group: { _id: null, total: { $sum: '$amountDue' } } },
+    ]);
+    const closingAR = closingArResult[0]?.total || 0;
+
+    const apFilter: Record<string, unknown> = { status: { $in: ['pending', 'approved'] } };
+    if (entity) apFilter.entity = new mongoose.Types.ObjectId(entity);
+
+    const openingApResult = await PaymentRequest.aggregate([
+      { $match: { ...apFilter, createdAt: { $lt: monthStart } } },
+      { $group: { _id: null, total: { $sum: '$totalAmount' } } },
+    ]);
+    const openingAP = openingApResult[0]?.total || 0;
+
+    const closingApResult = await PaymentRequest.aggregate([
+      { $match: { ...apFilter, createdAt: { $lte: monthEnd } } },
+      { $group: { _id: null, total: { $sum: '$totalAmount' } } },
+    ]);
+    const closingAP = closingApResult[0]?.total || 0;
+
+    const openingAssets = openingCash + openingAR;
+    const closingAssets = closingCash + closingAR;
+    const openingNet = openingAssets - openingAP;
+    const closingNet = closingAssets - closingAP;
+
+    res.json({
+      period: { year, month },
+      opening: {
+        cash: openingCash,
+        accountsReceivable: openingAR,
+        totalAssets: openingAssets,
+        accountsPayable: openingAP,
+        netPosition: openingNet,
+      },
+      operations: {
+        income: monthIncome,
+        expense: monthExpense,
+        net: monthIncome - monthExpense,
+      },
+      closing: {
+        cash: closingCash,
+        accountsReceivable: closingAR,
+        totalAssets: closingAssets,
+        accountsPayable: closingAP,
+        netPosition: closingNet,
+      },
+      change: {
+        cash: closingCash - openingCash,
+        accountsReceivable: closingAR - openingAR,
+        totalAssets: closingAssets - openingAssets,
+        accountsPayable: closingAP - openingAP,
+        netPosition: closingNet - openingNet,
+      },
     });
   } catch (error) {
     next(error);

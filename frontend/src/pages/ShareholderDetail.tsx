@@ -29,7 +29,7 @@ export default function ShareholderDetail() {
   const currentEquity = transactions[0]?.balanceAfter ?? 0;
 
   return (
-    <div>
+    <div className="max-w-4xl">
       <button onClick={() => navigate('/shareholders')} className="text-sm text-blue-600 hover:underline mb-4">
         &larr; Back to Shareholders
       </button>

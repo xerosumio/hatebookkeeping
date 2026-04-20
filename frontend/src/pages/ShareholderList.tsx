@@ -6,7 +6,7 @@ import {
 } from '../api/hooks';
 import { formatMoney } from '../utils/money';
 import { Pencil, Trash2 } from 'lucide-react';
-import type { Shareholder, ShareLiabilityEntry } from '../types';
+import type { ShareLiabilityEntry } from '../types';
 
 export default function ShareholderList() {
   const navigate = useNavigate();

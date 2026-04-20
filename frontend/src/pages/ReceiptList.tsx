@@ -4,6 +4,10 @@ import { useReceipts, useEntities } from '../api/hooks';
 import { formatMoney } from '../utils/money';
 import type { Client, Invoice, Entity } from '../types';
 
+function formatLabel(s: string) {
+  return s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export default function ReceiptList() {
   const [entityFilter, setEntityFilter] = useState('');
   const { data: entities } = useEntities();
@@ -45,6 +49,7 @@ export default function ReceiptList() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Invoice</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Amount</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Method</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Account</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Date</th>
               </tr>
             </thead>
@@ -66,7 +71,8 @@ export default function ReceiptList() {
                     {r.invoice && typeof r.invoice === 'object' ? (r.invoice as Invoice).invoiceNumber : ''}
                   </td>
                   <td className="px-4 py-3 text-right font-mono">{formatMoney(r.amount)}</td>
-                  <td className="px-4 py-3 text-gray-500">{r.paymentMethod}</td>
+                  <td className="px-4 py-3 text-gray-500">{formatLabel(r.paymentMethod)}</td>
+                  <td className="px-4 py-3 text-gray-500">{r.bankAccount}</td>
                   <td className="px-4 py-3 text-gray-500">
                     {new Date(r.paymentDate).toLocaleDateString()}
                   </td>

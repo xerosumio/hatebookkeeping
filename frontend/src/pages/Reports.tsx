@@ -3,12 +3,13 @@ import { Link } from 'react-router-dom';
 import {
   useIncomeStatement, useIncomeStatementTransactions,
   useCashFlow, useAccountsReceivable, useAccountsPayable, useEntities,
+  useBalanceSheet, useMonthlySummary,
 } from '../api/hooks';
 import { formatMoney } from '../utils/money';
 import { ChevronRight, ChevronDown } from 'lucide-react';
 import type { IncomeStatementLine, CashFlowMonth, ARInvoice, APPaymentRequest, APCategoryBreakdown, Transaction, Entity } from '../types';
 
-const tabs = ['Income Statement', 'Cash Flow', 'Accounts Receivable', 'Accounts Payable'] as const;
+const tabs = ['Income Statement', 'Balance Sheet', 'Monthly Summary', 'Cash Flow', 'Accounts Receivable', 'Accounts Payable'] as const;
 type Tab = (typeof tabs)[number];
 type DateMode = 'all' | 'month' | 'custom';
 
@@ -82,6 +83,8 @@ export default function Reports() {
       </div>
 
       {activeTab === 'Income Statement' && <IncomeStatementTab entity={entityFilter} />}
+      {activeTab === 'Balance Sheet' && <BalanceSheetTab entity={entityFilter} />}
+      {activeTab === 'Monthly Summary' && <MonthlySummaryTab entity={entityFilter} />}
       {activeTab === 'Cash Flow' && <CashFlowTab entity={entityFilter} />}
       {activeTab === 'Accounts Receivable' && <AccountsReceivableTab entity={entityFilter} />}
       {activeTab === 'Accounts Payable' && <AccountsPayableTab entity={entityFilter} />}
@@ -544,6 +547,201 @@ function AccountsPayableTab({ entity }: { entity: string }) {
             <p className="text-gray-500">No pending or approved payment requests{mode !== 'all' ? ' in this period' : ''}.</p>
           )}
         </>
+      ) : null}
+    </div>
+  );
+}
+
+function BalanceSheetTab({ entity }: { entity: string }) {
+  const { data, isLoading } = useBalanceSheet(entity || undefined);
+
+  return (
+    <div className="max-w-3xl">
+      {isLoading ? (
+        <p className="text-gray-500">Loading...</p>
+      ) : data ? (
+        <div className="space-y-6">
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-blue-700 mb-4">Assets</h2>
+            <table className="w-full text-sm">
+              <tbody>
+                <tr className="border-b border-gray-100">
+                  <td className="py-2 font-medium text-gray-700" colSpan={2}>Cash & Bank</td>
+                  <td className="py-2 text-right font-mono w-40">{formatMoney(data.assets.cash.total)}</td>
+                </tr>
+                {data.assets.cash.breakdown.map((f: { name: string; type: string; balance: number }) => (
+                  <tr key={f.name} className="border-b border-gray-50">
+                    <td className="py-1.5 pl-6 text-gray-500 text-xs" colSpan={2}>
+                      {f.name}
+                      <span className="ml-2 text-gray-400 capitalize">({f.type.replace(/_/g, ' ')})</span>
+                    </td>
+                    <td className="py-1.5 text-right font-mono text-xs text-gray-500">{formatMoney(f.balance)}</td>
+                  </tr>
+                ))}
+                <tr className="border-b border-gray-100">
+                  <td className="py-2 font-medium text-gray-700" colSpan={2}>
+                    Accounts Receivable
+                    <span className="ml-2 text-xs text-gray-400 font-normal">{data.assets.accountsReceivable.count} invoices</span>
+                  </td>
+                  <td className="py-2 text-right font-mono w-40">{formatMoney(data.assets.accountsReceivable.total)}</td>
+                </tr>
+                <tr className="font-bold border-t-2 border-gray-300">
+                  <td className="py-3" colSpan={2}>Total Assets</td>
+                  <td className="py-3 text-right font-mono text-blue-700">{formatMoney(data.assets.total)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-red-700 mb-4">Liabilities</h2>
+            <table className="w-full text-sm">
+              <tbody>
+                <tr className="border-b border-gray-100">
+                  <td className="py-2 font-medium text-gray-700" colSpan={2}>
+                    Accounts Payable
+                    <span className="ml-2 text-xs text-gray-400 font-normal">{data.liabilities.accountsPayable.count} requests</span>
+                  </td>
+                  <td className="py-2 text-right font-mono w-40">{formatMoney(data.liabilities.accountsPayable.total)}</td>
+                </tr>
+                <tr className="font-bold border-t-2 border-gray-300">
+                  <td className="py-3" colSpan={2}>Total Liabilities</td>
+                  <td className="py-3 text-right font-mono text-red-700">{formatMoney(data.liabilities.total)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="bg-white rounded-lg border-2 border-gray-300 p-6">
+            <div className="flex justify-between items-center text-lg font-bold">
+              <span>Net Position</span>
+              <span className={`font-mono ${data.netPosition >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                {formatMoney(data.netPosition)}
+              </span>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">Total Assets − Total Liabilities</p>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MonthlySummaryTab({ entity }: { entity: string }) {
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const { data, isLoading } = useMonthlySummary(year, month, entity || undefined);
+
+  const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
+
+  function DeltaCell({ value }: { value: number }) {
+    if (value === 0) return <td className="py-2.5 text-right font-mono text-gray-400">—</td>;
+    return (
+      <td className={`py-2.5 text-right font-mono font-medium ${value > 0 ? 'text-green-600' : 'text-red-600'}`}>
+        {value > 0 ? '+' : ''}{formatMoney(value)}
+      </td>
+    );
+  }
+
+  return (
+    <div className="max-w-4xl">
+      <div className="flex items-center gap-4 mb-6">
+        <div className="flex items-center gap-2">
+          <select
+            value={month}
+            onChange={(e) => setMonth(Number(e.target.value))}
+            className="border border-gray-300 rounded px-3 py-1.5 text-sm"
+          >
+            {monthNames.slice(1).map((m, i) => (
+              <option key={i + 1} value={i + 1}>{m}</option>
+            ))}
+          </select>
+          <select
+            value={year}
+            onChange={(e) => setYear(Number(e.target.value))}
+            className="border border-gray-300 rounded px-3 py-1.5 text-sm"
+          >
+            {years.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <p className="text-gray-500">Loading...</p>
+      ) : data ? (
+        <div className="space-y-6">
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="text-left px-5 py-3 font-medium text-gray-600 w-1/3"></th>
+                  <th className="text-right px-5 py-3 font-medium text-gray-500">Opening</th>
+                  <th className="text-right px-5 py-3 font-medium text-gray-500">Closing</th>
+                  <th className="text-right px-5 py-3 font-medium text-gray-500">Change</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-gray-100">
+                  <td className="px-5 py-2.5 font-medium text-gray-700">Cash & Bank</td>
+                  <td className="px-5 py-2.5 text-right font-mono">{formatMoney(data.opening.cash)}</td>
+                  <td className="px-5 py-2.5 text-right font-mono">{formatMoney(data.closing.cash)}</td>
+                  <DeltaCell value={data.change.cash} />
+                </tr>
+                <tr className="border-b border-gray-100">
+                  <td className="px-5 py-2.5 font-medium text-gray-700">Accounts Receivable</td>
+                  <td className="px-5 py-2.5 text-right font-mono">{formatMoney(data.opening.accountsReceivable)}</td>
+                  <td className="px-5 py-2.5 text-right font-mono">{formatMoney(data.closing.accountsReceivable)}</td>
+                  <DeltaCell value={data.change.accountsReceivable} />
+                </tr>
+                <tr className="border-b border-gray-200 font-bold bg-blue-50/50">
+                  <td className="px-5 py-2.5 text-blue-700">Total Assets</td>
+                  <td className="px-5 py-2.5 text-right font-mono text-blue-700">{formatMoney(data.opening.totalAssets)}</td>
+                  <td className="px-5 py-2.5 text-right font-mono text-blue-700">{formatMoney(data.closing.totalAssets)}</td>
+                  <DeltaCell value={data.change.totalAssets} />
+                </tr>
+                <tr className="border-b border-gray-100">
+                  <td className="px-5 py-2.5 font-medium text-gray-700">Accounts Payable</td>
+                  <td className="px-5 py-2.5 text-right font-mono">{formatMoney(data.opening.accountsPayable)}</td>
+                  <td className="px-5 py-2.5 text-right font-mono">{formatMoney(data.closing.accountsPayable)}</td>
+                  <DeltaCell value={data.change.accountsPayable} />
+                </tr>
+                <tr className="font-bold bg-gray-50 border-t-2 border-gray-300">
+                  <td className="px-5 py-3">Net Position</td>
+                  <td className={`px-5 py-3 text-right font-mono ${data.opening.netPosition >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                    {formatMoney(data.opening.netPosition)}
+                  </td>
+                  <td className={`px-5 py-3 text-right font-mono ${data.closing.netPosition >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                    {formatMoney(data.closing.netPosition)}
+                  </td>
+                  <DeltaCell value={data.change.netPosition} />
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <h3 className="text-sm font-semibold text-gray-700 mb-4">Operations for {monthNames[month]} {year}</h3>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-green-50 rounded-lg p-4 text-center">
+                <div className="text-xs text-green-600 font-medium mb-1">Revenue</div>
+                <div className="text-xl font-bold font-mono text-green-700">{formatMoney(data.operations.income)}</div>
+              </div>
+              <div className="bg-red-50 rounded-lg p-4 text-center">
+                <div className="text-xs text-red-600 font-medium mb-1">Expenses</div>
+                <div className="text-xl font-bold font-mono text-red-700">{formatMoney(data.operations.expense)}</div>
+              </div>
+              <div className={`${data.operations.net >= 0 ? 'bg-blue-50' : 'bg-amber-50'} rounded-lg p-4 text-center`}>
+                <div className={`text-xs font-medium mb-1 ${data.operations.net >= 0 ? 'text-blue-600' : 'text-amber-600'}`}>
+                  Net Income
+                </div>
+                <div className={`text-xl font-bold font-mono ${data.operations.net >= 0 ? 'text-blue-700' : 'text-amber-700'}`}>
+                  {formatMoney(data.operations.net)}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

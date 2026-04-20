@@ -17,13 +17,6 @@ const TERM_OPTIONS = [
   { value: 'custom', label: 'Custom...' },
 ];
 
-function termsLabel(terms: string): string {
-  const opt = TERM_OPTIONS.find((o) => o.value === terms);
-  if (opt) return opt.label;
-  const m = terms.match(/^custom_(\d+)$/);
-  if (m) return `Net ${m[1]}`;
-  return terms;
-}
 
 function computeDueDatePreview(terms: string): string {
   if (!terms) return '';

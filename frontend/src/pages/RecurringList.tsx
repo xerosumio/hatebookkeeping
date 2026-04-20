@@ -8,7 +8,7 @@ import {
 } from '../api/hooks';
 import { formatMoney, decimalToCents, centsToDecimal } from '../utils/money';
 import { Plus, Trash2, Pencil, X, Play, Pause, FileText, ChevronDown, ChevronRight, Bell, Receipt, CreditCard } from 'lucide-react';
-import type { RecurringItem, RecurringHistoryEntry, Entity } from '../types';
+import type { RecurringItem, RecurringHistoryEntry } from '../types';
 
 function getNextDue(item: RecurringItem): Date | null {
   if (!item.startDate) return null;

@@ -17,6 +17,8 @@ import {
   PieChart,
   CalendarCheck,
   Landmark,
+  RefreshCw,
+  Bot,
 } from 'lucide-react';
 
 const navItems = [
@@ -94,6 +96,28 @@ export default function AppShell() {
               >
                 <Settings size={18} />
                 Settings
+              </NavLink>
+              <NavLink
+                to="/airwallex-sync"
+                className={({ isActive }) =>
+                  `flex items-center gap-2 px-3 py-2 rounded text-sm ${
+                    isActive ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-100'
+                  }`
+                }
+              >
+                <RefreshCw size={18} />
+                Airwallex Sync
+              </NavLink>
+              <NavLink
+                to="/ai-agent"
+                className={({ isActive }) =>
+                  `flex items-center gap-2 px-3 py-2 rounded text-sm ${
+                    isActive ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-100'
+                  }`
+                }
+              >
+                <Bot size={18} />
+                AI Agent
               </NavLink>
             </>
           )}

@@ -16,7 +16,10 @@
     "seed:shareholder-liability": "tsx src/seed-shareholder-liability.ts",
     "seed:liability-ledger": "tsx src/seed-liability-ledger.ts",
     "seed:reconcile-airwallex": "tsx src/seed-reconcile-airwallex.ts",
-    "seed:repair-linkage": "tsx src/seed-repair-linkage.ts"
+    "seed:repair-linkage": "tsx src/seed-repair-linkage.ts",
+    "seed:airwallex-sync": "tsx src/seed-airwallex-sync.ts",
+    "seed:airwallex-cleanup": "tsx src/seed-airwallex-cleanup.ts",
+    "seed:data-audit": "tsx src/seed-data-audit.ts"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",
