@@ -18,6 +18,7 @@ export interface IUser extends Document {
   bankName: string;
   bankAccountNumber: string;
   fpsPhone: string;
+  signatureUrl: string;
   apiTokens: IApiToken[];
   createdAt: Date;
   updatedAt: Date;
@@ -34,6 +35,7 @@ const userSchema = new Schema<IUser>(
     bankName: { type: String, default: '' },
     bankAccountNumber: { type: String, default: '' },
     fpsPhone: { type: String, default: '' },
+    signatureUrl: { type: String, default: '' },
     apiTokens: [{
       token: { type: String, required: true },
       name: { type: String, required: true },

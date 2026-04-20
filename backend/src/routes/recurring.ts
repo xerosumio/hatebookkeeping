@@ -8,6 +8,7 @@ import { User } from '../models/User.js';
 import { getNextSequence } from '../models/Counter.js';
 import { getSettings } from '../models/Settings.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { Entity } from '../models/Entity.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { sendEmail, buildRecurringReminderEmailHtml, buildPaymentRequestEmailHtml, getSubjectForRequest } from '../utils/email.js';
 import { env } from '../config/env.js';
@@ -35,6 +36,18 @@ const recurringSchema = z.object({
   bankAccountInfo: z.string().optional().default(''),
 });
 
+function formatBankAccountDetails(ba: { name?: string; bankName?: string; accountNumber?: string; bankCode?: string; branchCode?: string; swiftCode?: string; location?: string }): string {
+  const lines: string[] = ['Bank Details Account information:'];
+  if (ba.name) lines.push(`Account name: ${ba.name}`);
+  if (ba.accountNumber) lines.push(`Bank account number: ${ba.accountNumber}`);
+  if (ba.bankCode) lines.push(`Bank code: ${ba.bankCode}`);
+  if (ba.branchCode) lines.push(`Branch code: ${ba.branchCode}`);
+  if (ba.swiftCode) lines.push(`SWIFT code: ${ba.swiftCode}`);
+  if (ba.bankName) lines.push(`Bank name: ${ba.bankName}`);
+  if (ba.location) lines.push(`Location: ${ba.location}`);
+  return lines.join('\n');
+}
+
 function computeDueDate(paymentTerms: string): Date {
   const now = new Date();
   if (paymentTerms === 'net_30') return new Date(now.getTime() + 30 * 86400000);
@@ -47,13 +60,39 @@ async function generateInvoiceForItem(
   userId: import('mongoose').Types.ObjectId,
 ) {
   const now = new Date();
-  const invoiceNumber = await getNextSequence('inv');
+
+  let entityId = item.entity;
+  if (!entityId) {
+    const settings = await getSettings();
+    entityId = settings.defaultEntityId;
+  }
+  if (!entityId) throw new AppError(400, 'Recurring item has no entity and no default entity is configured');
+
+  const entity = await Entity.findById(entityId);
+  const entityCode = entity?.code;
+  const invoiceNumber = await getNextSequence('inv', entityCode);
   const clientName = (item.client && typeof item.client === 'object') ? (item.client as any).name : '';
   const dueDate = computeDueDate(item.paymentTerms);
 
+  let bankAccountInfo = item.bankAccountInfo || '';
+  if (bankAccountInfo && entity?.bankAccounts?.length) {
+    const match = entity.bankAccounts.find((ba) => {
+      const label = [ba.name, ba.bankName, ba.accountNumber].filter(Boolean).join(' — ');
+      return label === bankAccountInfo;
+    });
+    if (match) {
+      bankAccountInfo = formatBankAccountDetails(match);
+    }
+  }
+  if (!bankAccountInfo && entity?.bankAccounts?.length) {
+    const defaultIdx = (entity as any).defaultBankAccountIndex || 0;
+    const defaultBa = entity.bankAccounts[defaultIdx] || entity.bankAccounts[0];
+    if (defaultBa) bankAccountInfo = formatBankAccountDetails(defaultBa);
+  }
+
   const invoice = await Invoice.create({
     invoiceNumber,
-    entity: item.entity,
+    entity: entityId,
     client: item.client,
     status: 'unpaid',
     lineItems: [{
@@ -68,9 +107,9 @@ async function generateInvoiceForItem(
     amountPaid: 0,
     amountDue: item.amount,
     paymentTerms: item.paymentTerms || '',
-    bankAccountInfo: item.bankAccountInfo || '',
+    bankAccountInfo,
     dueDate,
-    notes: `Auto-generated from recurring item: ${item.name}`,
+    notes: '',
     createdBy: userId,
   });
 

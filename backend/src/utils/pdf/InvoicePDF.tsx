@@ -40,7 +40,7 @@ export function InvoicePDF({ invoice: inv, company }: Props) {
   const fmtDate = (d: string | Date) =>
     new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 
-  const issuedDate = fmtDate(inv.createdAt);
+  const issuedDate = fmtDate(inv.invoiceDate || inv.createdAt);
   const dueDate = inv.dueDate ? fmtDate(inv.dueDate) : null;
 
   return (

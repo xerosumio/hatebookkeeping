@@ -177,7 +177,7 @@ function EntityManager() {
     return {
       code: '', name: '', address: '', phone: '', email: '', website: '',
       logoUrl: '', brandColor: '', companyChopUrl: '', signatureUrl: '',
-      bankAccounts: [],
+      bankAccounts: [], defaultBankAccountIndex: 0,
     };
   }
 
@@ -188,7 +188,7 @@ function EntityManager() {
       phone: entity.phone, email: entity.email, website: entity.website,
       logoUrl: entity.logoUrl || '', brandColor: entity.brandColor || '',
       companyChopUrl: entity.companyChopUrl || '', signatureUrl: entity.signatureUrl || '',
-      bankAccounts: entity.bankAccounts || [],
+      bankAccounts: entity.bankAccounts || [], defaultBankAccountIndex: entity.defaultBankAccountIndex || 0,
     });
     setShowNew(false);
     setSaveMsg('');
@@ -314,6 +314,7 @@ interface EntityForm {
   companyChopUrl: string;
   signatureUrl: string;
   bankAccounts: BankAccount[];
+  defaultBankAccountIndex: number;
 }
 
 function EntityFormFields({
@@ -401,7 +402,7 @@ function EntityFormFields({
           <label className="block text-xs font-medium text-gray-600">Bank Accounts</label>
           <button
             type="button"
-            onClick={() => setForm({ ...form, bankAccounts: [...form.bankAccounts, { name: '', bankName: '', accountNumber: '' }] })}
+            onClick={() => setForm({ ...form, bankAccounts: [...form.bankAccounts, { name: '', bankName: '', accountNumber: '', bankCode: '', branchCode: '', swiftCode: '', location: '' }] })}
             className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
           >
             <Plus size={12} /> Add
@@ -410,62 +411,70 @@ function EntityFormFields({
         {form.bankAccounts.length === 0 ? (
           <p className="text-xs text-gray-400">No bank accounts.</p>
         ) : (
-          <div className="space-y-2">
-            {form.bankAccounts.map((acc, i) => (
-              <div key={i} className="grid grid-cols-7 gap-2 items-start">
-                <div className="col-span-2">
-                  {i === 0 && <label className="block text-xs text-gray-500 mb-1">Label</label>}
-                  <input
-                    type="text"
-                    value={acc.name}
-                    onChange={(e) => {
-                      const updated = [...form.bankAccounts];
-                      updated[i] = { ...updated[i], name: e.target.value };
-                      setForm({ ...form, bankAccounts: updated });
-                    }}
-                    placeholder="e.g. HSBC HKD"
-                    className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
-                  />
+          <div className="space-y-3">
+            {form.bankAccounts.map((acc, i) => {
+              const updateField = (field: string, value: string) => {
+                const updated = [...form.bankAccounts];
+                updated[i] = { ...updated[i], [field]: value };
+                setForm({ ...form, bankAccounts: updated });
+              };
+              return (
+                <div key={i} className={`border rounded p-3 relative ${form.defaultBankAccountIndex === i ? 'border-blue-400 bg-blue-50/30' : 'border-gray-200'}`}>
+                  <div className="absolute top-2 right-2 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, defaultBankAccountIndex: i })}
+                      className={`text-xs px-2 py-0.5 rounded ${form.defaultBankAccountIndex === i ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-blue-100 hover:text-blue-600'}`}
+                    >
+                      {form.defaultBankAccountIndex === i ? 'Default' : 'Set default'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newAccounts = form.bankAccounts.filter((_, idx) => idx !== i);
+                        let newDefault = form.defaultBankAccountIndex;
+                        if (i < newDefault) newDefault--;
+                        else if (i === newDefault) newDefault = 0;
+                        setForm({ ...form, bankAccounts: newAccounts, defaultBankAccountIndex: Math.min(newDefault, Math.max(0, newAccounts.length - 1)) });
+                      }}
+                      className="text-gray-400 hover:text-red-500 p-1"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Account Name *</label>
+                      <input type="text" value={acc.name} onChange={(e) => updateField('name', e.target.value)} placeholder="Axilogy Limited" className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Account Number</label>
+                      <input type="text" value={acc.accountNumber} onChange={(e) => updateField('accountNumber', e.target.value)} placeholder="7950133712" className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Bank Name</label>
+                      <input type="text" value={acc.bankName} onChange={(e) => updateField('bankName', e.target.value)} placeholder="DBS Bank (Hong Kong) Limited" className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Bank Code</label>
+                      <input type="text" value={acc.bankCode || ''} onChange={(e) => updateField('bankCode', e.target.value)} placeholder="016" className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Branch Code</label>
+                      <input type="text" value={acc.branchCode || ''} onChange={(e) => updateField('branchCode', e.target.value)} placeholder="478" className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">SWIFT Code</label>
+                      <input type="text" value={acc.swiftCode || ''} onChange={(e) => updateField('swiftCode', e.target.value)} placeholder="DHBKHKHH" className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Location</label>
+                      <input type="text" value={acc.location || ''} onChange={(e) => updateField('location', e.target.value)} placeholder="Hong Kong SAR" className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
+                    </div>
+                  </div>
                 </div>
-                <div className="col-span-2">
-                  {i === 0 && <label className="block text-xs text-gray-500 mb-1">Bank Name</label>}
-                  <input
-                    type="text"
-                    value={acc.bankName}
-                    onChange={(e) => {
-                      const updated = [...form.bankAccounts];
-                      updated[i] = { ...updated[i], bankName: e.target.value };
-                      setForm({ ...form, bankAccounts: updated });
-                    }}
-                    placeholder="HSBC"
-                    className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
-                  />
-                </div>
-                <div className="col-span-2">
-                  {i === 0 && <label className="block text-xs text-gray-500 mb-1">Account Number</label>}
-                  <input
-                    type="text"
-                    value={acc.accountNumber}
-                    onChange={(e) => {
-                      const updated = [...form.bankAccounts];
-                      updated[i] = { ...updated[i], accountNumber: e.target.value };
-                      setForm({ ...form, bankAccounts: updated });
-                    }}
-                    placeholder="123-456789-001"
-                    className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
-                  />
-                </div>
-                <div className="col-span-1 flex items-center" style={i === 0 ? { marginTop: 20 } : {}}>
-                  <button
-                    type="button"
-                    onClick={() => setForm({ ...form, bankAccounts: form.bankAccounts.filter((_, idx) => idx !== i) })}
-                    className="text-gray-400 hover:text-red-500 p-1"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

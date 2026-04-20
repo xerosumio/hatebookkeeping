@@ -4,6 +4,10 @@ export interface IBankAccount {
   name: string;
   bankName: string;
   accountNumber: string;
+  bankCode: string;
+  branchCode: string;
+  swiftCode: string;
+  location: string;
 }
 
 export interface IChartOfAccount {
@@ -42,6 +46,10 @@ const settingsSchema = new Schema<ISettings>(
         name: { type: String, required: true },
         bankName: { type: String, default: '' },
         accountNumber: { type: String, default: '' },
+        bankCode: { type: String, default: '' },
+        branchCode: { type: String, default: '' },
+        swiftCode: { type: String, default: '' },
+        location: { type: String, default: '' },
       }],
       default: [],
     },

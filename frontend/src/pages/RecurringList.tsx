@@ -54,6 +54,7 @@ const actionBadge: Record<string, { className: string; label: string; icon: type
 
 interface FormState {
   name: string;
+  entity: string;
   type: 'income' | 'expense';
   category: string;
   amount: string;
@@ -71,7 +72,7 @@ interface FormState {
 }
 
 const emptyForm = (): FormState => ({
-  name: '', type: 'expense', category: '', amount: '', frequency: 'monthly',
+  name: '', entity: '', type: 'expense', category: '', amount: '', frequency: 'monthly',
   client: '', payee: '', description: '', startDate: '',
   endDate: '', dueDay: '1', alertDaysBefore: '7', paymentTerms: '', bankAccountInfo: '', active: true,
 });
@@ -115,6 +116,7 @@ export default function RecurringList() {
   function buildPayload(f: FormState) {
     return {
       name: f.name,
+      entity: f.entity || undefined,
       type: f.type,
       category: f.category,
       amount: decimalToCents(Number(f.amount)),
@@ -147,9 +149,11 @@ export default function RecurringList() {
   function startEdit(item: RecurringItem) {
     const clientId = item.client && typeof item.client === 'object' ? item.client._id : (item.client as string || '');
     const payeeId = item.payee && typeof item.payee === 'object' ? item.payee._id : (item.payee as string || '');
+    const entityId = item.entity && typeof item.entity === 'object' ? item.entity._id : (item.entity as string || '');
     setEditId(item._id);
     setEditForm({
       name: item.name,
+      entity: entityId,
       type: item.type,
       category: item.category,
       amount: String(centsToDecimal(item.amount)),
@@ -180,11 +184,13 @@ export default function RecurringList() {
   }
 
   async function toggleActive(item: RecurringItem) {
+    const entityId = item.entity && typeof item.entity === 'object' ? item.entity._id : (item.entity as string || '');
     await updateItem.mutateAsync({
       id: item._id,
       data: {
         ...buildPayload({
           name: item.name,
+          entity: entityId,
           type: item.type,
           category: item.category,
           amount: String(centsToDecimal(item.amount)),
@@ -215,10 +221,19 @@ export default function RecurringList() {
 
   function renderForm(f: FormState, setF: (v: FormState) => void, onSubmit: (e: FormEvent) => void, submitLabel: string, onCancel: () => void, isPending: boolean) {
     const isIncome = f.type === 'income' || tab === 'income';
+    const selectedEntity = entities?.find((e) => e._id === f.entity);
+    const entityBankAccounts = selectedEntity?.bankAccounts || [];
     return (
       <form onSubmit={onSubmit} className="space-y-3">
         {error && <div className="bg-red-50 text-red-600 text-sm p-2 rounded">{error}</div>}
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-5 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Entity *</label>
+            <select value={f.entity} onChange={(e) => setF({ ...f, entity: e.target.value, bankAccountInfo: '' })} required className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm">
+              <option value="">Select entity...</option>
+              {entities?.filter((e) => e.active).map((e) => <option key={e._id} value={e._id}>{e.code} — {e.name}</option>)}
+            </select>
+          </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Name *</label>
             <input type="text" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
@@ -295,8 +310,15 @@ export default function RecurringList() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Bank Account Info</label>
-                <input type="text" value={f.bankAccountInfo} onChange={(e) => setF({ ...f, bankAccountInfo: e.target.value })} placeholder="e.g. HSBC 123-456789-001" className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
+                <label className="block text-xs font-medium text-gray-600 mb-1">Bank Account</label>
+                <select value={f.bankAccountInfo} onChange={(e) => setF({ ...f, bankAccountInfo: e.target.value })} className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm">
+                  <option value="">Select bank account...</option>
+                  {entityBankAccounts.map((ba, idx) => {
+                    const label = [ba.name, ba.bankName, ba.accountNumber].filter(Boolean).join(' — ');
+                    return <option key={idx} value={label}>{label}</option>;
+                  })}
+                </select>
+                {!f.entity && <p className="text-xs text-gray-400 mt-0.5">Select an entity first</p>}
               </div>
             </>
           )}
@@ -355,7 +377,7 @@ export default function RecurringList() {
             {generate.isPending ? 'Generating...' : `Generate${dueCount > 0 ? ` (${dueCount} due)` : ''}`}
           </button>
           <button
-            onClick={() => { setShowForm(true); setForm({ ...emptyForm(), type: tab }); }}
+            onClick={() => { setShowForm(true); setForm({ ...emptyForm(), type: tab, entity: entityFilter }); }}
             className="flex items-center gap-1 bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700"
           >
             <Plus size={16} /> Add

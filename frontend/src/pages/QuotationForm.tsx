@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import SignatureCanvas from 'react-signature-canvas';
-import { useClients, useCreateClient, useQuotation, useCreateQuotation, useUpdateQuotation, useSettings, useEntities, uploadFile } from '../api/hooks';
+import { useClients, useCreateClient, useQuotation, useCreateQuotation, useUpdateQuotation, useSettings, useEntities, useUsers, uploadFile } from '../api/hooks';
 import LineItemEditor from '../components/LineItemEditor';
 import PaymentScheduleEditor from '../components/PaymentScheduleEditor';
 import { formatMoney } from '../utils/money';
@@ -18,6 +18,7 @@ export default function QuotationForm() {
   const { data: existing } = useQuotation(id || '');
   const { data: settings } = useSettings();
   const { data: entities } = useEntities();
+  const { data: users } = useUsers();
   const createQuotation = useCreateQuotation();
   const updateQuotation = useUpdateQuotation();
   const createClient = useCreateClient();
@@ -34,7 +35,8 @@ export default function QuotationForm() {
   const [companyChopUrl, setCompanyChopUrl] = useState('');
   const [signatureUrl, setSignatureUrl] = useState('');
   const [chopSource, setChopSource] = useState<'custom' | 'default'>('default');
-  const [sigSource, setSigSource] = useState<'custom' | 'default'>('default');
+  const [sigSource, setSigSource] = useState<'custom' | 'default' | 'user'>('default');
+  const [selectedSigUser, setSelectedSigUser] = useState('');
   const [validUntil, setValidUntil] = useState('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
@@ -42,8 +44,9 @@ export default function QuotationForm() {
   const [showNewClient, setShowNewClient] = useState(false);
   const [newClientForm, setNewClientForm] = useState({ name: '', email: '', phone: '', address: '' });
 
+  const [formLoaded, setFormLoaded] = useState(false);
   useEffect(() => {
-    if (existing) {
+    if (existing && !formLoaded) {
       setEntity(typeof existing.entity === 'object' ? existing.entity._id : existing.entity);
       setClient(typeof existing.client === 'object' ? existing.client._id : existing.client);
       setTitle(existing.title);
@@ -61,8 +64,21 @@ export default function QuotationForm() {
       }
       setValidUntil(existing.validUntil ? existing.validUntil.slice(0, 10) : '');
       setNotes(existing.notes);
+      setFormLoaded(true);
     }
-  }, [existing]);
+  }, [existing, formLoaded]);
+
+  const [sigResolved, setSigResolved] = useState(false);
+  useEffect(() => {
+    if (!sigResolved && existing?.signatureUrl && users?.length) {
+      const matchingUser = users.find((u) => u.signatureUrl === existing.signatureUrl);
+      if (matchingUser) {
+        setSigSource('user');
+        setSelectedSigUser(matchingUser._id);
+      }
+      setSigResolved(true);
+    }
+  }, [existing, users, sigResolved]);
 
   // Default to settings.defaultEntityId when creating new
   useEffect(() => {
@@ -124,7 +140,7 @@ export default function QuotationForm() {
       termsAndConditions,
       paymentSchedule,
       companyChopUrl: chopSource === 'default' ? '' : companyChopUrl,
-      signatureUrl: sigSource === 'default' ? '' : signatureUrl,
+      signatureUrl: sigSource === 'default' ? '' : sigSource === 'user' ? (users?.find((u) => u._id === selectedSigUser)?.signatureUrl || '') : signatureUrl,
       validUntil: validUntil || undefined,
       notes,
     };
@@ -359,6 +375,34 @@ export default function QuotationForm() {
               )}
               {sigSource === 'default' && !settings?.signatureUrl && (
                 <p className="text-xs text-gray-400 ml-6">No default signature configured in Settings.</p>
+              )}
+              {(users?.filter((u) => u.active && u.signatureUrl) || []).length > 0 && (
+                <>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="sigSource" checked={sigSource === 'user'} onChange={() => setSigSource('user')} className="text-blue-600" />
+                    <span className="text-sm text-gray-600">Use a team member's signature</span>
+                  </label>
+                  {sigSource === 'user' && (
+                    <div className="ml-6 space-y-2">
+                      <select
+                        value={selectedSigUser}
+                        onChange={(e) => setSelectedSigUser(e.target.value)}
+                        className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Select user...</option>
+                        {users?.filter((u) => u.active && u.signatureUrl).map((u) => (
+                          <option key={u._id} value={u._id}>{u.name}</option>
+                        ))}
+                      </select>
+                      {selectedSigUser && (() => {
+                        const u = users?.find((u) => u._id === selectedSigUser);
+                        return u?.signatureUrl ? (
+                          <img src={`${import.meta.env.VITE_API_URL || ''}${u.signatureUrl}`} alt="Signature" className="w-40 h-16 object-contain border rounded" />
+                        ) : null;
+                      })()}
+                    </div>
+                  )}
+                </>
               )}
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="radio" name="sigSource" checked={sigSource === 'custom'} onChange={() => setSigSource('custom')} className="text-blue-600" />

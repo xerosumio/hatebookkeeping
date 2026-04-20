@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useClients, useCreateInvoice, useUpdateInvoice, useInvoice, useEntities, useSettings } from '../api/hooks';
+import SignatureCanvas from 'react-signature-canvas';
+import { useClients, useCreateInvoice, useUpdateInvoice, useInvoice, useEntities, useSettings, useUsers, uploadFile } from '../api/hooks';
 import LineItemEditor from '../components/LineItemEditor';
 import { formatMoney, decimalToCents, centsToDecimal } from '../utils/money';
 import type { LineItem, Client } from '../types';
@@ -18,9 +19,9 @@ const TERM_OPTIONS = [
 ];
 
 
-function computeDueDatePreview(terms: string): string {
+function computeDueDatePreview(terms: string, invoiceDate: string): string {
   if (!terms) return '';
-  const base = new Date();
+  const base = invoiceDate ? new Date(invoiceDate + 'T00:00:00') : new Date();
   if (terms === 'due_on_receipt') return base.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   const m = terms.match(/^(?:net_|custom_)(\d+)$/);
   if (m) {
@@ -40,11 +41,14 @@ export default function InvoiceForm() {
   const { data: existing, isLoading: loadingInvoice } = useInvoice(id || '');
   const { data: entities } = useEntities();
   const { data: settings } = useSettings();
+  const { data: users } = useUsers();
   const createInvoice = useCreateInvoice();
   const updateInvoice = useUpdateInvoice();
+  const sigCanvas = useRef<SignatureCanvas>(null);
 
   const [entity, setEntity] = useState('');
   const [client, setClient] = useState('');
+  const [invoiceDate, setInvoiceDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [lineItems, setLineItems] = useState<LineItem[]>([
     { description: '', quantity: 1, unitPrice: 0, amount: 0 },
   ]);
@@ -53,6 +57,10 @@ export default function InvoiceForm() {
   const [customDays, setCustomDays] = useState(0);
   const [notes, setNotes] = useState('');
   const [bankAccountInfo, setBankAccountInfo] = useState('');
+  const [sigSource, setSigSource] = useState<'default' | 'user' | 'custom'>('default');
+  const [signatureUrl, setSignatureUrl] = useState('');
+  const [selectedSigUser, setSelectedSigUser] = useState('');
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [loaded, setLoaded] = useState(false);
 
@@ -61,6 +69,11 @@ export default function InvoiceForm() {
       setEntity(existing.entity && typeof existing.entity === 'object' ? (existing.entity as any)._id : (existing.entity || ''));
       const clientId = existing.client && typeof existing.client === 'object' ? (existing.client as Client)._id : (existing.client || '');
       setClient(clientId);
+      if (existing.invoiceDate) {
+        setInvoiceDate(new Date(existing.invoiceDate).toISOString().slice(0, 10));
+      } else if (existing.createdAt) {
+        setInvoiceDate(new Date(existing.createdAt).toISOString().slice(0, 10));
+      }
       setLineItems(existing.lineItems);
       setDiscount(centsToDecimal(existing.discount));
       setBankAccountInfo(existing.bankAccountInfo || '');
@@ -74,22 +87,101 @@ export default function InvoiceForm() {
           setPaymentTerms(existing.paymentTerms);
         }
       }
+      if (existing.signatureUrl) {
+        setSignatureUrl(existing.signatureUrl);
+        setSigSource('custom');
+      }
       setLoaded(true);
     }
   }, [isEdit, existing, loaded]);
 
+  // Re-evaluate signature source once users load -- detect if the saved
+  // signatureUrl belongs to a team member so we select the right radio.
+  const [sigResolved, setSigResolved] = useState(false);
+  useEffect(() => {
+    if (!sigResolved && existing?.signatureUrl && users?.length) {
+      const matchingUser = users.find((u) => u.signatureUrl === existing.signatureUrl);
+      if (matchingUser) {
+        setSigSource('user');
+        setSelectedSigUser(matchingUser._id);
+      }
+      setSigResolved(true);
+    }
+  }, [existing, users, sigResolved]);
+
+  function getDefaultBankAccountInfo(entityId: string): string {
+    const ent = entities?.find((e) => e._id === entityId);
+    if (!ent?.bankAccounts?.length) return '';
+    const idx = ent.defaultBankAccountIndex || 0;
+    const ba = ent.bankAccounts[idx] || ent.bankAccounts[0];
+    if (!ba) return '';
+    const lines: string[] = ['Bank Details Account information:'];
+    if (ba.name) lines.push(`Account name: ${ba.name}`);
+    if (ba.accountNumber) lines.push(`Bank account number: ${ba.accountNumber}`);
+    if (ba.bankCode) lines.push(`Bank code: ${ba.bankCode}`);
+    if (ba.branchCode) lines.push(`Branch code: ${ba.branchCode}`);
+    if (ba.swiftCode) lines.push(`SWIFT code: ${ba.swiftCode}`);
+    if (ba.bankName) lines.push(`Bank name: ${ba.bankName}`);
+    if (ba.location) lines.push(`Location: ${ba.location}`);
+    return lines.join('\n');
+  }
+
   useEffect(() => {
     if (!isEdit && !entity && settings?.defaultEntityId) {
       setEntity(settings.defaultEntityId);
+      if (!bankAccountInfo) {
+        setBankAccountInfo(getDefaultBankAccountInfo(settings.defaultEntityId));
+      }
     }
-  }, [isEdit, entity, settings]);
+  }, [isEdit, entity, settings, entities]);
 
   const subtotal = lineItems.reduce((sum, item) => sum + item.amount, 0);
   const discountCents = decimalToCents(discount);
   const total = subtotal - discountCents;
 
   const effectiveTerms = paymentTerms === 'custom' && customDays > 0 ? `custom_${customDays}` : paymentTerms === 'custom' ? '' : paymentTerms;
-  const dueDatePreview = useMemo(() => computeDueDatePreview(effectiveTerms), [effectiveTerms]);
+  const dueDatePreview = useMemo(() => computeDueDatePreview(effectiveTerms, invoiceDate), [effectiveTerms, invoiceDate]);
+
+  const usersWithSig = useMemo(() => users?.filter((u) => u.active && u.signatureUrl) || [], [users]);
+
+  function getEffectiveSignatureUrl() {
+    if (sigSource === 'default') return '';
+    if (sigSource === 'user') {
+      const u = users?.find((u) => u._id === selectedSigUser);
+      return u?.signatureUrl || '';
+    }
+    return signatureUrl;
+  }
+
+  async function handleSigUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const path = await uploadFile(file);
+      setSignatureUrl(path);
+    } catch {
+      setError('Signature upload failed');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function saveSignature() {
+    if (!sigCanvas.current || sigCanvas.current.isEmpty()) return;
+    const dataUrl = sigCanvas.current.toDataURL('image/png');
+    const blob = await (await fetch(dataUrl)).blob();
+    const file = new File([blob], 'signature.png', { type: 'image/png' });
+    setUploading(true);
+    try {
+      const path = await uploadFile(file);
+      setSignatureUrl(path);
+    } catch {
+      setError('Signature upload failed');
+    } finally {
+      setUploading(false);
+    }
+  }
 
   const isPending = createInvoice.isPending || updateInvoice.isPending;
 
@@ -99,6 +191,7 @@ export default function InvoiceForm() {
     const payload = {
       entity,
       client,
+      invoiceDate,
       lineItems,
       subtotal,
       discount: discountCents,
@@ -106,6 +199,7 @@ export default function InvoiceForm() {
       paymentTerms: effectiveTerms,
       notes,
       bankAccountInfo,
+      signatureUrl: getEffectiveSignatureUrl(),
     };
     try {
       if (isEdit) {
@@ -131,7 +225,7 @@ export default function InvoiceForm() {
           <label className="block text-sm font-medium text-gray-700 mb-1">Issuing Entity *</label>
           <select
             value={entity}
-            onChange={(e) => setEntity(e.target.value)}
+            onChange={(e) => { setEntity(e.target.value); setBankAccountInfo(getDefaultBankAccountInfo(e.target.value)); }}
             required
             className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
@@ -144,7 +238,7 @@ export default function InvoiceForm() {
           </select>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Client *</label>
             <select
@@ -158,6 +252,16 @@ export default function InvoiceForm() {
                 <option key={c._id} value={c._id}>{c.name}</option>
               ))}
             </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Date *</label>
+            <input
+              type="date"
+              value={invoiceDate}
+              onChange={(e) => setInvoiceDate(e.target.value)}
+              required
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Payment Terms</label>
@@ -212,15 +316,47 @@ export default function InvoiceForm() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Bank Account Info</label>
-          <textarea
-            value={bankAccountInfo}
-            onChange={(e) => setBankAccountInfo(e.target.value)}
-            rows={3}
-            placeholder="Leave blank to use company default from Settings"
-            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <p className="text-xs text-gray-400 mt-1">Bank name, account number, SWIFT, etc. Leave blank to use company default.</p>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Bank Account</label>
+          {(() => {
+            const selEntity = entities?.find((e) => e._id === entity);
+            const bankAccounts = selEntity?.bankAccounts || [];
+            return bankAccounts.length > 0 ? (
+              <>
+                <select
+                  value={bankAccountInfo}
+                  onChange={(e) => setBankAccountInfo(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Use entity default</option>
+                  {bankAccounts.map((ba, idx) => {
+                    const lines: string[] = ['Bank Details Account information:'];
+                    if (ba.name) lines.push(`Account name: ${ba.name}`);
+                    if (ba.accountNumber) lines.push(`Bank account number: ${ba.accountNumber}`);
+                    if (ba.bankCode) lines.push(`Bank code: ${ba.bankCode}`);
+                    if (ba.branchCode) lines.push(`Branch code: ${ba.branchCode}`);
+                    if (ba.swiftCode) lines.push(`SWIFT code: ${ba.swiftCode}`);
+                    if (ba.bankName) lines.push(`Bank name: ${ba.bankName}`);
+                    if (ba.location) lines.push(`Location: ${ba.location}`);
+                    const value = lines.join('\n');
+                    const label = [ba.name, ba.bankName, ba.accountNumber].filter(Boolean).join(' — ');
+                    return <option key={idx} value={value}>{label}</option>;
+                  })}
+                </select>
+                <p className="text-xs text-gray-400 mt-1">Leave blank to use entity default.</p>
+              </>
+            ) : (
+              <>
+                <textarea
+                  value={bankAccountInfo}
+                  onChange={(e) => setBankAccountInfo(e.target.value)}
+                  rows={3}
+                  placeholder="Leave blank to use company default from Settings"
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-400 mt-1">Bank name, account number, SWIFT, etc. Leave blank to use company default.</p>
+              </>
+            );
+          })()}
         </div>
 
         <div>
@@ -231,6 +367,84 @@ export default function InvoiceForm() {
             rows={3}
             className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
+        </div>
+
+        {/* Signature */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Signature</label>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="sigSource" checked={sigSource === 'default'} onChange={() => setSigSource('default')} className="text-blue-600" />
+              <span className="text-sm text-gray-600">Use entity default</span>
+            </label>
+
+            {usersWithSig.length > 0 && (
+              <>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="sigSource" checked={sigSource === 'user'} onChange={() => setSigSource('user')} className="text-blue-600" />
+                  <span className="text-sm text-gray-600">Use a team member's signature</span>
+                </label>
+                {sigSource === 'user' && (
+                  <div className="ml-6 space-y-2">
+                    <select
+                      value={selectedSigUser}
+                      onChange={(e) => setSelectedSigUser(e.target.value)}
+                      className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select user...</option>
+                      {usersWithSig.map((u) => (
+                        <option key={u._id} value={u._id}>{u.name}</option>
+                      ))}
+                    </select>
+                    {selectedSigUser && (() => {
+                      const u = users?.find((u) => u._id === selectedSigUser);
+                      return u?.signatureUrl ? (
+                        <img src={`${import.meta.env.VITE_API_URL || ''}${u.signatureUrl}`} alt="Signature" className="w-40 h-16 object-contain border rounded" />
+                      ) : null;
+                    })()}
+                  </div>
+                )}
+              </>
+            )}
+
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="sigSource" checked={sigSource === 'custom'} onChange={() => setSigSource('custom')} className="text-blue-600" />
+              <span className="text-sm text-gray-600">Draw / upload custom</span>
+            </label>
+            {sigSource === 'custom' && (
+              <div className="ml-6">
+                {signatureUrl ? (
+                  <div>
+                    <img src={`${import.meta.env.VITE_API_URL || ''}${signatureUrl}`} alt="Signature" className="w-64 h-24 object-contain border rounded mb-2" />
+                    <button type="button" onClick={() => setSignatureUrl('')} className="text-sm text-red-600 hover:underline">Clear</button>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="border border-gray-300 rounded mb-2" style={{ width: '100%', height: 200 }}>
+                      <SignatureCanvas
+                        ref={sigCanvas}
+                        penColor="black"
+                        minWidth={1}
+                        maxWidth={3}
+                        velocityFilterWeight={0.7}
+                        canvasProps={{ style: { width: '100%', height: '100%' } }}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={saveSignature} disabled={uploading} className="text-sm text-blue-600 hover:underline">
+                        {uploading ? 'Saving...' : 'Save Signature'}
+                      </button>
+                      <button type="button" onClick={() => sigCanvas.current?.clear()} className="text-sm text-gray-500 hover:underline">Clear Pad</button>
+                    </div>
+                    <div className="mt-2">
+                      <span className="text-sm text-gray-500 mr-2">Or upload:</span>
+                      <input type="file" accept="image/*" onChange={handleSigUpload} disabled={uploading} className="text-sm" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex gap-3 pt-4 border-t border-gray-200">

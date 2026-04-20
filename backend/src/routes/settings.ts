@@ -18,6 +18,10 @@ const updateSchema = z.object({
     name: z.string().min(1),
     bankName: z.string().optional().default(''),
     accountNumber: z.string().optional().default(''),
+    bankCode: z.string().optional().default(''),
+    branchCode: z.string().optional().default(''),
+    swiftCode: z.string().optional().default(''),
+    location: z.string().optional().default(''),
   })).optional(),
   chartOfAccounts: z.array(z.object({
     code: z.string().min(1),

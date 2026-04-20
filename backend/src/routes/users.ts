@@ -18,6 +18,7 @@ const updateUserSchema = z.object({
   bankName: z.string().optional(),
   bankAccountNumber: z.string().optional(),
   fpsPhone: z.string().optional(),
+  signatureUrl: z.string().optional(),
 });
 
 // Any authenticated user can list users (needed for recipient picker)
@@ -48,6 +49,7 @@ router.put('/:id', roleGuard('admin'), async (req: AuthRequest, res, next) => {
     if (data.bankName !== undefined) user.bankName = data.bankName;
     if (data.bankAccountNumber !== undefined) user.bankAccountNumber = data.bankAccountNumber;
     if (data.fpsPhone !== undefined) user.fpsPhone = data.fpsPhone;
+    if (data.signatureUrl !== undefined) user.signatureUrl = data.signatureUrl;
     if (data.password) {
       user.passwordHash = await bcrypt.hash(data.password, 12);
     }

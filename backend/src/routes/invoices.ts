@@ -36,6 +36,7 @@ const invoiceSchema = z.object({
   discount: z.number().int().optional().default(0),
   total: z.number().int(),
   milestone: z.string().optional().default(''),
+  invoiceDate: z.string().optional(),
   paymentTerms: z.string().optional().default(''),
   dueDate: z.string().optional(),
   notes: z.string().optional().default(''),
@@ -83,10 +84,12 @@ router.post('/', async (req: AuthRequest, res, next) => {
     const entity = await Entity.findById(data.entity);
     if (!entity) throw new AppError(400, 'Entity not found');
     const invoiceNumber = await getNextSequence('inv', entity.code);
-    const dueDate = data.dueDate || computeDueDate(data.paymentTerms);
+    const invoiceDate = data.invoiceDate ? new Date(data.invoiceDate) : new Date();
+    const dueDate = data.dueDate || computeDueDate(data.paymentTerms, invoiceDate);
     const invoice = await Invoice.create({
       ...data,
       invoiceNumber,
+      invoiceDate,
       dueDate,
       amountDue: data.total,
       createdBy: req.user!._id,
@@ -113,10 +116,13 @@ router.get('/:id', async (req, res, next) => {
 router.put('/:id', async (req, res, next) => {
   try {
     const data = invoiceSchema.parse(req.body);
-    const dueDate = data.dueDate || computeDueDate(data.paymentTerms);
+    const invoiceDate = data.invoiceDate ? new Date(data.invoiceDate) : undefined;
+    const dueDate = data.dueDate || computeDueDate(data.paymentTerms, invoiceDate);
+    const update: Record<string, unknown> = { ...data, dueDate, amountDue: data.total };
+    if (invoiceDate) update.invoiceDate = invoiceDate;
     const invoice = await Invoice.findByIdAndUpdate(
       req.params.id,
-      { ...data, dueDate, amountDue: data.total },
+      update,
       { new: true },
     );
     if (!invoice) throw new AppError(404, 'Invoice not found');

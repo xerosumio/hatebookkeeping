@@ -20,6 +20,7 @@ export interface IInvoice extends Document {
   amountPaid: number;
   amountDue: number;
   milestone: string;
+  invoiceDate: Date;
   paymentTerms: string;
   dueDate?: Date;
   notes: string;
@@ -59,6 +60,7 @@ const invoiceSchema = new Schema<IInvoice>(
     amountPaid: { type: Number, default: 0 },
     amountDue: { type: Number, required: true },
     milestone: { type: String, default: '' },
+    invoiceDate: { type: Date, default: Date.now },
     paymentTerms: { type: String, default: '' },
     dueDate: { type: Date },
     notes: { type: String, default: '' },

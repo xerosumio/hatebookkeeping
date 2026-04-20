@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { useUsers, useCreateUser, useUpdateUser, useDeactivateUser } from '../api/hooks';
+import { useState, useRef } from 'react';
+import SignatureCanvas from 'react-signature-canvas';
+import { useUsers, useCreateUser, useUpdateUser, useDeactivateUser, uploadFile } from '../api/hooks';
 import { useAuth } from '../contexts/AuthContext';
 import { UserPlus, Pencil, X, Check, Ban, KeyRound } from 'lucide-react';
 
@@ -11,6 +12,7 @@ interface EditFormState {
   bankName: string;
   bankAccountNumber: string;
   fpsPhone: string;
+  signatureUrl: string;
 }
 
 export default function UserList() {
@@ -23,8 +25,26 @@ export default function UserList() {
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'user', bankName: '', bankAccountNumber: '', fpsPhone: '' });
   const [editId, setEditId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<EditFormState>({ name: '', email: '', role: '', password: '', bankName: '', bankAccountNumber: '', fpsPhone: '' });
+  const [editForm, setEditForm] = useState<EditFormState>({ name: '', email: '', role: '', password: '', bankName: '', bankAccountNumber: '', fpsPhone: '', signatureUrl: '' });
   const [editError, setEditError] = useState('');
+  const [sigUploading, setSigUploading] = useState(false);
+  const sigCanvas = useRef<SignatureCanvas>(null);
+
+  async function saveDrawnSignature() {
+    if (!sigCanvas.current || sigCanvas.current.isEmpty()) return;
+    const dataUrl = sigCanvas.current.toDataURL('image/png');
+    const blob = await (await fetch(dataUrl)).blob();
+    const file = new File([blob], 'signature.png', { type: 'image/png' });
+    setSigUploading(true);
+    try {
+      const path = await uploadFile(file);
+      setEditForm((prev) => ({ ...prev, signatureUrl: path }));
+    } catch {
+      setEditError('Signature upload failed');
+    } finally {
+      setSigUploading(false);
+    }
+  }
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -33,9 +53,9 @@ export default function UserList() {
     setShowAdd(false);
   }
 
-  function startEdit(u: { _id: string; name: string; email: string; role: string; bankName?: string; bankAccountNumber?: string; fpsPhone?: string }) {
+  function startEdit(u: { _id: string; name: string; email: string; role: string; bankName?: string; bankAccountNumber?: string; fpsPhone?: string; signatureUrl?: string }) {
     setEditId(u._id);
-    setEditForm({ name: u.name, email: u.email, role: u.role, password: '', bankName: u.bankName || '', bankAccountNumber: u.bankAccountNumber || '', fpsPhone: u.fpsPhone || '' });
+    setEditForm({ name: u.name, email: u.email, role: u.role, password: '', bankName: u.bankName || '', bankAccountNumber: u.bankAccountNumber || '', fpsPhone: u.fpsPhone || '', signatureUrl: u.signatureUrl || '' });
     setEditError('');
   }
 
@@ -43,7 +63,7 @@ export default function UserList() {
     if (!editId) return;
     setEditError('');
     try {
-      const payload: Record<string, string> = { name: editForm.name, email: editForm.email, role: editForm.role, bankName: editForm.bankName, bankAccountNumber: editForm.bankAccountNumber, fpsPhone: editForm.fpsPhone };
+      const payload: Record<string, string> = { name: editForm.name, email: editForm.email, role: editForm.role, bankName: editForm.bankName, bankAccountNumber: editForm.bankAccountNumber, fpsPhone: editForm.fpsPhone, signatureUrl: editForm.signatureUrl };
       if (editForm.password.trim()) {
         if (editForm.password.length < 8) {
           setEditError('Password must be at least 8 characters');
@@ -248,6 +268,57 @@ export default function UserList() {
                           className="border border-gray-300 rounded px-3 py-2 text-sm w-full"
                         />
                       </div>
+                      <div className="col-span-2">
+                        <label className="block text-xs text-gray-500 mb-1">Signature</label>
+                        {editForm.signatureUrl ? (
+                          <div className="flex items-center gap-3">
+                            <img src={`${import.meta.env.VITE_API_URL || ''}${editForm.signatureUrl}`} alt="Signature" className="h-16 object-contain border rounded" />
+                            <button type="button" onClick={() => setEditForm({ ...editForm, signatureUrl: '' })} className="text-xs text-red-600 hover:underline">Remove</button>
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="border border-gray-300 rounded mb-2" style={{ height: 150 }}>
+                              <SignatureCanvas
+                                ref={sigCanvas}
+                                penColor="black"
+                                minWidth={1}
+                                maxWidth={3}
+                                velocityFilterWeight={0.7}
+                                canvasProps={{ style: { width: '100%', height: '100%' } }}
+                              />
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <button type="button" onClick={saveDrawnSignature} disabled={sigUploading} className="text-sm text-blue-600 hover:underline">
+                                {sigUploading ? 'Saving...' : 'Save Signature'}
+                              </button>
+                              <button type="button" onClick={() => sigCanvas.current?.clear()} className="text-sm text-gray-500 hover:underline">Clear Pad</button>
+                              <span className="text-xs text-gray-400">or</span>
+                              <label className="text-sm text-blue-600 hover:underline cursor-pointer">
+                                Upload image
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  disabled={sigUploading}
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    setSigUploading(true);
+                                    try {
+                                      const path = await uploadFile(file);
+                                      setEditForm((prev) => ({ ...prev, signatureUrl: path }));
+                                    } catch {
+                                      setEditError('Signature upload failed');
+                                    } finally {
+                                      setSigUploading(false);
+                                    }
+                                  }}
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                     {editError && <p className="text-sm text-red-600">{editError}</p>}
                     <div className="flex gap-2">
@@ -265,7 +336,7 @@ export default function UserList() {
                   </div>
                 ) : (
                   <div className="flex items-center px-5 py-3.5">
-                    <div className="flex-1 min-w-0 grid grid-cols-5 gap-4 items-center">
+                    <div className="flex-1 min-w-0 grid grid-cols-6 gap-4 items-center">
                       <div>
                         <p className="font-medium text-sm">{u.name}</p>
                       </div>
@@ -281,6 +352,13 @@ export default function UserList() {
                           </div>
                         ) : (
                           <p className="text-xs text-gray-300">No payment info</p>
+                        )}
+                      </div>
+                      <div>
+                        {u.signatureUrl ? (
+                          <img src={`${import.meta.env.VITE_API_URL || ''}${u.signatureUrl}`} alt="Signature" className="h-8 max-w-[80px] object-contain" />
+                        ) : (
+                          <p className="text-xs text-gray-300">No signature</p>
                         )}
                       </div>
                       <div>

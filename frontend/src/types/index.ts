@@ -52,6 +52,7 @@ export interface Entity {
   website: string;
   logoUrl: string;
   bankAccounts: BankAccount[];
+  defaultBankAccountIndex: number;
   brandColor: string;
   companyChopUrl: string;
   signatureUrl: string;
@@ -212,6 +213,7 @@ export interface Invoice {
   amountPaid: number;
   amountDue: number;
   milestone: string;
+  invoiceDate: string;
   paymentTerms: string;
   dueDate: string;
   notes: string;
@@ -315,6 +317,10 @@ export interface BankAccount {
   name: string;
   bankName: string;
   accountNumber: string;
+  bankCode: string;
+  branchCode: string;
+  swiftCode: string;
+  location: string;
 }
 
 export interface ChartOfAccount {

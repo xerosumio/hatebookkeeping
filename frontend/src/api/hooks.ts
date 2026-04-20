@@ -7,7 +7,7 @@ import type {
 } from '../types';
 
 // Users (admin-only)
-interface UserFromApi { _id: string; email: string; name: string; role: string; active: boolean; bankName?: string; bankAccountNumber?: string; fpsPhone?: string; createdAt: string }
+interface UserFromApi { _id: string; email: string; name: string; role: string; active: boolean; bankName?: string; bankAccountNumber?: string; fpsPhone?: string; signatureUrl?: string; createdAt: string }
 export function useUsers() {
   return useQuery({
     queryKey: ['users'],
@@ -27,7 +27,7 @@ export function useCreateUser() {
 export function useUpdateUser() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { name?: string; email?: string; role?: string; active?: boolean; password?: string; bankName?: string; bankAccountNumber?: string; fpsPhone?: string } }) =>
+    mutationFn: ({ id, data }: { id: string; data: { name?: string; email?: string; role?: string; active?: boolean; password?: string; bankName?: string; bankAccountNumber?: string; fpsPhone?: string; signatureUrl?: string } }) =>
       api.put(`/users/${id}`, data).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
   });
