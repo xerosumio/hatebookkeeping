@@ -1,3 +1,9 @@
+export function titleCase(str: string): string {
+  return str
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export function formatMoney(cents: number): string {
   return `HK$ ${(cents / 100).toLocaleString('en-HK', {
     minimumFractionDigits: 2,

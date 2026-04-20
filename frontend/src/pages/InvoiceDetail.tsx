@@ -107,9 +107,9 @@ export default function InvoiceDetail() {
             onChange={(e) => updateStatus.mutate({ id: inv._id, data: { status: e.target.value } })}
             className={`px-3 py-1 rounded text-sm font-medium border-0 cursor-pointer ${statusColors[inv.status]}`}
           >
-            <option value="unpaid">unpaid</option>
-            <option value="partial">partial</option>
-            <option value="paid">paid</option>
+            <option value="unpaid">Unpaid</option>
+            <option value="partial">Partial</option>
+            <option value="paid">Paid</option>
           </select>
           {inv.status !== 'paid' && (
             <Link
@@ -138,19 +138,19 @@ export default function InvoiceDetail() {
             <table className="w-full text-sm">
               <thead className="border-b border-gray-200">
                 <tr>
-                  <th className="text-left py-2 font-medium text-gray-600">Description</th>
-                  <th className="text-right py-2 font-medium text-gray-600 w-20">Qty</th>
-                  <th className="text-right py-2 font-medium text-gray-600 w-32">Unit Price</th>
-                  <th className="text-right py-2 font-medium text-gray-600 w-32">Amount</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Description</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-600 w-20">Qty</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-600 w-32">Unit Price</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-600 w-32">Amount</th>
                 </tr>
               </thead>
               <tbody>
                 {inv.lineItems.map((item, i) => (
                   <tr key={i} className="border-b border-gray-100">
-                    <td className="py-2">{item.description}</td>
-                    <td className="py-2 text-right">{item.quantity}</td>
-                    <td className="py-2 text-right tabular-nums">{formatMoney(item.unitPrice)}</td>
-                    <td className="py-2 text-right tabular-nums">{formatMoney(item.amount)}</td>
+                    <td className="px-4 py-3">{item.description}</td>
+                    <td className="px-4 py-3 text-right">{item.quantity}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{formatMoney(item.unitPrice)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{formatMoney(item.amount)}</td>
                   </tr>
                 ))}
               </tbody>

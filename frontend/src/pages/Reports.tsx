@@ -5,7 +5,7 @@ import {
   useCashFlow, useAccountsReceivable, useAccountsPayable, useEntities,
   useBalanceSheet, useMonthlySummary,
 } from '../api/hooks';
-import { formatMoney } from '../utils/money';
+import { formatMoney, titleCase } from '../utils/money';
 import { ChevronRight, ChevronDown } from 'lucide-react';
 import type { IncomeStatementLine, CashFlowMonth, ARInvoice, APPaymentRequest, APCategoryBreakdown, Transaction, Entity } from '../types';
 
@@ -386,7 +386,7 @@ function AccountsReceivableTab({ entity }: { entity: string }) {
                           <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                             inv.status === 'partial' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
                           }`}>
-                            {inv.status}
+                            {titleCase(inv.status)}
                           </span>
                         </td>
                       </tr>
@@ -523,7 +523,7 @@ function AccountsPayableTab({ entity }: { entity: string }) {
                               ? 'bg-blue-100 text-blue-700'
                               : 'bg-amber-100 text-amber-700'
                           }`}>
-                            {req.status}
+                            {titleCase(req.status)}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-gray-500 text-xs">

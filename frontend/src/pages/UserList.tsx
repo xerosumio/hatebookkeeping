@@ -287,7 +287,7 @@ export default function UserList() {
                         <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                           u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'
                         }`}>
-                          {u.role}
+                          {u.role === 'admin' ? 'Admin' : 'User'}
                         </span>
                       </div>
                       <div>

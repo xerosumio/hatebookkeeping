@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTransactions, useDeleteTransaction, useEntities } from '../api/hooks';
-import { formatMoney } from '../utils/money';
+import { formatMoney, titleCase } from '../utils/money';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import TransactionForm from './TransactionForm';
 import { PendingBanner } from '../components/PendingBankTransactions';
@@ -79,7 +79,7 @@ export default function TransactionList() {
                 typeFilter === t ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
-              {t || 'All'}
+              {t ? titleCase(t) : 'All'}
             </button>
           ))}
         </div>
@@ -124,7 +124,7 @@ export default function TransactionList() {
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                       t.type === 'income' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                     }`}>
-                      {t.type}
+                      {titleCase(t.type)}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-gray-500 text-xs">

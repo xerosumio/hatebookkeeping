@@ -184,23 +184,23 @@ export default function Endpoint() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="text-left px-4 py-2 font-medium text-gray-600">Name</th>
-                <th className="text-left px-4 py-2 font-medium text-gray-600">Token</th>
-                <th className="text-left px-4 py-2 font-medium text-gray-600">Created</th>
-                <th className="text-left px-4 py-2 font-medium text-gray-600">Last Used</th>
-                <th className="w-10 px-4 py-2"></th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Name</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Token</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Created</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Last Used</th>
+                <th className="w-10 px-4 py-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {tokens.map((t: TokenInfo) => (
                 <tr key={t._id} className="hover:bg-gray-50">
-                  <td className="px-4 py-2.5 font-medium">{t.name}</td>
-                  <td className="px-4 py-2.5 font-mono text-xs text-gray-500">{t.tokenPreview}</td>
-                  <td className="px-4 py-2.5 text-gray-500">{new Date(t.createdAt).toLocaleDateString()}</td>
-                  <td className="px-4 py-2.5 text-gray-500">
+                  <td className="px-4 py-3 font-medium">{t.name}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-gray-500">{t.tokenPreview}</td>
+                  <td className="px-4 py-3 text-gray-500">{new Date(t.createdAt).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-gray-500">
                     {t.lastUsedAt ? new Date(t.lastUsedAt).toLocaleDateString() : 'Never'}
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-3">
                     <button
                       onClick={() => handleRevoke(t._id, t.name)}
                       className="text-gray-400 hover:text-red-600 p-1"

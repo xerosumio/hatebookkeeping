@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useReimbursements, useDeleteReimbursement } from '../api/hooks';
-import { formatMoney } from '../utils/money';
+import { formatMoney, titleCase } from '../utils/money';
 import { Plus, Trash2, Eye } from 'lucide-react';
 import type { Reimbursement, PaymentRequest } from '../types';
 
@@ -75,7 +75,7 @@ export default function ReimbursementList() {
                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[status] || 'bg-gray-100 text-gray-700'}`}>
-                        {status}
+                        {titleCase(status)}
                       </span>
                     </td>
                     <td className="px-4 py-3">

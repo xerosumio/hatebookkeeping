@@ -4,7 +4,7 @@ import {
   useShareholders, useInvestShareholder, useShareTransfer,
   useShareholderLiabilities, useCreateShareholderLiability, useUpdateShareholderLiability, useDeleteShareholderLiability,
 } from '../api/hooks';
-import { formatMoney } from '../utils/money';
+import { formatMoney, titleCase } from '../utils/money';
 import { Pencil, Trash2 } from 'lucide-react';
 import type { ShareLiabilityEntry } from '../types';
 
@@ -454,7 +454,7 @@ function LiabilityHistoryModal({
                     <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
                       e.type === 'purchase' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'
                     }`}>
-                      {e.type}
+                      {titleCase(e.type)}
                     </span>
                   </td>
                   <td className="px-3 py-2 text-gray-600">{e.description}</td>

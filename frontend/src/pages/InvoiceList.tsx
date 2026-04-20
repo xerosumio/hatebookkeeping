@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useInvoices, useEntities, useUpdateInvoiceStatus } from '../api/hooks';
-import { formatMoney } from '../utils/money';
+import { formatMoney, titleCase } from '../utils/money';
 import { Plus } from 'lucide-react';
 import type { Client, Entity } from '../types';
 
@@ -49,7 +49,7 @@ export default function InvoiceList() {
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
-              {s || 'All'}
+              {s ? titleCase(s) : 'All'}
             </button>
           ))}
         </div>
@@ -112,11 +112,11 @@ export default function InvoiceList() {
                       className={`appearance-none px-2 py-0.5 pr-5 rounded text-xs font-medium border-0 cursor-pointer bg-[length:12px_12px] bg-[right_4px_center] bg-no-repeat ${statusColors[inv.status] || 'bg-gray-100 text-gray-700'}`}
                       style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")` }}
                     >
-                      <option value="draft">draft</option>
-                      <option value="sent">sent</option>
-                      <option value="unpaid">unpaid</option>
-                      <option value="partial">partial</option>
-                      <option value="paid">paid</option>
+                      <option value="draft">Draft</option>
+                      <option value="sent">Sent</option>
+                      <option value="unpaid">Unpaid</option>
+                      <option value="partial">Partial</option>
+                      <option value="paid">Paid</option>
                     </select>
                   </td>
                   <td className="px-4 py-3 text-gray-500">

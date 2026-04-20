@@ -15,7 +15,12 @@ const statusColors: Record<string, string> = {
 };
 
 const statusLabels: Record<string, string> = {
+  draft: 'Draft',
   pending_approval: 'Pending Approval',
+  approved: 'Approved',
+  sent: 'Sent',
+  accepted: 'Accepted',
+  rejected: 'Rejected',
 };
 
 export default function QuotationList() {

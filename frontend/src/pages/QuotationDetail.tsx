@@ -6,7 +6,7 @@ import {
   useInvoices, fetchPdfBlob,
 } from '../api/hooks';
 import { useAuth } from '../contexts/AuthContext';
-import { formatMoney } from '../utils/money';
+import { formatMoney, titleCase } from '../utils/money';
 import { FileText, Calendar, ArrowLeft, Plus, Pencil, CheckCircle, XCircle, Send, Clock, Mail } from 'lucide-react';
 import PdfInlinePreview from '../components/PdfPreviewModal';
 import type { Client, QuotationActivityLog, Invoice } from '../types';
@@ -21,7 +21,12 @@ const statusColors: Record<string, string> = {
 };
 
 const statusLabels: Record<string, string> = {
+  draft: 'Draft',
   pending_approval: 'Pending Approval',
+  approved: 'Approved',
+  sent: 'Sent',
+  accepted: 'Accepted',
+  rejected: 'Rejected',
 };
 
 const actionConfig: Record<string, { label: string; icon: typeof Plus; color: string }> = {
@@ -267,19 +272,19 @@ export default function QuotationDetail() {
               <table className="w-full text-sm">
                 <thead className="border-b border-gray-200">
                   <tr>
-                    <th className="text-left py-2 font-medium text-gray-600">Description</th>
-                    <th className="text-right py-2 font-medium text-gray-600 w-20">Qty</th>
-                    <th className="text-right py-2 font-medium text-gray-600 w-32">Unit Price</th>
-                    <th className="text-right py-2 font-medium text-gray-600 w-32">Amount</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Description</th>
+                    <th className="text-right px-4 py-3 font-medium text-gray-600 w-20">Qty</th>
+                    <th className="text-right px-4 py-3 font-medium text-gray-600 w-32">Unit Price</th>
+                    <th className="text-right px-4 py-3 font-medium text-gray-600 w-32">Amount</th>
                   </tr>
                 </thead>
                 <tbody>
                   {q.lineItems.map((item, i) => (
                     <tr key={i} className="border-b border-gray-100">
-                      <td className="py-2">{item.description}</td>
-                      <td className="py-2 text-right">{item.quantity}</td>
-                      <td className={`py-2 text-right tabular-nums ${item.waived ? 'line-through text-gray-400' : ''}`}>{formatMoney(item.unitPrice)}</td>
-                      <td className={`py-2 text-right tabular-nums ${item.waived ? 'text-green-600 font-medium' : ''}`}>
+                      <td className="px-4 py-3">{item.description}</td>
+                      <td className="px-4 py-3 text-right">{item.quantity}</td>
+                      <td className={`px-4 py-3 text-right tabular-nums ${item.waived ? 'line-through text-gray-400' : ''}`}>{formatMoney(item.unitPrice)}</td>
+                      <td className={`px-4 py-3 text-right tabular-nums ${item.waived ? 'text-green-600 font-medium' : ''}`}>
                         {item.waived ? 'WAIVED' : formatMoney(item.amount)}
                       </td>
                     </tr>
@@ -300,19 +305,19 @@ export default function QuotationDetail() {
                 <table className="w-full text-sm">
                   <thead className="border-b border-gray-200">
                     <tr>
-                      <th className="text-left py-2 font-medium text-gray-600">Milestone</th>
-                      <th className="text-right py-2 font-medium text-gray-600 w-16">%</th>
-                      <th className="text-right py-2 font-medium text-gray-600 w-32">Amount</th>
-                      <th className="text-left py-2 font-medium text-gray-600 pl-4">Due</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-600">Milestone</th>
+                      <th className="text-right px-4 py-3 font-medium text-gray-600 w-16">%</th>
+                      <th className="text-right px-4 py-3 font-medium text-gray-600 w-32">Amount</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-600">Due</th>
                     </tr>
                   </thead>
                   <tbody>
                     {q.paymentSchedule.map((m, i) => (
                       <tr key={i} className="border-b border-gray-100">
-                        <td className="py-2">{m.milestone}</td>
-                        <td className="py-2 text-right">{m.percentage}%</td>
-                        <td className="py-2 text-right tabular-nums">{formatMoney(m.amount)}</td>
-                        <td className="py-2 text-gray-600 pl-4">{m.dueDescription}</td>
+                        <td className="px-4 py-3">{m.milestone}</td>
+                        <td className="px-4 py-3 text-right">{m.percentage}%</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{formatMoney(m.amount)}</td>
+                        <td className="px-4 py-3 text-gray-600">{m.dueDescription}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -326,31 +331,31 @@ export default function QuotationDetail() {
                 <table className="w-full text-sm">
                   <thead className="border-b border-gray-200">
                     <tr>
-                      <th className="text-left py-2 font-medium text-gray-600">Invoice #</th>
-                      <th className="text-right py-2 font-medium text-gray-600 w-32">Total</th>
-                      <th className="text-right py-2 font-medium text-gray-600 w-32">Paid</th>
-                      <th className="text-right py-2 font-medium text-gray-600 w-32">Due</th>
-                      <th className="text-center py-2 font-medium text-gray-600 w-24">Status</th>
+                      <th className="text-left px-4 py-3 font-medium text-gray-600">Invoice #</th>
+                      <th className="text-right px-4 py-3 font-medium text-gray-600 w-32">Total</th>
+                      <th className="text-right px-4 py-3 font-medium text-gray-600 w-32">Paid</th>
+                      <th className="text-right px-4 py-3 font-medium text-gray-600 w-32">Due</th>
+                      <th className="text-center px-4 py-3 font-medium text-gray-600 w-24">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {linkedInvoices.map((inv: Invoice) => (
                       <tr key={inv._id} className="border-b border-gray-100">
-                        <td className="py-2">
+                        <td className="px-4 py-3">
                           <Link to={`/invoices/${inv._id}`} className="text-blue-600 hover:underline">
                             {inv.invoiceNumber}
                           </Link>
                         </td>
-                        <td className="py-2 text-right tabular-nums">{formatMoney(inv.total)}</td>
-                        <td className="py-2 text-right tabular-nums">{formatMoney(inv.amountPaid)}</td>
-                        <td className="py-2 text-right tabular-nums">{formatMoney(inv.amountDue)}</td>
-                        <td className="py-2 text-center">
+                        <td className="px-4 py-3 text-right tabular-nums">{formatMoney(inv.total)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{formatMoney(inv.amountPaid)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{formatMoney(inv.amountDue)}</td>
+                        <td className="px-4 py-3 text-center">
                           <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                             inv.status === 'paid' ? 'bg-green-100 text-green-700' :
                             inv.status === 'partial' ? 'bg-amber-100 text-amber-700' :
                             'bg-gray-100 text-gray-600'
                           }`}>
-                            {inv.status}
+                            {titleCase(inv.status)}
                           </span>
                         </td>
                       </tr>
@@ -487,7 +492,7 @@ export default function QuotationDetail() {
                           <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
                             isAdminUser ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-500'
                           }`}>
-                            {u.role}
+                            {titleCase(u.role)}
                           </span>
                         </div>
                         <p className="text-xs text-gray-500 truncate">{u.email}</p>

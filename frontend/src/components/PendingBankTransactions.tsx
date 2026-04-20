@@ -8,7 +8,7 @@ import {
   useSettings,
   useEntities,
 } from '../api/hooks';
-import { formatMoney } from '../utils/money';
+import { formatMoney, titleCase } from '../utils/money';
 import { Link2, Plus, X, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface PendingItem {
@@ -132,7 +132,7 @@ function CreateForm({ item, onClose }: { item: PendingItem; onClose: () => void 
         <div className="bg-gray-50 rounded p-3 mb-4 text-sm">
           <div className="flex justify-between">
             <span className="text-gray-500">Type</span>
-            <span className={`font-medium ${item.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>{item.type}</span>
+            <span className={`font-medium ${item.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>{titleCase(item.type)}</span>
           </div>
           <div className="flex justify-between mt-1">
             <span className="text-gray-500">Amount</span>
@@ -235,7 +235,7 @@ export default function PendingBankTransactions() {
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                     item.type === 'income' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                   }`}>
-                    {item.type}
+                    {titleCase(item.type)}
                   </span>
                 </td>
                 <td className={`px-4 py-3 text-right font-mono ${item.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>

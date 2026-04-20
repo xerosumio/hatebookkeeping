@@ -10,7 +10,7 @@ import {
   useUsers,
 } from '../api/hooks';
 import { useAuth } from '../contexts/AuthContext';
-import { formatMoney } from '../utils/money';
+import { formatMoney, titleCase } from '../utils/money';
 import { Paperclip, Pencil, Trash2, Plus, CheckCircle, XCircle, Zap, Clock, Send, Mail } from 'lucide-react';
 import type { User, Payee, ActivityLogEntry, Entity } from '../types';
 
@@ -118,7 +118,7 @@ export default function PaymentRequestDetail() {
         </div>
         <div className="flex items-center gap-2">
           <span className={`px-3 py-1 rounded text-sm font-medium ${statusColors[pr.status]}`}>
-            {pr.status}
+            {titleCase(pr.status)}
           </span>
           {canNotify && (
             <button
@@ -358,7 +358,7 @@ export default function PaymentRequestDetail() {
                           <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
                             isAdmin ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-500'
                           }`}>
-                            {u.role}
+                            {titleCase(u.role)}
                           </span>
                         </div>
                         <p className="text-xs text-gray-500 truncate">{u.email}</p>

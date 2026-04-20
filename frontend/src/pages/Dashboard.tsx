@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { useCashFlow, useAccountsReceivable, useRecurringOverview, usePaymentRequests } from '../api/hooks';
 import { useAuth } from '../contexts/AuthContext';
-import { formatMoney, centsToDecimal } from '../utils/money';
+import { formatMoney, centsToDecimal, titleCase } from '../utils/money';
 import type { Client } from '../types';
 
 const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -117,35 +117,35 @@ export default function Dashboard() {
           <table className="w-full text-sm">
             <thead className="border-b border-gray-200">
               <tr>
-                <th className="text-left py-2 font-medium text-gray-600">Number</th>
-                <th className="text-left py-2 font-medium text-gray-600">Description</th>
-                <th className="text-right py-2 font-medium text-gray-600">Total</th>
-                <th className="text-left py-2 font-medium text-gray-600">Status</th>
-                <th className="text-left py-2 font-medium text-gray-600">Action</th>
-                <th className="text-left py-2 font-medium text-gray-600">Date</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Number</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Description</th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">Total</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Action</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Date</th>
               </tr>
             </thead>
             <tbody>
               {actionableItems.map((r) => (
                 <tr key={r._id} className="border-b border-gray-100">
-                  <td className="py-2">
+                  <td className="px-4 py-3">
                     <Link to={`/payment-requests/${r._id}`} className="text-blue-600 hover:underline font-medium">
                       {r.requestNumber}
                     </Link>
                   </td>
-                  <td className="py-2 text-gray-600 max-w-xs truncate">{r.description || '—'}</td>
-                  <td className="py-2 text-right font-mono tabular-nums">{formatMoney(r.totalAmount)}</td>
-                  <td className="py-2">
+                  <td className="px-4 py-3 text-gray-600 max-w-xs truncate">{r.description || '—'}</td>
+                  <td className="px-4 py-3 text-right font-mono tabular-nums">{formatMoney(r.totalAmount)}</td>
+                  <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[r.status] || 'bg-gray-100 text-gray-600'}`}>
-                      {r.status}
+                      {titleCase(r.status)}
                     </span>
                   </td>
-                  <td className="py-2">
+                  <td className="px-4 py-3">
                     <Link to={`/payment-requests/${r._id}`} className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded hover:bg-blue-100">
                       {r.actionType}
                     </Link>
                   </td>
-                  <td className="py-2 text-gray-400 text-xs">{new Date(r.createdAt).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-gray-400 text-xs">{new Date(r.createdAt).toLocaleDateString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -160,28 +160,28 @@ export default function Dashboard() {
           <table className="w-full text-sm">
             <thead className="border-b border-gray-200">
               <tr>
-                <th className="text-left py-2 font-medium text-gray-600">Invoice</th>
-                <th className="text-left py-2 font-medium text-gray-600">Client</th>
-                <th className="text-right py-2 font-medium text-gray-600">Due</th>
-                <th className="text-left py-2 font-medium text-gray-600">Status</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Invoice</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Client</th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">Due</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
               </tr>
             </thead>
             <tbody>
               {ar.invoices.slice(0, 10).map((inv: any) => (
                 <tr key={inv._id} className="border-b border-gray-100">
-                  <td className="py-2">
+                  <td className="px-4 py-3">
                     <Link to={`/invoices/${inv._id}`} className="text-blue-600 hover:underline">
                       {inv.invoiceNumber}
                     </Link>
                   </td>
-                  <td className="py-2 text-gray-600">
+                  <td className="px-4 py-3 text-gray-600">
                     {typeof inv.client === 'object' ? (inv.client as Client).name : ''}
                   </td>
-                  <td className="py-2 text-right font-mono text-red-600">{formatMoney(inv.amountDue)}</td>
-                  <td className="py-2">
+                  <td className="px-4 py-3 text-right font-mono text-red-600">{formatMoney(inv.amountDue)}</td>
+                  <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                       inv.status === 'partial' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
-                    }`}>{inv.status}</span>
+                    }`}>{titleCase(inv.status)}</span>
                   </td>
                 </tr>
               ))}

@@ -129,7 +129,7 @@ export default function AppShell() {
             Sign out
           </button>
           <div className="px-3 py-2 text-xs text-gray-400">
-            {user?.name} ({user?.role})
+            {user?.name} ({user?.role === 'admin' ? 'Admin' : 'User'})
           </div>
         </div>
       </aside>

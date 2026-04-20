@@ -1,11 +1,11 @@
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useReimbursement, useDeleteReimbursement } from '../api/hooks';
-import { formatMoney } from '../utils/money';
+import { formatMoney, titleCase } from '../utils/money';
 import { Pencil, Trash2, ExternalLink } from 'lucide-react';
 import type { PaymentRequest } from '../types';
 
 const statusColors: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-700',
+  pending: 'bg-amber-100 text-amber-700',
   approved: 'bg-blue-100 text-blue-700',
   rejected: 'bg-red-100 text-red-700',
   executed: 'bg-green-100 text-green-700',
@@ -43,7 +43,7 @@ export default function ReimbursementDetail() {
         </div>
         <div className="flex items-center gap-2">
           <span className={`px-3 py-1 rounded text-sm font-medium ${statusColors[prStatus]}`}>
-            {prStatus}
+            {titleCase(prStatus)}
           </span>
           {canEdit && (
             <>
@@ -109,7 +109,7 @@ export default function ReimbursementDetail() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Status</span>
-                <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[pr.status]}`}>{pr.status}</span>
+                <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[pr.status]}`}>{titleCase(pr.status)}</span>
               </div>
               {pr.approvedBy && (
                 <div className="flex justify-between">

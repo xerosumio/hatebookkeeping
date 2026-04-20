@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { usePaymentRequests, useDeletePaymentRequest, useEntities } from '../api/hooks';
 import { useAuth } from '../contexts/AuthContext';
-import { formatMoney } from '../utils/money';
+import { formatMoney, titleCase } from '../utils/money';
 import { Plus, Trash2 } from 'lucide-react';
 import type { User, Entity } from '../types';
 
@@ -53,7 +53,7 @@ export default function PaymentRequestList() {
                 statusFilter === s ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
-              {s || 'All'}
+              {s ? titleCase(s) : 'All'}
             </button>
           ))}
         </div>
@@ -107,7 +107,7 @@ export default function PaymentRequestList() {
                     <td className="px-4 py-3 text-right font-mono tabular-nums">{formatMoney(r.totalAmount)}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[r.status]}`}>
-                        {r.status}
+                        {titleCase(r.status)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-500">{creator?.name || ''}</td>
