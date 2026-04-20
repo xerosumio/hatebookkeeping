@@ -1,33 +1,5 @@
 const API_URL = process.env.BOOKKEEPING_API_URL || 'http://localhost:4000/api';
-const EMAIL = process.env.BOOKKEEPING_EMAIL || '';
-const PASSWORD = process.env.BOOKKEEPING_PASSWORD || '';
-
-let cachedToken: string | null = null;
-let tokenExpiry = 0;
-
-async function authenticate(): Promise<string> {
-  if (cachedToken && Date.now() < tokenExpiry) return cachedToken;
-
-  if (!EMAIL || !PASSWORD) {
-    throw new Error('BOOKKEEPING_EMAIL and BOOKKEEPING_PASSWORD env vars are required');
-  }
-
-  const res = await fetch(`${API_URL}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Auth failed (${res.status}): ${body}`);
-  }
-
-  const data = await res.json();
-  cachedToken = data.token;
-  tokenExpiry = Date.now() + 23 * 60 * 60 * 1000; // refresh 1h before 24h expiry
-  return cachedToken!;
-}
+const API_TOKEN = process.env.BOOKKEEPING_API_TOKEN || '';
 
 export async function apiRequest(
   method: string,
@@ -35,7 +7,9 @@ export async function apiRequest(
   body?: unknown,
   query?: Record<string, string | undefined>,
 ): Promise<unknown> {
-  const token = await authenticate();
+  if (!API_TOKEN) {
+    throw new Error('BOOKKEEPING_API_TOKEN env var is required');
+  }
 
   const url = new URL(`${API_URL}${path}`);
   if (query) {
@@ -45,7 +19,7 @@ export async function apiRequest(
   }
 
   const headers: Record<string, string> = {
-    Authorization: `Bearer ${token}`,
+    Authorization: `Bearer ${API_TOKEN}`,
     'Content-Type': 'application/json',
   };
 

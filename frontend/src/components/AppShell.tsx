@@ -18,7 +18,7 @@ import {
   CalendarCheck,
   Landmark,
   RefreshCw,
-  Bot,
+  Plug,
 } from 'lucide-react';
 
 const navItems = [
@@ -109,15 +109,15 @@ export default function AppShell() {
                 Airwallex Sync
               </NavLink>
               <NavLink
-                to="/ai-agent"
+                to="/endpoint"
                 className={({ isActive }) =>
                   `flex items-center gap-2 px-3 py-2 rounded text-sm ${
                     isActive ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-100'
                   }`
                 }
               >
-                <Bot size={18} />
-                AI Agent
+                <Plug size={18} />
+                Endpoint
               </NavLink>
             </>
           )}

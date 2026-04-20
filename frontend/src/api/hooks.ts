@@ -558,6 +558,30 @@ export function useMonthlySummary(year: number, month: number, entity?: string) 
   });
 }
 
+// API tokens
+export function useApiTokens() {
+  return useQuery({
+    queryKey: ['api-tokens'],
+    queryFn: () => api.get('/auth/tokens').then((r) => r.data),
+  });
+}
+
+export function useGenerateToken() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => api.post('/auth/tokens', { name }).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['api-tokens'] }),
+  });
+}
+
+export function useRevokeToken() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (tokenId: string) => api.delete(`/auth/tokens/${tokenId}`).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['api-tokens'] }),
+  });
+}
+
 // Reimbursements
 export function useReimbursements() {
   return useQuery({

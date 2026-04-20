@@ -1,5 +1,13 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
+export interface IApiToken {
+  _id: mongoose.Types.ObjectId;
+  token: string;
+  name: string;
+  createdAt: Date;
+  lastUsedAt: Date | null;
+}
+
 export interface IUser extends Document {
   email: string;
   passwordHash: string;
@@ -10,6 +18,7 @@ export interface IUser extends Document {
   bankName: string;
   bankAccountNumber: string;
   fpsPhone: string;
+  apiTokens: IApiToken[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -25,6 +34,12 @@ const userSchema = new Schema<IUser>(
     bankName: { type: String, default: '' },
     bankAccountNumber: { type: String, default: '' },
     fpsPhone: { type: String, default: '' },
+    apiTokens: [{
+      token: { type: String, required: true },
+      name: { type: String, required: true },
+      createdAt: { type: Date, default: Date.now },
+      lastUsedAt: { type: Date, default: null },
+    }],
   },
   { timestamps: true },
 );

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
@@ -117,6 +118,44 @@ router.put('/change-password', authMiddleware, async (req: AuthRequest, res, nex
     await user.save();
 
     res.json({ message: 'Password changed successfully' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// API token management
+router.get('/tokens', authMiddleware, (req: AuthRequest, res) => {
+  const tokens = (req.user!.apiTokens || []).map((t) => ({
+    _id: t._id,
+    name: t.name,
+    tokenPreview: t.token.slice(0, 8) + '...' + t.token.slice(-4),
+    createdAt: t.createdAt,
+    lastUsedAt: t.lastUsedAt,
+  }));
+  res.json(tokens);
+});
+
+router.post('/tokens', authMiddleware, async (req: AuthRequest, res, next) => {
+  try {
+    const { name } = z.object({ name: z.string().min(1).max(100) }).parse(req.body);
+    const token = 'hbk_' + crypto.randomBytes(32).toString('hex');
+    const user = req.user!;
+    user.apiTokens.push({ token, name, createdAt: new Date(), lastUsedAt: null } as any);
+    await user.save();
+    res.status(201).json({ token, name });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/tokens/:tokenId', authMiddleware, async (req: AuthRequest, res, next) => {
+  try {
+    const user = req.user!;
+    const idx = user.apiTokens.findIndex((t) => t._id.toString() === req.params.tokenId);
+    if (idx === -1) throw new AppError(404, 'Token not found');
+    user.apiTokens.splice(idx, 1);
+    await user.save();
+    res.json({ message: 'Token revoked' });
   } catch (error) {
     next(error);
   }

@@ -34,7 +34,7 @@ import UserList from './pages/UserList';
 import FundList from './pages/FundList';
 import SettingsPage from './pages/Settings';
 import AirwallexSync from './pages/AirwallexSync';
-import AIAgent from './pages/AIAgent';
+import Endpoint from './pages/Endpoint';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -98,7 +98,7 @@ export default function App() {
               <Route path="users" element={<UserList />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="airwallex-sync" element={<AirwallexSync />} />
-              <Route path="ai-agent" element={<AIAgent />} />
+              <Route path="endpoint" element={<Endpoint />} />
             </Route>
           </Routes>
         </HashRouter>

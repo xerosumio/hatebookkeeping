@@ -20,11 +20,19 @@ export async function authMiddleware(
     }
 
     const token = header.slice(7);
-    const payload = jwt.verify(token, env.jwtSecret) as { userId: string };
-    const user = await User.findById(payload.userId);
 
-    if (!user || !user.active) {
-      throw new AppError(401, 'Invalid token');
+    let user;
+    if (token.startsWith('hbk_')) {
+      user = await User.findOne({ 'apiTokens.token': token, active: true });
+      if (!user) throw new AppError(401, 'Invalid API token');
+      await User.updateOne(
+        { _id: user._id, 'apiTokens.token': token },
+        { $set: { 'apiTokens.$.lastUsedAt': new Date() } },
+      );
+    } else {
+      const payload = jwt.verify(token, env.jwtSecret) as { userId: string };
+      user = await User.findById(payload.userId);
+      if (!user || !user.active) throw new AppError(401, 'Invalid token');
     }
 
     req.user = user;
