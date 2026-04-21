@@ -27,6 +27,7 @@ export interface AirwallexFinancialTransaction {
   created_at: string;
   settled_at: string | null;
   batch_id: string | null;
+  description?: string;
 }
 
 export interface AirwallexGlobalAccountTransaction {

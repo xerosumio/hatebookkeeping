@@ -15,7 +15,7 @@ export interface CompanyInfo {
   brandColor?: string;
 }
 
-interface PopulatedInvoice extends IInvoice {
+interface PopulatedInvoice extends Omit<IInvoice, 'quotation'> {
   quotation?: { quotationNumber: string; title: string } | null;
 }
 

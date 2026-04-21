@@ -55,7 +55,8 @@ async function runAlertCheck() {
     let alertsSent = 0;
 
     for (const item of items) {
-      const nextDue = getNextDueDateForItem(item);
+      if (!item.startDate) continue;
+      const nextDue = getNextDueDateForItem(item as typeof item & { startDate: Date });
       if (!nextDue) continue;
 
       const alertDate = new Date(nextDue.getTime() - item.alertDaysBefore * 86400000);

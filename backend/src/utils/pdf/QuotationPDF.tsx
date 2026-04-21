@@ -90,7 +90,7 @@ export function QuotationPDF({ quotation: q, company }: Props) {
 
         {/* ── Line Items Table ── */}
         <View style={styles.table}>
-          <View style={[styles.tableHeader, { minPresenceAhead: 30 }]} wrap={false}>
+          <View style={[styles.tableHeader, { minPresenceAhead: 30 } as any]} wrap={false}>
             <Text style={[styles.colNum, styles.tableHeaderText]}>#</Text>
             <Text style={[styles.colDesc, styles.tableHeaderText]}>Item & Description</Text>
             <Text style={[styles.colQty, styles.tableHeaderText]}>Qty</Text>
@@ -131,9 +131,9 @@ export function QuotationPDF({ quotation: q, company }: Props) {
         {/* ── Payment Schedule ── */}
         {q.paymentSchedule.length > 0 && (
           <View wrap={q.paymentSchedule.length > 6}>
-            <Text style={[styles.sectionTitle, { minPresenceAhead: 40 }]}>Payment Schedule</Text>
+            <Text style={[styles.sectionTitle, { minPresenceAhead: 40 } as any]}>Payment Schedule</Text>
             <View style={styles.table}>
-              <View style={[styles.tableHeader, { minPresenceAhead: 30 }]} wrap={false}>
+              <View style={[styles.tableHeader, { minPresenceAhead: 30 } as any]} wrap={false}>
                 <Text style={[styles.colNum, styles.tableHeaderText]}>#</Text>
                 <Text style={[{ flex: 1 }, styles.tableHeaderText]}>Milestone</Text>
                 <Text style={[{ width: 35, textAlign: 'right' }, styles.tableHeaderText]}>%</Text>

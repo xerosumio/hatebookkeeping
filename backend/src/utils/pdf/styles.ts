@@ -269,16 +269,16 @@ function buildStyles(ACCENT: string) {
   },
 
   footer: {
-    position: 'absolute' as const,
+    position: 'absolute',
     bottom: 24,
     left: 48,
     right: 48,
     fontSize: 7,
     color: MUTED,
-    textAlign: 'center' as const,
+    textAlign: 'center',
     paddingTop: 8,
     borderTopWidth: 0.5,
     borderTopColor: BORDER,
   },
-  } satisfies Record<string, any>;
+  } as const;
 }

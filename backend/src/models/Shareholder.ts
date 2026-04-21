@@ -14,6 +14,8 @@ export interface IShareholder extends Document {
   sharePercent: number;
   active: boolean;
   shareHistory: IShareAdjustmentLog[];
+  sharePurchaseOwed?: number;
+  sharePurchasePaid?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -36,6 +38,8 @@ const shareholderSchema = new Schema<IShareholder>(
     sharePercent: { type: Number, required: true },
     active: { type: Boolean, default: true },
     shareHistory: { type: [shareAdjustmentLogSchema], default: [] },
+    sharePurchaseOwed: { type: Number, default: 0 },
+    sharePurchasePaid: { type: Number, default: 0 },
   },
   { timestamps: true },
 );
