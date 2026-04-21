@@ -1,7 +1,5 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import path from 'path';
-import fs from 'fs';
 import { renderToBuffer } from '@react-pdf/renderer';
 import React from 'react';
 import { Quotation } from '../models/Quotation.js';
@@ -14,6 +12,7 @@ import { QuotationPDF } from '../utils/pdf/QuotationPDF.js';
 import { getSettings, Settings } from '../models/Settings.js';
 import { env } from '../config/env.js';
 import { sendEmail, buildStatusChangeEmailHtml } from '../utils/email.js';
+import { resolveImageFields } from '../utils/resolveImageForPdf.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -316,21 +315,9 @@ router.get('/:id/pdf', async (req, res, next) => {
     const company = entityObj
       ? { companyName: entityObj.name, companyAddress: entityObj.address, companyPhone: entityObj.phone, companyEmail: entityObj.email, companyWebsite: entityObj.website, logoUrl: entityObj.logoUrl, brandColor: entityObj.brandColor, companyChopUrl: entityObj.companyChopUrl, signatureUrl: entityObj.signatureUrl, bankAccounts: entityObj.bankAccounts }
       : { ...settings.toObject() } as any;
-    for (const field of ['logoUrl', 'companyChopUrl', 'signatureUrl'] as const) {
-      if (company[field]) {
-        const file = company[field].replace(/^\/api\/uploads\//, '');
-        const abs = path.resolve(env.uploadDir, file);
-        company[field] = fs.existsSync(abs) && fs.statSync(abs).size > 0 ? abs : '';
-      }
-    }
+    await resolveImageFields(company, ['logoUrl', 'companyChopUrl', 'signatureUrl']);
     const q = quotation as any;
-    for (const field of ['companyChopUrl', 'signatureUrl'] as const) {
-      if (q[field] && q[field].startsWith('/api/uploads/')) {
-        const file = q[field].replace(/^\/api\/uploads\//, '');
-        const abs = path.resolve(env.uploadDir, file);
-        q[field] = fs.existsSync(abs) && fs.statSync(abs).size > 0 ? abs : '';
-      }
-    }
+    await resolveImageFields(q, ['companyChopUrl', 'signatureUrl']);
     if (!q.companyChopUrl && company.companyChopUrl) q.companyChopUrl = company.companyChopUrl;
     if (!q.signatureUrl && company.signatureUrl) q.signatureUrl = company.signatureUrl;
     const buffer = await renderToBuffer(

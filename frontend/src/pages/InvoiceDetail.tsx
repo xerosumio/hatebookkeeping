@@ -38,20 +38,25 @@ export default function InvoiceDetail() {
 
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [includeChop, setIncludeChop] = useState(true);
+  const [includeSignature, setIncludeSignature] = useState(true);
 
   const showPdfPreview = useCallback(async () => {
     if (!id || !inv) return;
     setPdfLoading(true);
     try {
       if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl);
-      const url = await fetchPdfBlob(`/invoices/${id}/pdf`);
+      const params = new URLSearchParams();
+      params.set('includeChop', String(includeChop));
+      params.set('includeSignature', String(includeSignature));
+      const url = await fetchPdfBlob(`/invoices/${id}/pdf?${params}`);
       setPdfBlobUrl(url);
     } catch {
       alert('Failed to generate PDF. Check server logs.');
     } finally {
       setPdfLoading(false);
     }
-  }, [id, inv, pdfBlobUrl]);
+  }, [id, inv, pdfBlobUrl, includeChop, includeSignature]);
 
   const hidePdfPreview = useCallback(() => {
     if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl);
@@ -95,13 +100,23 @@ export default function InvoiceDetail() {
               <ArrowLeft size={14} /> Back to Details
             </button>
           ) : (
-            <button
-              onClick={showPdfPreview}
-              disabled={pdfLoading}
-              className="flex items-center gap-1 border border-gray-300 px-3 py-1.5 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
-            >
-              <FileText size={14} /> {pdfLoading ? 'Loading...' : 'Preview PDF'}
-            </button>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none">
+                <input type="checkbox" checked={includeChop} onChange={(e) => setIncludeChop(e.target.checked)} className="rounded border-gray-300 text-blue-600" />
+                Company Chop
+              </label>
+              <label className="flex items-center gap-1.5 text-sm text-gray-600 cursor-pointer select-none">
+                <input type="checkbox" checked={includeSignature} onChange={(e) => setIncludeSignature(e.target.checked)} className="rounded border-gray-300 text-blue-600" />
+                Signature
+              </label>
+              <button
+                onClick={showPdfPreview}
+                disabled={pdfLoading}
+                className="flex items-center gap-1 border border-gray-300 px-3 py-1.5 rounded text-sm hover:bg-gray-50 disabled:opacity-50"
+              >
+                <FileText size={14} /> {pdfLoading ? 'Loading...' : 'Preview PDF'}
+              </button>
+            </div>
           )}
           <select
             value={inv.status}

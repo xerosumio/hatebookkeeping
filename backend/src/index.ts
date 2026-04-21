@@ -29,6 +29,7 @@ const app = express();
 
 app.use(cors({ origin: env.corsOrigin, credentials: true }));
 app.use(express.json());
+app.use('/api/uploads', uploadRoutes);
 app.use('/api/uploads', express.static(path.resolve(env.uploadDir)));
 
 app.use('/api/auth', authRoutes);
@@ -44,7 +45,6 @@ app.use('/api/recurring', recurringRoutes);
 app.use('/api/reimbursements', reimbursementRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/settings', settingsRoutes);
-app.use('/api/uploads', uploadRoutes);
 app.use('/api/entities', entityRoutes);
 app.use('/api/shareholders', shareholderRoutes);
 app.use('/api/monthly-close', monthlyCloseRoutes);

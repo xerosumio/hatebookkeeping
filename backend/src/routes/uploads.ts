@@ -2,26 +2,25 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import mongoose from 'mongoose';
 import { env } from '../config/env.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { FileUpload } from '../models/FileUpload.js';
 
 const router = Router();
 router.use(authMiddleware);
 
-const uploadDir = path.resolve(env.uploadDir);
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+const MIME_MAP: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.pdf': 'application/pdf',
+};
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const name = `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
-    cb(null, name);
-  },
-});
+const storage = multer.memoryStorage();
 
 const upload = multer({
   storage,
@@ -37,11 +36,41 @@ const upload = multer({
   },
 });
 
-router.post('/', upload.single('file'), (req, res) => {
-  if (!req.file) {
-    throw new AppError(400, 'No file uploaded');
+router.post('/', upload.single('file'), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      throw new AppError(400, 'No file uploaded');
+    }
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    const contentType = MIME_MAP[ext] || req.file.mimetype;
+    const doc = await FileUpload.create({
+      filename: req.file.originalname,
+      contentType,
+      data: req.file.buffer,
+      size: req.file.size,
+    });
+    res.json({ path: `/api/uploads/${doc._id}` });
+  } catch (error) {
+    next(error);
   }
-  res.json({ path: `/api/uploads/${req.file.filename}` });
+});
+
+router.get('/:id', async (req, res, next) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return next();
+    }
+    const doc = await FileUpload.findById(req.params.id);
+    if (!doc) {
+      return next();
+    }
+    res.setHeader('Content-Type', doc.contentType);
+    res.setHeader('Content-Length', doc.size);
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.send(doc.data);
+  } catch (error) {
+    next(error);
+  }
 });
 
 export default router;

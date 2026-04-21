@@ -1,7 +1,5 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import path from 'path';
-import fs from 'fs';
 import React from 'react';
 import { renderToBuffer } from '@react-pdf/renderer';
 import { Invoice } from '../models/Invoice.js';
@@ -15,7 +13,7 @@ import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { InvoicePDF } from '../utils/pdf/InvoicePDF.js';
 import { getSettings } from '../models/Settings.js';
-import { env } from '../config/env.js';
+import { resolveImageFields } from '../utils/resolveImageForPdf.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -266,29 +264,22 @@ router.get('/:id/pdf', async (req, res, next) => {
     const invoice = await Invoice.findById(req.params.id).populate('client').populate('entity');
     if (!invoice) throw new AppError(404, 'Invoice not found');
 
+    const includeChop = req.query.includeChop !== 'false';
+    const includeSignature = req.query.includeSignature !== 'false';
+
     const entityObj = (invoice as any).entity;
     const settings = await getSettings();
     const company = entityObj
       ? { companyName: entityObj.name, companyAddress: entityObj.address, companyPhone: entityObj.phone, companyEmail: entityObj.email, companyWebsite: entityObj.website, logoUrl: entityObj.logoUrl, brandColor: entityObj.brandColor, companyChopUrl: entityObj.companyChopUrl, signatureUrl: entityObj.signatureUrl, bankAccounts: entityObj.bankAccounts }
       : { ...settings.toObject() } as any;
-    for (const field of ['logoUrl', 'companyChopUrl', 'signatureUrl'] as const) {
-      if (company[field]) {
-        const file = company[field].replace(/^\/api\/uploads\//, '');
-        const abs = path.resolve(env.uploadDir, file);
-        company[field] = fs.existsSync(abs) && fs.statSync(abs).size > 0 ? abs : '';
-      }
-    }
+    await resolveImageFields(company, ['logoUrl', 'companyChopUrl', 'signatureUrl']);
     const inv = invoice as any;
-    for (const field of ['companyChopUrl', 'signatureUrl'] as const) {
-      if (inv[field] && inv[field].startsWith('/api/uploads/')) {
-        const file = inv[field].replace(/^\/api\/uploads\//, '');
-        const abs = path.resolve(env.uploadDir, file);
-        inv[field] = fs.existsSync(abs) && fs.statSync(abs).size > 0 ? abs : '';
-      }
-    }
+    await resolveImageFields(inv, ['companyChopUrl', 'signatureUrl']);
     if (!inv.companyChopUrl && company.companyChopUrl) inv.companyChopUrl = company.companyChopUrl;
     if (!inv.signatureUrl && company.signatureUrl) inv.signatureUrl = company.signatureUrl;
     if (!inv.bankAccountInfo && company.bankAccountInfo) inv.bankAccountInfo = company.bankAccountInfo;
+    if (!includeChop) inv.companyChopUrl = '';
+    if (!includeSignature) inv.signatureUrl = '';
     const buffer = await renderToBuffer(
       React.createElement(InvoicePDF, { invoice: inv, company }) as any,
     );
