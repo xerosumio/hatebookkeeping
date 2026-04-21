@@ -1,6 +1,6 @@
 export type EntityKey = 'ax' | 'nt';
 
-export const FUND_NAMES: Record<EntityKey, string> = {
+export const FUND_NAMES: Record<string, string> = {
   ax: 'Axilogy Airwallex',
   nt: 'Naton Airwallex',
 };
