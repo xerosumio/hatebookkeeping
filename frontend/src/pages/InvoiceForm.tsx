@@ -115,8 +115,12 @@ export default function InvoiceForm() {
     const idx = ent.defaultBankAccountIndex || 0;
     const ba = ent.bankAccounts[idx] || ent.bankAccounts[0];
     if (!ba) return '';
-    const lines: string[] = ['Bank Details Account information:'];
-    if (ba.name) lines.push(`Account name: ${ba.name}`);
+    return formatBankInfo(ba, ent.name);
+  }
+
+  function formatBankInfo(ba: { name?: string; accountNumber?: string; bankCode?: string; branchCode?: string; swiftCode?: string; bankName?: string; location?: string }, entityName?: string): string {
+    const lines: string[] = ['Airwallex Global Account information:'];
+    lines.push(`Global Account name: ${entityName || ba.name || ''}`);
     if (ba.accountNumber) lines.push(`Bank account number: ${ba.accountNumber}`);
     if (ba.bankCode) lines.push(`Bank code: ${ba.bankCode}`);
     if (ba.branchCode) lines.push(`Branch code: ${ba.branchCode}`);
@@ -329,15 +333,7 @@ export default function InvoiceForm() {
                 >
                   <option value="">Use entity default</option>
                   {bankAccounts.map((ba, idx) => {
-                    const lines: string[] = ['Bank Details Account information:'];
-                    if (ba.name) lines.push(`Account name: ${ba.name}`);
-                    if (ba.accountNumber) lines.push(`Bank account number: ${ba.accountNumber}`);
-                    if (ba.bankCode) lines.push(`Bank code: ${ba.bankCode}`);
-                    if (ba.branchCode) lines.push(`Branch code: ${ba.branchCode}`);
-                    if (ba.swiftCode) lines.push(`SWIFT code: ${ba.swiftCode}`);
-                    if (ba.bankName) lines.push(`Bank name: ${ba.bankName}`);
-                    if (ba.location) lines.push(`Location: ${ba.location}`);
-                    const value = lines.join('\n');
+                    const value = formatBankInfo(ba, selEntity?.name);
                     const label = [ba.name, ba.bankName, ba.accountNumber].filter(Boolean).join(' — ');
                     return <option key={idx} value={value}>{label}</option>;
                   })}

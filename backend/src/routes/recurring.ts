@@ -35,9 +35,9 @@ const recurringSchema = z.object({
   bankAccountInfo: z.string().optional().default(''),
 });
 
-function formatBankAccountDetails(ba: { name?: string; bankName?: string; accountNumber?: string; bankCode?: string; branchCode?: string; swiftCode?: string; location?: string }): string {
-  const lines: string[] = ['Bank Details Account information:'];
-  if (ba.name) lines.push(`Account name: ${ba.name}`);
+function formatBankAccountDetails(ba: { name?: string; bankName?: string; accountNumber?: string; bankCode?: string; branchCode?: string; swiftCode?: string; location?: string }, entityName?: string): string {
+  const lines: string[] = ['Airwallex Global Account information:'];
+  lines.push(`Global Account name: ${entityName || ba.name || ''}`);
   if (ba.accountNumber) lines.push(`Bank account number: ${ba.accountNumber}`);
   if (ba.bankCode) lines.push(`Bank code: ${ba.bankCode}`);
   if (ba.branchCode) lines.push(`Branch code: ${ba.branchCode}`);
@@ -80,13 +80,13 @@ async function generateInvoiceForItem(
       return label === bankAccountInfo;
     });
     if (match) {
-      bankAccountInfo = formatBankAccountDetails(match);
+      bankAccountInfo = formatBankAccountDetails(match, entity?.name);
     }
   }
   if (!bankAccountInfo && entity?.bankAccounts?.length) {
     const defaultIdx = (entity as any).defaultBankAccountIndex || 0;
     const defaultBa = entity.bankAccounts[defaultIdx] || entity.bankAccounts[0];
-    if (defaultBa) bankAccountInfo = formatBankAccountDetails(defaultBa);
+    if (defaultBa) bankAccountInfo = formatBankAccountDetails(defaultBa, entity?.name);
   }
 
   const invoice = await Invoice.create({
