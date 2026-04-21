@@ -287,6 +287,7 @@ router.get('/:id/pdf', async (req, res, next) => {
     res.setHeader('Content-Disposition', `inline; filename="${invoice.invoiceNumber}.pdf"`);
     res.send(Buffer.from(buffer));
   } catch (error) {
+    console.error('Invoice PDF generation failed:', error);
     next(error);
   }
 });

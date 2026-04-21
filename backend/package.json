@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc && cp -r src/utils/pdf/fonts dist/utils/pdf/fonts",
     "start": "node dist/index.js",
     "seed": "tsx src/seed.ts",
     "seed:demo": "tsx src/seed-demo.ts",
