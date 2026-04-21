@@ -1,15 +1,12 @@
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
 import mongoose from 'mongoose';
-import { env } from '../config/env.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { FileUpload } from '../models/FileUpload.js';
 
 const router = Router();
-router.use(authMiddleware);
 
 const MIME_MAP: Record<string, string> = {
   '.png': 'image/png',
@@ -36,7 +33,7 @@ const upload = multer({
   },
 });
 
-router.post('/', upload.single('file'), async (req, res, next) => {
+router.post('/', authMiddleware, upload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) {
       throw new AppError(400, 'No file uploaded');
