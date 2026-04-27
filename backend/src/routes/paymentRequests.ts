@@ -11,6 +11,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import { sendEmail, buildPaymentRequestEmailHtml, buildStatusChangeEmailHtml, getSubjectForRequest } from '../utils/email.js';
 import { env } from '../config/env.js';
 import { formatMoney } from '../utils/pdf/formatMoney.js';
+import { getRequiredApproverIds, hasFullApproval } from '../utils/dualApproval.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -43,6 +44,7 @@ router.get('/', async (req, res, next) => {
       .populate('entity', 'code name')
       .populate('createdBy', 'name')
       .populate('approvedBy', 'name')
+      .populate('approvals.user', 'name')
       .populate('items.payee', 'name bankName bankAccountNumber')
       .sort({ createdAt: -1 });
     res.json(requests);
@@ -79,6 +81,7 @@ router.get('/:id', async (req, res, next) => {
       .populate('entity', 'code name bankAccounts')
       .populate('createdBy', 'name email')
       .populate('approvedBy', 'name email')
+      .populate('approvals.user', 'name')
       .populate('items.payee', 'name bankName bankAccountNumber bankCode')
       .populate('activityLog.user', 'name');
     if (!request) throw new AppError(404, 'Payment request not found');
@@ -161,40 +164,66 @@ router.patch('/:id/approve', roleGuard('admin'), async (req: AuthRequest, res, n
       throw new AppError(400, 'Can only approve pending requests');
     }
 
-    request.status = 'approved';
-    request.approvedBy = req.user!._id;
-    request.approvedAt = new Date();
+    // Check if this user already approved
+    const alreadyApproved = (request.approvals || []).some(
+      (a) => a.user.toString() === req.user!._id.toString(),
+    );
+    if (alreadyApproved) {
+      throw new AppError(400, 'You have already approved this request');
+    }
+
+    // Record this approval
+    if (!request.approvals) request.approvals = [];
+    request.approvals.push({ user: req.user!._id, at: new Date() });
     request.activityLog.push({
       action: 'approved',
       user: req.user!._id,
       timestamp: new Date(),
     } as any);
-    await request.save();
 
-    // Send approval notification emails
-    const settings = await Settings.findOne();
-    const companyName = settings?.companyName || 'HateBookkeeping';
-    const detailUrl = `${env.frontendUrl}/#/payment-requests/${request._id}`;
-    const creator = await User.findById(request.createdBy, 'email name');
-    const recipientEmails = [...new Set([
-      ...(creator?.email ? [creator.email] : []),
-      ...(request.notifiedEmails || []),
-    ])];
-
-    if (recipientEmails.length > 0) {
-      const html = buildStatusChangeEmailHtml({
-        companyName,
-        requestNumber: request.requestNumber,
-        newStatus: 'approved',
-        actorName: req.user!.name,
-        detailUrl,
-      });
-      const primary = recipientEmails[0];
-      const cc = recipientEmails.slice(1);
-      sendEmail({ to: primary, cc: cc.length > 0 ? cc : undefined, subject: getSubjectForRequest(request.requestNumber, true), html }).catch(() => {});
+    // Check if dual approval is now complete
+    const requiredIds = await getRequiredApproverIds();
+    if (hasFullApproval(request.approvals, requiredIds)) {
+      request.status = 'approved';
+      request.approvedBy = req.user!._id;
+      request.approvedAt = new Date();
     }
 
-    res.json(request);
+    await request.save();
+
+    // Send email notification only when fully approved
+    if (request.status === 'approved') {
+      const settings = await Settings.findOne();
+      const companyName = settings?.companyName || 'HateBookkeeping';
+      const detailUrl = `${env.frontendUrl}/#/payment-requests/${request._id}`;
+      const creator = await User.findById(request.createdBy, 'email name');
+      const recipientEmails = [...new Set([
+        ...(creator?.email ? [creator.email] : []),
+        ...(request.notifiedEmails || []),
+      ])];
+
+      if (recipientEmails.length > 0) {
+        const html = buildStatusChangeEmailHtml({
+          companyName,
+          requestNumber: request.requestNumber,
+          newStatus: 'approved',
+          actorName: req.user!.name,
+          detailUrl,
+        });
+        const primary = recipientEmails[0];
+        const cc = recipientEmails.slice(1);
+        sendEmail({ to: primary, cc: cc.length > 0 ? cc : undefined, subject: getSubjectForRequest(request.requestNumber, true), html }).catch(() => {});
+      }
+    }
+
+    const populated = await PaymentRequest.findById(request._id)
+      .populate('entity', 'code name')
+      .populate('createdBy', 'name')
+      .populate('approvedBy', 'name')
+      .populate('approvals.user', 'name')
+      .populate('items.payee', 'name bankName bankAccountNumber')
+      .populate('activityLog.user', 'name');
+    res.json(populated);
   } catch (error) {
     next(error);
   }
@@ -212,6 +241,7 @@ router.patch('/:id/reject', roleGuard('admin'), async (req: AuthRequest, res, ne
     request.status = 'rejected';
     request.approvedBy = req.user!._id;
     request.rejectionReason = reason;
+    request.approvals = [];
     request.activityLog.push({
       action: 'rejected',
       user: req.user!._id,

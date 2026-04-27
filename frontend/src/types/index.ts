@@ -187,6 +187,11 @@ export interface QuotationActivityLog {
   note?: string;
 }
 
+export interface ApprovalEntry {
+  user: string | { _id: string; name: string };
+  at: string;
+}
+
 export interface Quotation {
   _id: string;
   quotationNumber: string;
@@ -207,6 +212,7 @@ export interface Quotation {
   notes: string;
   approvedBy?: string | User;
   approvedAt?: string;
+  approvals?: ApprovalEntry[];
   rejectionReason?: string;
   notifiedEmails?: string[];
   activityLog?: QuotationActivityLog[];
@@ -321,6 +327,7 @@ export interface PaymentRequest {
   createdBy: string | User;
   approvedBy?: string | User;
   approvedAt?: string;
+  approvals?: ApprovalEntry[];
   rejectionReason?: string;
   executedAt?: string;
   bankReference?: string;

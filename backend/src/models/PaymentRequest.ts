@@ -15,6 +15,11 @@ export interface IActivityLogEntry {
   note?: string;
 }
 
+export interface IApprovalEntry {
+  user: mongoose.Types.ObjectId;
+  at: Date;
+}
+
 export interface IPaymentRequest extends Document {
   requestNumber: string;
   entity?: mongoose.Types.ObjectId;
@@ -26,6 +31,7 @@ export interface IPaymentRequest extends Document {
   createdBy: mongoose.Types.ObjectId;
   approvedBy?: mongoose.Types.ObjectId;
   approvedAt?: Date;
+  approvals: IApprovalEntry[];
   rejectionReason?: string;
   executedAt?: Date;
   bankReference?: string;
@@ -77,6 +83,10 @@ const paymentRequestSchema = new Schema<IPaymentRequest>(
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     approvedBy: { type: Schema.Types.ObjectId, ref: 'User' },
     approvedAt: { type: Date },
+    approvals: [{
+      user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+      at: { type: Date, required: true },
+    }],
     rejectionReason: { type: String },
     executedAt: { type: Date },
     bankReference: { type: String },
