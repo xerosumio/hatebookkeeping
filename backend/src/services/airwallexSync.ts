@@ -35,9 +35,22 @@ export async function runSync(entity: EntityKey) {
       status: 'success',
     }).sort({ completedAt: -1 });
 
-    const fromDate = lastSuccess?.completedAt
+    let fromDate = lastSuccess?.completedAt
       ? new Date(lastSuccess.completedAt.getTime() - DAY_MS).toISOString()
       : CUTOFF[entity];
+
+    // Extend window to cover any pending transactions or dismissed
+    // conversions that the new auto-handler can now process
+    const oldestOutstanding = await PendingBankTransaction.findOne({
+      entity,
+      $or: [
+        { status: 'pending' },
+        { status: 'dismissed', sourceType: 'CONVERSION' },
+      ],
+    }).sort({ date: 1 });
+    if (oldestOutstanding && new Date(oldestOutstanding.date).toISOString() < fromDate) {
+      fromDate = new Date(oldestOutstanding.date.getTime() - DAY_MS).toISOString();
+    }
 
     const bankTxns = await getFinancialTransactions(entity, {
       from: fromDate,
