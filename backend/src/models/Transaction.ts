@@ -15,7 +15,7 @@ export interface ITransaction extends Document {
   bankReference: string;
   bankAccount: string;
   reconciled: boolean;
-  createdBy: mongoose.Types.ObjectId;
+  createdBy?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -36,7 +36,7 @@ const transactionSchema = new Schema<ITransaction>(
     bankReference: { type: String, default: '' },
     bankAccount: { type: String, default: '' },
     reconciled: { type: Boolean, default: false },
-    createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true },
 );

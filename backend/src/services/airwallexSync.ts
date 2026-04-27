@@ -6,8 +6,10 @@ import {
   type EntityKey,
   getFinancialTransactions,
   getBalances,
+  getConversion,
 } from './airwallex.js';
 import { FUND_NAME } from '../config/bankAccounts.js';
+import { adjustFundBalance } from '../utils/fundBalance.js';
 
 const CUTOFF: Record<EntityKey, string> = {
   ax: '2026-03-02T00:00:00Z',
@@ -45,12 +47,61 @@ export async function runSync(entity: EntityKey) {
 
     let matched = 0;
     let unmatched = 0;
+    let conversions = 0;
     const unmatchedItems: Array<{ airwallexId: string; amount: number; date: string; description: string }> = [];
 
     for (const bt of bankTxns) {
       const amountCents = Math.round(Math.abs(bt.amount) * 100);
       const isDebit = bt.amount < 0;
       const type = isDebit ? 'expense' : 'income';
+
+      // Auto-handle currency conversions
+      if (bt.source_type === 'CONVERSION') {
+        const alreadyHandled = await Transaction.findOne({
+          bankAccount: FUND_NAME[entity],
+          bankReference: bt.source_id,
+          reconciled: true,
+        });
+        if (alreadyHandled) {
+          matched++;
+          continue;
+        }
+
+        let description = `Currency conversion: ${Math.abs(bt.amount)} HKD`;
+        try {
+          const conv = await getConversion(entity, bt.source_id);
+          const otherCurrency = conv.sell_currency === 'HKD' ? conv.buy_currency : conv.sell_currency;
+          const otherAmount = conv.sell_currency === 'HKD' ? conv.buy_amount : conv.sell_amount;
+          description = `Currency conversion: ${Math.abs(bt.amount)} HKD -> ${otherAmount} ${otherCurrency} @ ${conv.client_rate}`;
+        } catch (err: any) {
+          console.warn(`[airwallex-sync] Could not fetch conversion ${bt.source_id}: ${err.message}`);
+        }
+
+        const txn = await Transaction.create({
+          date: new Date(bt.created_at),
+          type,
+          category: 'Currency Conversion',
+          description,
+          amount: amountCents,
+          bankAccount: FUND_NAME[entity],
+          bankReference: bt.source_id,
+          reconciled: true,
+          createdBy: null,
+        });
+
+        const balanceAdjust = type === 'income' ? amountCents : -amountCents;
+        await adjustFundBalance(FUND_NAME[entity], balanceAdjust);
+
+        // Dismiss any existing pending record for this conversion
+        await PendingBankTransaction.updateOne(
+          { airwallexId: bt.id, status: 'pending' },
+          { $set: { status: 'matched', matchedTransaction: txn._id, resolvedAt: new Date() } },
+        );
+
+        conversions++;
+        matched++;
+        continue;
+      }
 
       const existing = await Transaction.findOne({
         bankAccount: FUND_NAME[entity],
@@ -137,7 +188,7 @@ export async function runSync(entity: EntityKey) {
     await log.save();
 
     console.log(
-      `[airwallex-sync] ${entity.toUpperCase()} complete: ${matched} matched, ${unmatched} unmatched, discrepancy ${discrepancy / 100}`,
+      `[airwallex-sync] ${entity.toUpperCase()} complete: ${matched} matched (${conversions} conversions), ${unmatched} unmatched, discrepancy ${discrepancy / 100}`,
     );
 
     return log;

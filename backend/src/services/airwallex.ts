@@ -155,6 +155,22 @@ export async function getFinancialTransactions(
   return all;
 }
 
+export interface AirwallexConversion {
+  id: string;
+  sell_amount: number;
+  sell_currency: string;
+  buy_amount: number;
+  buy_currency: string;
+  client_rate: number;
+  status: string;
+  created_at: string;
+  conversion_date: string;
+}
+
+export async function getConversion(entity: EntityKey, conversionId: string): Promise<AirwallexConversion> {
+  return apiGet<AirwallexConversion>(entity, `/conversions/${conversionId}`);
+}
+
 export async function getGlobalAccounts(entity: EntityKey) {
   const data = await apiGet<{ items: Array<{ id: string; nickname: string; status: string; currency: string[] }> }>(
     entity,
