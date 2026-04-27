@@ -41,6 +41,7 @@ export interface IQuotation extends Document {
   notes: string;
   approvedBy?: mongoose.Types.ObjectId;
   approvedAt?: Date;
+  approvals: { user: mongoose.Types.ObjectId; at: Date }[];
   rejectionReason?: string;
   notifiedEmails: string[];
   activityLog: IQuotationActivityLog[];
@@ -108,6 +109,10 @@ const quotationSchema = new Schema<IQuotation>(
     notes: { type: String, default: '' },
     approvedBy: { type: Schema.Types.ObjectId, ref: 'User' },
     approvedAt: { type: Date },
+    approvals: [{
+      user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+      at: { type: Date, required: true },
+    }],
     rejectionReason: { type: String },
     notifiedEmails: [{ type: String }],
     activityLog: [quotationActivityLogSchema],

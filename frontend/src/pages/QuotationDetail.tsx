@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { formatMoney, titleCase } from '../utils/money';
 import { FileText, Calendar, ArrowLeft, Plus, Pencil, CheckCircle, XCircle, Send, Clock, Mail } from 'lucide-react';
 import PdfInlinePreview from '../components/PdfPreviewModal';
-import type { Client, QuotationActivityLog, Invoice } from '../types';
+import type { Client, QuotationActivityLog, Invoice, ApprovalEntry } from '../types';
 
 const statusColors: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-700',
@@ -395,30 +395,63 @@ export default function QuotationDetail() {
             </div>
           </div>
 
+          {/* Dual Approval Progress */}
+          {q.status === 'pending_approval' && (q.approvals?.length ?? 0) > 0 && (
+            <div className="bg-white rounded-lg border border-gray-200 p-5">
+              <h3 className="text-sm font-medium text-gray-700 mb-2">Approval Progress</h3>
+              <p className="text-sm text-gray-500 mb-2">Requires approval from both William and Andy.</p>
+              <div className="flex flex-wrap gap-2">
+                {(q.approvals || []).map((a: ApprovalEntry, i: number) => {
+                  const name = typeof a.user === 'object' ? a.user.name : 'Unknown';
+                  return (
+                    <span key={i} className="inline-flex items-center gap-1 bg-green-50 text-green-700 px-2.5 py-1 rounded text-sm font-medium">
+                      <CheckCircle size={14} /> {name}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Approval Review */}
           {q.status === 'pending_approval' && isAdmin && (
             <div className="bg-white rounded-lg border border-gray-200 p-5 space-y-3">
               <h3 className="text-sm font-medium text-gray-700">Review Quotation</h3>
-              {showReject ? (
-                <div className="space-y-2">
-                  <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Reason for returning to draft (optional)..." rows={2} className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
-                  <div className="flex gap-2">
-                    <button onClick={handleReject} disabled={reject.isPending} className="bg-red-600 text-white px-4 py-1.5 rounded text-sm hover:bg-red-700 disabled:opacity-50">
-                      {reject.isPending ? 'Returning...' : 'Confirm Return'}
-                    </button>
-                    <button onClick={() => setShowReject(false)} className="text-sm text-gray-500 hover:underline">Cancel</button>
+              <p className="text-xs text-gray-500">Dual approval required -- both William and Andy must approve.</p>
+              {(() => {
+                const currentUserApproved = (q.approvals || []).some(
+                  (a: ApprovalEntry) => {
+                    const uid = typeof a.user === 'object' ? a.user._id : a.user;
+                    return uid === user?.id;
+                  },
+                );
+                return showReject ? (
+                  <div className="space-y-2">
+                    <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Reason for returning to draft (optional)..." rows={2} className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
+                    <div className="flex gap-2">
+                      <button onClick={handleReject} disabled={reject.isPending} className="bg-red-600 text-white px-4 py-1.5 rounded text-sm hover:bg-red-700 disabled:opacity-50">
+                        {reject.isPending ? 'Returning...' : 'Confirm Return'}
+                      </button>
+                      <button onClick={() => setShowReject(false)} className="text-sm text-gray-500 hover:underline">Cancel</button>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <button onClick={handleApprove} disabled={approve.isPending} className="bg-green-600 text-white px-4 py-1.5 rounded text-sm hover:bg-green-700 disabled:opacity-50">
-                    {approve.isPending ? 'Approving...' : 'Approve'}
-                  </button>
-                  <button onClick={() => setShowReject(true)} className="bg-red-600 text-white px-4 py-1.5 rounded text-sm hover:bg-red-700">
-                    Return to Draft
-                  </button>
-                </div>
-              )}
+                ) : (
+                  <div className="flex gap-2">
+                    {currentUserApproved ? (
+                      <span className="inline-flex items-center gap-1 text-green-600 text-sm font-medium px-4 py-1.5">
+                        <CheckCircle size={14} /> You have approved -- waiting for the other approver
+                      </span>
+                    ) : (
+                      <button onClick={handleApprove} disabled={approve.isPending} className="bg-green-600 text-white px-4 py-1.5 rounded text-sm hover:bg-green-700 disabled:opacity-50">
+                        {approve.isPending ? 'Approving...' : 'Approve'}
+                      </button>
+                    )}
+                    <button onClick={() => setShowReject(true)} className="bg-red-600 text-white px-4 py-1.5 rounded text-sm hover:bg-red-700">
+                      Return to Draft
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
           )}
 

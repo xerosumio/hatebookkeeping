@@ -13,6 +13,7 @@ import { getSettings, Settings } from '../models/Settings.js';
 import { env } from '../config/env.js';
 import { sendEmail, buildStatusChangeEmailHtml } from '../utils/email.js';
 import { resolveImageFields } from '../utils/resolveImageForPdf.js';
+import { getRequiredApproverIds, hasFullApproval } from '../utils/dualApproval.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -100,6 +101,7 @@ router.get('/:id', async (req, res, next) => {
       .populate('entity')
       .populate('createdBy', 'name email')
       .populate('approvedBy', 'name email')
+      .populate('approvals.user', 'name')
       .populate('activityLog.user', 'name');
     if (!quotation) throw new AppError(404, 'Quotation not found');
     res.json(quotation);
@@ -170,40 +172,67 @@ router.patch('/:id/approve', roleGuard('admin'), async (req: AuthRequest, res, n
       throw new AppError(400, 'Can only approve quotations pending approval');
     }
 
-    quotation.status = 'approved';
-    quotation.approvedBy = req.user!._id;
-    quotation.approvedAt = new Date();
+    // Check if this user already approved
+    const alreadyApproved = (quotation.approvals || []).some(
+      (a) => a.user.toString() === req.user!._id.toString(),
+    );
+    if (alreadyApproved) {
+      throw new AppError(400, 'You have already approved this quotation');
+    }
+
+    // Record this approval
+    if (!quotation.approvals) quotation.approvals = [];
+    quotation.approvals.push({ user: req.user!._id, at: new Date() });
     quotation.activityLog.push({
       action: 'approved',
       user: req.user!._id,
       timestamp: new Date(),
     } as any);
-    await quotation.save();
 
-    const settings = await Settings.findOne();
-    const companyName = settings?.companyName || 'HateBookkeeping';
-    const detailUrl = `${env.frontendUrl}/#/quotations/${quotation._id}`;
-    const creator = await User.findById(quotation.createdBy, 'email name');
-    const recipientEmails = [...new Set([
-      ...(creator?.email ? [creator.email] : []),
-      ...(quotation.notifiedEmails || []),
-    ])];
-
-    if (recipientEmails.length > 0) {
-      const html = buildStatusChangeEmailHtml({
-        companyName,
-        requestNumber: quotation.quotationNumber,
-        requestLabel: 'Quotation',
-        newStatus: 'approved',
-        actorName: req.user!.name,
-        detailUrl,
-      });
-      const primary = recipientEmails[0];
-      const cc = recipientEmails.slice(1);
-      sendEmail({ to: primary, cc: cc.length > 0 ? cc : undefined, subject: `Quotation ${quotation.quotationNumber} Approved`, html }).catch(() => {});
+    // Check if dual approval is now complete
+    const requiredIds = await getRequiredApproverIds();
+    if (hasFullApproval(quotation.approvals, requiredIds)) {
+      quotation.status = 'approved';
+      quotation.approvedBy = req.user!._id;
+      quotation.approvedAt = new Date();
     }
 
-    res.json(quotation);
+    await quotation.save();
+
+    // Send email notification only when fully approved
+    if (quotation.status === 'approved') {
+      const settings = await Settings.findOne();
+      const companyName = settings?.companyName || 'HateBookkeeping';
+      const detailUrl = `${env.frontendUrl}/#/quotations/${quotation._id}`;
+      const creator = await User.findById(quotation.createdBy, 'email name');
+      const recipientEmails = [...new Set([
+        ...(creator?.email ? [creator.email] : []),
+        ...(quotation.notifiedEmails || []),
+      ])];
+
+      if (recipientEmails.length > 0) {
+        const html = buildStatusChangeEmailHtml({
+          companyName,
+          requestNumber: quotation.quotationNumber,
+          requestLabel: 'Quotation',
+          newStatus: 'approved',
+          actorName: req.user!.name,
+          detailUrl,
+        });
+        const primary = recipientEmails[0];
+        const cc = recipientEmails.slice(1);
+        sendEmail({ to: primary, cc: cc.length > 0 ? cc : undefined, subject: `Quotation ${quotation.quotationNumber} Approved`, html }).catch(() => {});
+      }
+    }
+
+    const populated = await Quotation.findById(quotation._id)
+      .populate('client')
+      .populate('entity')
+      .populate('createdBy', 'name email')
+      .populate('approvedBy', 'name email')
+      .populate('approvals.user', 'name')
+      .populate('activityLog.user', 'name');
+    res.json(populated);
   } catch (error) {
     next(error);
   }
@@ -220,6 +249,7 @@ router.patch('/:id/reject', roleGuard('admin'), async (req: AuthRequest, res, ne
 
     quotation.status = 'draft';
     quotation.rejectionReason = reason;
+    quotation.approvals = [];
     quotation.activityLog.push({
       action: 'rejected',
       user: req.user!._id,
