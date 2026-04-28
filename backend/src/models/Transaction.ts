@@ -2,6 +2,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export interface ITransaction extends Document {
   date: Date;
+  accountingDate?: Date;
   type: 'income' | 'expense';
   category: string;
   description: string;
@@ -23,6 +24,7 @@ export interface ITransaction extends Document {
 const transactionSchema = new Schema<ITransaction>(
   {
     date: { type: Date, required: true },
+    accountingDate: { type: Date },
     type: { type: String, enum: ['income', 'expense'], required: true },
     category: { type: String, required: true },
     description: { type: String, required: true },
@@ -43,5 +45,6 @@ const transactionSchema = new Schema<ITransaction>(
 
 transactionSchema.index({ date: 1 });
 transactionSchema.index({ type: 1, date: 1 });
+transactionSchema.index({ accountingDate: 1 });
 
 export const Transaction = mongoose.model<ITransaction>('Transaction', transactionSchema);

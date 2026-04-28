@@ -10,6 +10,7 @@ router.use(authMiddleware);
 
 const transactionSchema = z.object({
   date: z.string(),
+  accountingDate: z.string().optional(),
   type: z.enum(['income', 'expense']),
   category: z.string().min(1),
   description: z.string().min(1),
@@ -63,6 +64,7 @@ router.post('/', roleGuard('admin', 'user'), async (req: AuthRequest, res, next)
     const transaction = await Transaction.create({
       ...data,
       date: new Date(data.date),
+      accountingDate: data.accountingDate ? new Date(data.accountingDate) : undefined,
       client: refOrUnset(data.client),
       payee: refOrUnset(data.payee),
       invoice: refOrUnset(data.invoice),
@@ -111,8 +113,16 @@ router.put('/:id', roleGuard('admin', 'user'), async (req, res, next) => {
     }
 
     const refFields = ['client', 'payee', 'invoice', 'receipt', 'paymentRequest'] as const;
-    const $set: Record<string, unknown> = { ...data, date: new Date(data.date) };
+    const $set: Record<string, unknown> = {
+      ...data,
+      date: new Date(data.date),
+      ...(data.accountingDate ? { accountingDate: new Date(data.accountingDate) } : {}),
+    };
     const $unset: Record<string, 1> = {};
+    if (!data.accountingDate) {
+      delete $set.accountingDate;
+      $unset.accountingDate = 1;
+    }
     for (const f of refFields) {
       if (data[f]) {
         $set[f] = data[f];

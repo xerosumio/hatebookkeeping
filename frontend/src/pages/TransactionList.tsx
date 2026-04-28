@@ -141,7 +141,14 @@ export default function TransactionList() {
             <tbody>
               {transactions.map((t) => (
                 <tr key={t._id} className="border-b border-gray-100 hover:bg-gray-50 group">
-                  <td className="px-4 py-3 text-gray-500">{new Date(t.date).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-gray-500">
+                    {new Date(t.date).toLocaleDateString()}
+                    {t.accountingDate && t.accountingDate.slice(0, 10) !== t.date.slice(0, 10) && (
+                      <div className="text-[10px] text-amber-600" title="Accounting date differs from payment date">
+                        Acct: {new Date(t.accountingDate).toLocaleDateString()}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                       t.type === 'income' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'

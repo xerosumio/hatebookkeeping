@@ -21,7 +21,8 @@ async function computeMonthlyFigures(year: number, month: number, entityId: stri
   const endDate = new Date(year, month, 1);
 
   const results = await Transaction.aggregate([
-    { $match: { date: { $gte: startDate, $lt: endDate }, entity: new mongoose.Types.ObjectId(entityId) } },
+    { $addFields: { _effectiveDate: { $ifNull: ['$accountingDate', '$date'] } } },
+    { $match: { _effectiveDate: { $gte: startDate, $lt: endDate }, entity: new mongoose.Types.ObjectId(entityId) } },
     { $group: { _id: '$type', total: { $sum: '$amount' } } },
   ]);
 

@@ -270,6 +270,7 @@ export interface Receipt {
 export interface Transaction {
   _id: string;
   date: string;
+  accountingDate?: string;
   type: 'income' | 'expense';
   category: string;
   description: string;

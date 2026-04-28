@@ -17,19 +17,16 @@ router.get('/cash-flow', async (req, res, next) => {
     const month = req.query.month !== undefined ? parseInt(req.query.month as string) : undefined;
     const entity = req.query.entity as string | undefined;
 
-    const matchStage: Record<string, unknown> = {
-      date: {
-        $gte: new Date(year, month !== undefined ? month : 0, 1),
-        $lte: new Date(year, month !== undefined ? month + 1 : 12, 0),
-      },
-    };
-    if (entity) matchStage.entity = new mongoose.Types.ObjectId(entity);
+    const rangeStart = new Date(year, month !== undefined ? month : 0, 1);
+    const rangeEnd = new Date(year, month !== undefined ? month + 1 : 12, 0);
+    const entityMatch = entity ? { entity: new mongoose.Types.ObjectId(entity) } : {};
 
     const result = await Transaction.aggregate([
-      { $match: matchStage },
+      { $addFields: { _effectiveDate: { $ifNull: ['$accountingDate', '$date'] } } },
+      { $match: { _effectiveDate: { $gte: rangeStart, $lte: rangeEnd }, ...entityMatch } },
       {
         $group: {
-          _id: { type: '$type', month: { $month: '$date' } },
+          _id: { type: '$type', month: { $month: '$_effectiveDate' } },
           total: { $sum: '$amount' },
           count: { $sum: 1 },
         },
@@ -154,7 +151,8 @@ router.get('/income-statement', async (req, res, next) => {
     const entity = req.query.entity as string | undefined;
 
     const result = await Transaction.aggregate([
-      { $match: { date: { $gte: startDate, $lte: endDate }, ...(entity ? { entity: new mongoose.Types.ObjectId(entity) } : {}) } },
+      { $addFields: { _effectiveDate: { $ifNull: ['$accountingDate', '$date'] } } },
+      { $match: { _effectiveDate: { $gte: startDate, $lte: endDate }, ...(entity ? { entity: new mongoose.Types.ObjectId(entity) } : {}) } },
       {
         $group: {
           _id: { type: '$type', category: '$category' },
@@ -205,15 +203,20 @@ router.get('/income-statement/transactions', async (req, res, next) => {
       : new Date();
     const entity = req.query.entity as string | undefined;
 
-    const transactions = await Transaction.find({
-      type: type as string,
-      category: category as string,
-      date: { $gte: startDate, $lte: endDate },
-      ...(entity ? { entity } : {}),
-    })
-      .populate('invoice', 'invoiceNumber')
-      .populate('paymentRequest', 'requestNumber')
-      .sort({ date: -1 });
+    const transactions = await Transaction.aggregate([
+      { $addFields: { _effectiveDate: { $ifNull: ['$accountingDate', '$date'] } } },
+      { $match: {
+        type: type as string,
+        category: category as string,
+        _effectiveDate: { $gte: startDate, $lte: endDate },
+        ...(entity ? { entity: new mongoose.Types.ObjectId(entity) } : {}),
+      }},
+      { $sort: { _effectiveDate: -1 } },
+    ]);
+    await Transaction.populate(transactions, [
+      { path: 'invoice', select: 'invoiceNumber' },
+      { path: 'paymentRequest', select: 'requestNumber' },
+    ]);
 
     res.json(transactions);
   } catch (error) {
@@ -343,7 +346,8 @@ router.get('/monthly-summary', async (req, res, next) => {
     const totalOpeningBalance = funds.reduce((s, f) => s + f.openingBalance, 0);
 
     const preMonthTxns = await Transaction.aggregate([
-      { $match: { date: { $lt: monthStart }, ...entityMatch } },
+      { $addFields: { _effectiveDate: { $ifNull: ['$accountingDate', '$date'] } } },
+      { $match: { _effectiveDate: { $lt: monthStart }, ...entityMatch } },
       { $group: { _id: '$type', total: { $sum: '$amount' } } },
     ]);
     let preIncome = 0, preExpense = 0;
@@ -354,7 +358,8 @@ router.get('/monthly-summary', async (req, res, next) => {
     const openingCash = totalOpeningBalance + preIncome - preExpense;
 
     const monthTxns = await Transaction.aggregate([
-      { $match: { date: { $gte: monthStart, $lte: monthEnd }, ...entityMatch } },
+      { $addFields: { _effectiveDate: { $ifNull: ['$accountingDate', '$date'] } } },
+      { $match: { _effectiveDate: { $gte: monthStart, $lte: monthEnd }, ...entityMatch } },
       { $group: { _id: '$type', total: { $sum: '$amount' }, count: { $sum: 1 } } },
     ]);
     let monthIncome = 0, monthExpense = 0;

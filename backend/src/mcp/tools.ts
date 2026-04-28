@@ -239,7 +239,7 @@ export function registerTools(server: McpServer, api: ApiRequestFn = defaultApiR
   });
 
   server.tool('create_transaction', 'Create a manual transaction', {
-    date: ReqStr, type: ReqStr, category: ReqStr, amount: z.number(),
+    date: ReqStr, accountingDate: OptStr, type: ReqStr, category: ReqStr, amount: z.number(),
     description: ReqStr, entity: OptStr, bankAccount: OptStr,
     fund: OptStr, reference: OptStr,
   }, async (args) => {
@@ -248,7 +248,7 @@ export function registerTools(server: McpServer, api: ApiRequestFn = defaultApiR
   });
 
   server.tool('update_transaction', 'Update a transaction', {
-    id: ReqStr, date: OptStr, type: OptStr, category: OptStr,
+    id: ReqStr, date: OptStr, accountingDate: OptStr, type: OptStr, category: OptStr,
     amount: OptNum, description: OptStr, entity: OptStr,
     bankAccount: OptStr, fund: OptStr, reference: OptStr,
   }, async ({ id, ...body }) => {

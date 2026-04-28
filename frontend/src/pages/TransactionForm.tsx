@@ -23,6 +23,7 @@ export default function TransactionForm({ onDone, existing }: Props) {
 
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
+    accountingDate: '',
     type: 'expense' as 'income' | 'expense',
     category: '',
     description: '',
@@ -53,6 +54,7 @@ export default function TransactionForm({ onDone, existing }: Props) {
       }
       setForm({
         date: existing.date.slice(0, 10),
+        accountingDate: existing.accountingDate ? existing.accountingDate.slice(0, 10) : '',
         type: existing.type,
         category: existing.category,
         description: existing.description,
@@ -77,6 +79,7 @@ export default function TransactionForm({ onDone, existing }: Props) {
     const payload = {
       ...form,
       amount: decimalToCents(Number(form.amount)),
+      accountingDate: form.accountingDate || undefined,
       entity: form.entity || undefined,
       client: form.client || undefined,
       payee: form.payee || undefined,
@@ -97,7 +100,7 @@ export default function TransactionForm({ onDone, existing }: Props) {
     <form onSubmit={handleSubmit} className="space-y-3">
       <h3 className="text-sm font-semibold text-gray-700">{isEdit ? 'Edit Transaction' : 'New Transaction'}</h3>
       {error && <div className="bg-red-50 text-red-600 text-sm p-2 rounded">{error}</div>}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-5 gap-3">
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">Date</label>
           <input
@@ -106,6 +109,16 @@ export default function TransactionForm({ onDone, existing }: Props) {
             onChange={(e) => setForm({ ...form, date: e.target.value })}
             required
             className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Accounting Date</label>
+          <input
+            type="date"
+            value={form.accountingDate}
+            onChange={(e) => setForm({ ...form, accountingDate: e.target.value })}
+            className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm"
+            title="Override the reporting period. Leave blank to use the transaction date."
           />
         </div>
         <div>
