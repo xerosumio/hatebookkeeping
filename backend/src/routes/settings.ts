@@ -31,6 +31,7 @@ const updateSchema = z.object({
   })).optional(),
   companyChopUrl: z.string().optional(),
   signatureUrl: z.string().optional(),
+  recurringAlertMethod: z.enum(['email', 'in_app', 'both']).optional(),
 });
 
 router.get('/', async (_req, res, next) => {

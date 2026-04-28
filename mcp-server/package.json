@@ -4,6 +4,12 @@
   "description": "MCP server for HateBookkeeping — exposes all bookkeeping endpoints to Claude/AI agents",
   "type": "module",
   "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./tools": "./dist/tools.js",
+    "./client": "./dist/client.js",
+    "./handler": "./dist/handler.js"
+  },
   "bin": {
     "hatebookkeeping-mcp": "dist/index.js"
   },

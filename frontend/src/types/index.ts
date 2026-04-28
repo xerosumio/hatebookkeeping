@@ -369,6 +369,20 @@ export interface Settings {
   chartOfAccounts: ChartOfAccount[];
   companyChopUrl: string;
   signatureUrl: string;
+  recurringAlertMethod?: 'email' | 'in_app' | 'both';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AppNotification {
+  _id: string;
+  recipient: string;
+  title: string;
+  message: string;
+  type: 'recurring_due';
+  link: string;
+  read: boolean;
+  dedupKey?: string;
   createdAt: string;
   updatedAt: string;
 }

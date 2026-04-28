@@ -17,6 +17,7 @@ export default function SettingsPage() {
 
   const [form, setForm] = useState({
     chartOfAccounts: [] as ChartOfAccount[],
+    recurringAlertMethod: 'both' as 'email' | 'in_app' | 'both',
   });
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
@@ -25,6 +26,7 @@ export default function SettingsPage() {
     if (settings) {
       setForm({
         chartOfAccounts: settings.chartOfAccounts || [],
+        recurringAlertMethod: settings.recurringAlertMethod || 'both',
       });
     }
   }, [settings]);
@@ -49,6 +51,23 @@ export default function SettingsPage() {
       <h1 className="text-2xl font-bold mb-6">Settings</h1>
 
       <EntityManager />
+
+      <hr className="my-8 border-gray-200" />
+
+      <h2 className="text-lg font-semibold mb-4">Recurring Alerts</h2>
+      <p className="text-xs text-gray-400 mb-3">Choose how you want to be notified when recurring items are approaching their due date.</p>
+      <div className="mb-6">
+        <label className="block text-xs text-gray-500 mb-1">Alert Method</label>
+        <select
+          value={form.recurringAlertMethod}
+          onChange={(e) => setForm({ ...form, recurringAlertMethod: e.target.value as 'email' | 'in_app' | 'both' })}
+          className="w-60 border border-gray-300 rounded px-2 py-1.5 text-sm"
+        >
+          <option value="both">Email + In-App</option>
+          <option value="email">Email Only</option>
+          <option value="in_app">In-App Only</option>
+        </select>
+      </div>
 
       <hr className="my-8 border-gray-200" />
 
@@ -154,7 +173,7 @@ export default function SettingsPage() {
             disabled={updateSettings.isPending}
             className="bg-blue-600 text-white px-6 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
           >
-            {updateSettings.isPending ? 'Saving...' : 'Save Chart of Accounts'}
+            {updateSettings.isPending ? 'Saving...' : 'Save Settings'}
           </button>
         </div>
       </form>

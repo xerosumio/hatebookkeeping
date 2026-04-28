@@ -4,7 +4,7 @@ import type {
   Client, Quotation, Invoice, Receipt, Transaction, Payee, PaymentRequest, RecurringItem,
   Settings, CashFlowReport, AccountsReceivableReport, IncomeStatementReport, AccountsPayableReport,
   Reimbursement, Entity, Shareholder, ShareLiabilityEntry, EquityTransaction, MonthlyClose, Fund, FundTransfer,
-  FundLedgerResponse,
+  FundLedgerResponse, AppNotification,
 } from '../types';
 
 // Users (admin-only)
@@ -958,6 +958,42 @@ export function useDismissPending() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pending-bank-txns'] });
       qc.invalidateQueries({ queryKey: ['pending-bank-count'] });
+    },
+  });
+}
+
+// Notifications
+export function useNotifications() {
+  return useQuery({
+    queryKey: ['notifications'],
+    queryFn: () => api.get<AppNotification[]>('/notifications').then((r) => r.data),
+  });
+}
+
+export function useUnreadNotificationCount() {
+  return useQuery({
+    queryKey: ['notifications', 'unread-count'],
+    queryFn: () => api.get<{ count: number }>('/notifications/unread-count').then((r) => r.data.count),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useMarkNotificationRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.patch(`/notifications/${id}/read`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+}
+
+export function useMarkAllNotificationsRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.patch('/notifications/read-all').then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notifications'] });
     },
   });
 }

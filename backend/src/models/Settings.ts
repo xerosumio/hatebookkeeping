@@ -30,6 +30,7 @@ export interface ISettings extends Document {
   companyChopUrl: string;
   signatureUrl: string;
   defaultEntityId: mongoose.Types.ObjectId;
+  recurringAlertMethod: 'email' | 'in_app' | 'both';
 }
 
 const settingsSchema = new Schema<ISettings>(
@@ -65,6 +66,11 @@ const settingsSchema = new Schema<ISettings>(
     companyChopUrl: { type: String, default: '' },
     signatureUrl: { type: String, default: '' },
     defaultEntityId: { type: Schema.Types.ObjectId, ref: 'Entity' },
+    recurringAlertMethod: {
+      type: String,
+      enum: ['email', 'in_app', 'both'],
+      default: 'both',
+    },
   },
   { timestamps: true },
 );

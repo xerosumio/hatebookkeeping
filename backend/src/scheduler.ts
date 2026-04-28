@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { RecurringItem } from './models/RecurringItem.js';
 import { User } from './models/User.js';
 import { getSettings } from './models/Settings.js';
+import { Notification } from './models/Notification.js';
 import { sendEmail, buildRecurringReminderEmailHtml } from './utils/email.js';
 import { env } from './config/env.js';
 import { formatMoney } from './utils/pdf/formatMoney.js';
@@ -44,13 +45,17 @@ async function runAlertCheck() {
 
     const settings = await getSettings();
     const companyName = settings.companyName || 'HateBookkeeping';
+    const alertMethod = settings.recurringAlertMethod || 'both';
     const admins = await User.find({ role: 'admin', active: true }).select('email name');
     const adminEmails = admins.map((a) => a.email).filter(Boolean);
 
-    if (adminEmails.length === 0) {
-      console.log('[scheduler] No admin emails configured, skipping alerts');
+    if (adminEmails.length === 0 && admins.length === 0) {
+      console.log('[scheduler] No admins configured, skipping alerts');
       return;
     }
+
+    const sendEmailAlerts = alertMethod === 'email' || alertMethod === 'both';
+    const sendInAppAlerts = alertMethod === 'in_app' || alertMethod === 'both';
 
     let alertsSent = 0;
 
@@ -77,34 +82,62 @@ async function runAlertCheck() {
         ? `${env.frontendUrl}/#/${isIncome ? 'invoices' : 'payment-requests'}/${refId}`
         : `${env.frontendUrl}/#/recurring`;
 
-      const html = buildRecurringReminderEmailHtml({
-        companyName,
-        itemName: item.name,
-        type: item.type,
-        invoiceNumber: undefined,
-        requestNumber: undefined,
-        clientName: isIncome ? clientName : undefined,
-        payeeName: !isIncome ? payeeName : undefined,
-        amount: formatMoney(item.amount),
-        frequency: item.frequency,
-        detailUrl,
-        invoiceId: isIncome && item.lastGeneratedInvoice ? String(item.lastGeneratedInvoice) : undefined,
-        isAlert: true,
-        dueDate: nextDue.toLocaleDateString('en-HK', { year: 'numeric', month: 'short', day: 'numeric' }),
-      });
+      const dueDateStr = nextDue.toLocaleDateString('en-HK', { year: 'numeric', month: 'short', day: 'numeric' });
 
-      const subject = isIncome
-        ? `Reminder: ${item.name} — Invoice due ${nextDue.toLocaleDateString()}`
-        : `Reminder: ${item.name} — Payment due ${nextDue.toLocaleDateString()}`;
+      if (sendEmailAlerts && adminEmails.length > 0) {
+        const html = buildRecurringReminderEmailHtml({
+          companyName,
+          itemName: item.name,
+          type: item.type,
+          invoiceNumber: undefined,
+          requestNumber: undefined,
+          clientName: isIncome ? clientName : undefined,
+          payeeName: !isIncome ? payeeName : undefined,
+          amount: formatMoney(item.amount),
+          frequency: item.frequency,
+          detailUrl,
+          invoiceId: isIncome && item.lastGeneratedInvoice ? String(item.lastGeneratedInvoice) : undefined,
+          isAlert: true,
+          dueDate: dueDateStr,
+        });
 
-      const primary = adminEmails[0];
-      const cc = adminEmails.slice(1);
-      await sendEmail({
-        to: primary,
-        cc: cc.length > 0 ? cc : undefined,
-        subject,
-        html,
-      }).catch(() => {});
+        const subject = isIncome
+          ? `Reminder: ${item.name} — Invoice due ${nextDue.toLocaleDateString()}`
+          : `Reminder: ${item.name} — Payment due ${nextDue.toLocaleDateString()}`;
+
+        const primary = adminEmails[0];
+        const cc = adminEmails.slice(1);
+        await sendEmail({
+          to: primary,
+          cc: cc.length > 0 ? cc : undefined,
+          subject,
+          html,
+        }).catch(() => {});
+      }
+
+      if (sendInAppAlerts) {
+        const dedupPrefix = `recurring:${item._id}:${pk}`;
+        const title = isIncome
+          ? `${item.name} — Invoice due ${dueDateStr}`
+          : `${item.name} — Payment due ${dueDateStr}`;
+        const counterparty = isIncome ? clientName : payeeName;
+        const message = `${item.frequency} ${item.type} "${item.name}"${counterparty ? ` (${counterparty})` : ''} of ${formatMoney(item.amount)} is due ${dueDateStr}. Go to Recurring to generate.`;
+
+        for (const admin of admins) {
+          const dedupKey = `${dedupPrefix}:${admin._id}`;
+          const exists = await Notification.exists({ dedupKey });
+          if (!exists) {
+            await Notification.create({
+              recipient: admin._id,
+              title,
+              message,
+              type: 'recurring_due',
+              link: '/recurring',
+              dedupKey,
+            });
+          }
+        }
+      }
 
       item.history.push({
         date: now,

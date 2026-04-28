@@ -23,6 +23,8 @@ import shareholderRoutes from './routes/shareholders.js';
 import monthlyCloseRoutes from './routes/monthlyClose.js';
 import fundsRouter from './routes/funds.js';
 import airwallexRoutes from './routes/airwallex.js';
+import notificationRoutes from './routes/notifications.js';
+import mcpRoutes from './routes/mcp.js';
 import { startScheduler } from './scheduler.js';
 
 const app = express();
@@ -50,6 +52,8 @@ app.use('/api/shareholders', shareholderRoutes);
 app.use('/api/monthly-close', monthlyCloseRoutes);
 app.use('/api/funds', fundsRouter);
 app.use('/api/airwallex', airwallexRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/mcp', mcpRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });

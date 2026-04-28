@@ -1,5 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import NotificationBell from './NotificationBell';
 import {
   LayoutDashboard,
   Users,
@@ -133,8 +134,13 @@ export default function AppShell() {
           </div>
         </div>
       </aside>
-      <main className="flex-1 overflow-y-auto p-6">
-        <Outlet />
+      <main className="flex-1 overflow-y-auto flex flex-col">
+        <div className="flex items-center justify-end px-6 pt-4 pb-0">
+          {user?.role === 'admin' && <NotificationBell />}
+        </div>
+        <div className="flex-1 px-6 pb-6 pt-2">
+          <Outlet />
+        </div>
       </main>
     </div>
   );

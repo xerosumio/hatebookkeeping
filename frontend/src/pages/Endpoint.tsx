@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useApiTokens, useGenerateToken, useRevokeToken } from '../api/hooks';
-import { Plug, Copy, Check, Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, Key } from 'lucide-react';
+import { Plug, Copy, Check, Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, Key, Globe } from 'lucide-react';
 
 const TOOL_GROUPS = [
   { group: 'Entities', tools: ['list_entities', 'get_entity', 'create_entity', 'update_entity'] },
@@ -227,6 +227,48 @@ export default function Endpoint() {
         </p>
         <div className="bg-gray-900 rounded-lg p-4 max-h-80 overflow-y-auto">
           <pre className="text-sm text-green-400 font-mono whitespace-pre-wrap">{installPrompt}</pre>
+        </div>
+      </div>
+
+      {/* Claude Remote Connector */}
+      <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <Globe size={18} className="text-purple-600" />
+          <h2 className="text-lg font-semibold">Claude Remote Connector</h2>
+        </div>
+        <p className="text-xs text-gray-500 mb-4">
+          Connect Claude directly to your bookkeeping system using MCP Streamable HTTP. No local setup required.
+        </p>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Remote MCP Server URL</label>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 bg-gray-50 border border-gray-200 rounded px-3 py-2 text-sm font-mono text-gray-800">
+                {`${window.location.origin}/api/mcp`}
+              </code>
+              <CopyButton text={`${window.location.origin}/api/mcp`} label="Copy" />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Authentication</label>
+            <p className="text-xs text-gray-500 mb-2">
+              In Claude's "Add custom connector" dialog, paste the URL above and enter your API token as the <strong>OAuth Client Secret</strong>. Leave Client ID empty.
+            </p>
+          </div>
+
+          <div className="bg-purple-50 border border-purple-100 rounded-lg p-4">
+            <h3 className="text-sm font-medium text-purple-900 mb-2">Setup Steps</h3>
+            <ol className="text-xs text-purple-800 space-y-1.5 list-decimal list-inside">
+              <li>Generate an API token above (if you haven't already)</li>
+              <li>Open Claude and go to <strong>Settings &rarr; Connectors &rarr; Add custom connector</strong></li>
+              <li>Enter a name (e.g. "HateBookkeeping")</li>
+              <li>Paste the Remote MCP Server URL shown above</li>
+              <li>Expand "Advanced settings" and paste your API token as the OAuth Client Secret</li>
+              <li>Click "Add" — Claude now has access to all {totalTools} bookkeeping tools</li>
+            </ol>
+          </div>
         </div>
       </div>
 
