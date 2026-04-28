@@ -24,7 +24,7 @@ import monthlyCloseRoutes from './routes/monthlyClose.js';
 import fundsRouter from './routes/funds.js';
 import airwallexRoutes from './routes/airwallex.js';
 import notificationRoutes from './routes/notifications.js';
-import mcpRoutes from './routes/mcp.js';
+import mcpRoutes, { buildOAuthMetadata } from './routes/mcp.js';
 import { startScheduler } from './scheduler.js';
 
 const app = express();
@@ -57,6 +57,11 @@ app.use('/api/mcp', mcpRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
+});
+
+app.get('/.well-known/oauth-authorization-server', (req, res) => {
+  const base = `${req.protocol}://${req.get('host')}`;
+  res.json(buildOAuthMetadata(base));
 });
 
 app.use(errorHandler);

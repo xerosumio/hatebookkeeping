@@ -212,9 +212,19 @@ export default function Endpoint() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Authentication</label>
-            <p className="text-xs text-gray-500 mb-2">
-              In Claude's "Add custom connector" dialog, paste the URL above and enter your API token as the <strong>OAuth Client Secret</strong>. Leave Client ID empty.
+            <label className="block text-xs font-medium text-gray-600 mb-1">OAuth Client ID</label>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 bg-gray-50 border border-gray-200 rounded px-3 py-2 text-sm font-mono text-gray-800">
+                hatebookkeeping
+              </code>
+              <CopyButton text="hatebookkeeping" label="Copy" />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">OAuth Client Secret</label>
+            <p className="text-xs text-gray-500">
+              Use your API token (generated above) as the Client Secret.
             </p>
           </div>
 
@@ -225,7 +235,7 @@ export default function Endpoint() {
               <li>Open Claude and go to <strong>Settings &rarr; Connectors &rarr; Add custom connector</strong></li>
               <li>Enter a name (e.g. "HateBookkeeping")</li>
               <li>Paste the Remote MCP Server URL shown above</li>
-              <li>Expand "Advanced settings" and paste your API token as the OAuth Client Secret</li>
+              <li>Expand "Advanced settings", enter <strong>hatebookkeeping</strong> as the Client ID and paste your API token as the Client Secret</li>
               <li>Click "Add" — Claude now has access to all {totalTools} bookkeeping tools</li>
             </ol>
           </div>
