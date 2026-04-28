@@ -24,30 +24,6 @@ const TOOL_GROUPS = [
 
 const totalTools = TOOL_GROUPS.reduce((s, g) => s + g.tools.length, 0);
 
-function buildInstallPrompt(token?: string) {
-  const tokenValue = token || '<YOUR_TOKEN>';
-  return `You have access to a bookkeeping system called HateBookkeeping via MCP.
-
-To set it up, add this to your MCP configuration (claude_desktop_config.json or .cursor/mcp.json):
-
-{
-  "mcpServers": {
-    "hatebookkeeping": {
-      "command": "node",
-      "args": ["<path-to-project>/mcp-server/dist/index.js"],
-      "env": {
-        "BOOKKEEPING_API_URL": "http://localhost:4000/api",
-        "BOOKKEEPING_API_TOKEN": "${tokenValue}"
-      }
-    }
-  }
-}
-
-Before using, build the MCP server: cd mcp-server && npm install && npm run build
-
-This gives you ${totalTools} tools across ${TOOL_GROUPS.length} categories to manage clients, quotations, invoices, receipts, transactions, payees, expense approvals, reimbursements, recurring items, shareholders, monthly close, funds, reports, users, settings, and Airwallex bank sync. All actions are attributed to the token owner.`;
-}
-
 function CopyButton({ text, label }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   function handleCopy() {
@@ -94,8 +70,6 @@ export default function Endpoint() {
       revokeMutation.mutate(id);
     }
   }
-
-  const installPrompt = buildInstallPrompt(newlyCreatedToken || undefined);
 
   return (
     <div className="max-w-4xl">
@@ -214,20 +188,6 @@ export default function Endpoint() {
             </tbody>
           </table>
         )}
-      </div>
-
-      {/* Install Prompt */}
-      <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold">Install Prompt</h2>
-          <CopyButton text={installPrompt} label="Copy Prompt" />
-        </div>
-        <p className="text-xs text-gray-500 mb-3">
-          Copy this and paste it to Claude. It will know how to configure and connect to your system.
-        </p>
-        <div className="bg-gray-900 rounded-lg p-4 max-h-80 overflow-y-auto">
-          <pre className="text-sm text-green-400 font-mono whitespace-pre-wrap">{installPrompt}</pre>
-        </div>
       </div>
 
       {/* Claude Remote Connector */}
