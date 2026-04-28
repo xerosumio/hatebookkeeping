@@ -20,9 +20,10 @@ async function computeMonthlyFigures(year: number, month: number, entityId: stri
   const startDate = new Date(year, month - 1, 1);
   const endDate = new Date(year, month, 1);
 
+  const NON_OPERATIONAL_CATEGORIES = ['Currency Conversion'];
   const results = await Transaction.aggregate([
     { $addFields: { _effectiveDate: { $ifNull: ['$accountingDate', '$date'] } } },
-    { $match: { _effectiveDate: { $gte: startDate, $lt: endDate }, entity: new mongoose.Types.ObjectId(entityId) } },
+    { $match: { _effectiveDate: { $gte: startDate, $lt: endDate }, category: { $nin: NON_OPERATIONAL_CATEGORIES }, entity: new mongoose.Types.ObjectId(entityId) } },
     { $group: { _id: '$type', total: { $sum: '$amount' } } },
   ]);
 

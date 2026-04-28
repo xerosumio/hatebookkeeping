@@ -10,6 +10,9 @@ import { authMiddleware } from '../middleware/auth.js';
 const router = Router();
 router.use(authMiddleware);
 
+const NON_OPERATIONAL_CATEGORIES = ['Currency Conversion'];
+const excludeNonOperational = { category: { $nin: NON_OPERATIONAL_CATEGORIES } };
+
 // Monthly cash flow
 router.get('/cash-flow', async (req, res, next) => {
   try {
@@ -23,7 +26,7 @@ router.get('/cash-flow', async (req, res, next) => {
 
     const result = await Transaction.aggregate([
       { $addFields: { _effectiveDate: { $ifNull: ['$accountingDate', '$date'] } } },
-      { $match: { _effectiveDate: { $gte: rangeStart, $lte: rangeEnd }, ...entityMatch } },
+      { $match: { _effectiveDate: { $gte: rangeStart, $lte: rangeEnd }, ...excludeNonOperational, ...entityMatch } },
       {
         $group: {
           _id: { type: '$type', month: { $month: '$_effectiveDate' } },
@@ -152,7 +155,7 @@ router.get('/income-statement', async (req, res, next) => {
 
     const result = await Transaction.aggregate([
       { $addFields: { _effectiveDate: { $ifNull: ['$accountingDate', '$date'] } } },
-      { $match: { _effectiveDate: { $gte: startDate, $lte: endDate }, ...(entity ? { entity: new mongoose.Types.ObjectId(entity) } : {}) } },
+      { $match: { _effectiveDate: { $gte: startDate, $lte: endDate }, ...excludeNonOperational, ...(entity ? { entity: new mongoose.Types.ObjectId(entity) } : {}) } },
       {
         $group: {
           _id: { type: '$type', category: '$category' },
@@ -347,7 +350,7 @@ router.get('/monthly-summary', async (req, res, next) => {
 
     const preMonthTxns = await Transaction.aggregate([
       { $addFields: { _effectiveDate: { $ifNull: ['$accountingDate', '$date'] } } },
-      { $match: { _effectiveDate: { $lt: monthStart }, ...entityMatch } },
+      { $match: { _effectiveDate: { $lt: monthStart }, ...excludeNonOperational, ...entityMatch } },
       { $group: { _id: '$type', total: { $sum: '$amount' } } },
     ]);
     let preIncome = 0, preExpense = 0;
@@ -359,7 +362,7 @@ router.get('/monthly-summary', async (req, res, next) => {
 
     const monthTxns = await Transaction.aggregate([
       { $addFields: { _effectiveDate: { $ifNull: ['$accountingDate', '$date'] } } },
-      { $match: { _effectiveDate: { $gte: monthStart, $lte: monthEnd }, ...entityMatch } },
+      { $match: { _effectiveDate: { $gte: monthStart, $lte: monthEnd }, ...excludeNonOperational, ...entityMatch } },
       { $group: { _id: '$type', total: { $sum: '$amount' }, count: { $sum: 1 } } },
     ]);
     let monthIncome = 0, monthExpense = 0;
