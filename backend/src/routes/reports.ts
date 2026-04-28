@@ -10,7 +10,7 @@ import { authMiddleware } from '../middleware/auth.js';
 const router = Router();
 router.use(authMiddleware);
 
-const NON_OPERATIONAL_CATEGORIES = ['Currency Conversion'];
+const NON_OPERATIONAL_CATEGORIES = ['Currency Conversion', 'Intercompany Transfer'];
 const excludeNonOperational = { category: { $nin: NON_OPERATIONAL_CATEGORIES } };
 
 // Monthly cash flow
