@@ -2,9 +2,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { apiRequest as defaultApiRequest, type ApiRequestFn } from './client.js';
 
-const OptStr = z.string().optional();
+const OptStr = z.string().nullish();
 const ReqStr = z.string();
-const OptNum = z.number().optional();
+const OptNum = z.number().nullish();
 
 export function registerTools(server: McpServer, api: ApiRequestFn = defaultApiRequest) {
 

@@ -2,7 +2,7 @@ export type ApiRequestFn = (
   method: string,
   path: string,
   body?: unknown,
-  query?: Record<string, string | undefined>,
+  query?: Record<string, string | null | undefined>,
 ) => Promise<unknown>;
 
 export function createApiRequest(token: string, baseUrl = 'http://localhost:4000/api'): ApiRequestFn {
@@ -14,7 +14,7 @@ export function createApiRequest(token: string, baseUrl = 'http://localhost:4000
     const url = new URL(`${baseUrl}${path}`);
     if (query) {
       for (const [k, v] of Object.entries(query)) {
-        if (v !== undefined && v !== '') url.searchParams.set(k, v);
+        if (v != null && v !== '') url.searchParams.set(k, v);
       }
     }
 
