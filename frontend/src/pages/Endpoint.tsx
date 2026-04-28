@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { useApiTokens, useGenerateToken, useRevokeToken } from '../api/hooks';
 import { Plug, Copy, Check, Plus, Trash2, AlertTriangle, ChevronDown, ChevronRight, Key, Globe } from 'lucide-react';
 
+const apiBase = import.meta.env.VITE_API_URL || window.location.origin;
+const mcpUrl = `${apiBase}/api/mcp`;
+
 const TOOL_GROUPS = [
   { group: 'Entities', tools: ['list_entities', 'get_entity', 'create_entity', 'update_entity'] },
   { group: 'Clients', tools: ['list_clients', 'get_client', 'create_client', 'update_client', 'delete_client'] },
@@ -205,9 +208,9 @@ export default function Endpoint() {
             <label className="block text-xs font-medium text-gray-600 mb-1">Remote MCP Server URL</label>
             <div className="flex items-center gap-2">
               <code className="flex-1 bg-gray-50 border border-gray-200 rounded px-3 py-2 text-sm font-mono text-gray-800">
-                {`${window.location.origin}/api/mcp`}
+                {mcpUrl}
               </code>
-              <CopyButton text={`${window.location.origin}/api/mcp`} label="Copy" />
+              <CopyButton text={mcpUrl} label="Copy" />
             </div>
           </div>
 
