@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createMcpHttpHandler } from 'hatebookkeeping-mcp/handler';
+import { createMcpHttpHandler } from '../mcp/handler.js';
 import { env } from '../config/env.js';
 
 const router = Router();
