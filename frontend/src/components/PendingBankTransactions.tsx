@@ -27,16 +27,21 @@ interface PendingItem {
 
 function MatchModal({ item, onClose }: { item: PendingItem; onClose: () => void }) {
   const matchMutation = useMatchPending();
-  const { data: txns, isLoading } = useTransactions({ reconciled: 'false', type: item.type });
+  const { data: unreconciledTxns, isLoading: loadingUnreconciled } = useTransactions({ reconciled: 'false', type: item.type });
+  const { data: reconciledTxns, isLoading: loadingReconciled } = useTransactions({ reconciled: 'true', type: item.type });
 
-  const candidates = (txns || [])
+  const isLoading = loadingUnreconciled || loadingReconciled;
+  const allTxns = [...(unreconciledTxns || []), ...(reconciledTxns || [])];
+
+  const candidates = allTxns
     .filter((t) => {
       return t.bankAccount === FUND_NAMES[item.entity] || !t.bankAccount;
     })
     .sort((a, b) => {
       const aMatch = a.amount === item.amount ? 0 : 1;
       const bMatch = b.amount === item.amount ? 0 : 1;
-      return aMatch - bMatch;
+      if (aMatch !== bMatch) return aMatch - bMatch;
+      return new Date(b.date).getTime() - new Date(a.date).getTime();
     });
 
   function handleMatch(txnId: string) {
@@ -66,29 +71,37 @@ function MatchModal({ item, onClose }: { item: PendingItem; onClose: () => void 
               <tr>
                 <th className="text-left px-3 py-2 font-medium text-gray-600">Date</th>
                 <th className="text-left px-3 py-2 font-medium text-gray-600">Description</th>
+                <th className="text-left px-3 py-2 font-medium text-gray-600">Payee</th>
                 <th className="text-right px-3 py-2 font-medium text-gray-600">Amount</th>
+                <th className="text-left px-3 py-2 font-medium text-gray-600">Link</th>
                 <th className="px-3 py-2 w-20"></th>
               </tr>
             </thead>
             <tbody>
-              {candidates.map((t) => (
-                <tr key={t._id} className="border-b border-gray-100 hover:bg-blue-50">
-                  <td className="px-3 py-2 text-gray-500">{new Date(t.date).toLocaleDateString()}</td>
-                  <td className="px-3 py-2">{t.description}</td>
-                  <td className={`px-3 py-2 text-right font-mono ${t.amount === item.amount ? 'text-green-600 font-medium' : ''}`}>
-                    {formatMoney(t.amount)}
-                  </td>
-                  <td className="px-3 py-2">
-                    <button
-                      onClick={() => handleMatch(t._id)}
-                      disabled={matchMutation.isPending}
-                      className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      Link
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {candidates.map((t) => {
+                const payeeName = t.payee && typeof t.payee === 'object' ? t.payee.name : '';
+                const prNum = t.paymentRequest && typeof t.paymentRequest === 'object' ? t.paymentRequest.requestNumber : '';
+                return (
+                  <tr key={t._id} className={`border-b border-gray-100 hover:bg-blue-50 ${t.amount === item.amount ? 'bg-green-50' : ''}`}>
+                    <td className="px-3 py-2 text-gray-500">{new Date(t.date).toLocaleDateString()}</td>
+                    <td className="px-3 py-2">{t.description}</td>
+                    <td className="px-3 py-2 text-gray-500 text-xs">{payeeName}</td>
+                    <td className={`px-3 py-2 text-right font-mono ${t.amount === item.amount ? 'text-green-600 font-medium' : ''}`}>
+                      {formatMoney(t.amount)}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-gray-400">{prNum}</td>
+                    <td className="px-3 py-2">
+                      <button
+                        onClick={() => handleMatch(t._id)}
+                        disabled={matchMutation.isPending}
+                        className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        Link
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
