@@ -11,6 +11,7 @@ export interface IReimbursementItem {
 
 export interface IReimbursement extends Document {
   reimbursementNumber: string;
+  entity?: mongoose.Types.ObjectId;
   title: string;
   submittedBy: mongoose.Types.ObjectId;
   items: IReimbursementItem[];
@@ -36,6 +37,7 @@ const reimbursementItemSchema = new Schema<IReimbursementItem>(
 const reimbursementSchema = new Schema<IReimbursement>(
   {
     reimbursementNumber: { type: String, required: true, unique: true },
+    entity: { type: Schema.Types.ObjectId, ref: 'Entity' },
     title: { type: String, required: true },
     submittedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     items: [reimbursementItemSchema],

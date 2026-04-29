@@ -26,6 +26,7 @@ const itemSchema = z.object({
 
 const createSchema = z.object({
   title: z.string().min(1),
+  entity: z.string().optional(),
   onBehalfOfUserId: z.string().optional(),
   items: z.array(itemSchema).min(1),
   notes: z.string().optional().default(''),
@@ -33,6 +34,7 @@ const createSchema = z.object({
 
 const updateSchema = z.object({
   title: z.string().min(1).optional(),
+  entity: z.string().optional(),
   items: z.array(itemSchema).min(1).optional(),
   notes: z.string().optional(),
 });
@@ -63,6 +65,7 @@ router.get('/', async (req: AuthRequest, res, next) => {
       filter.submittedBy = req.user!._id;
     }
     const reimbursements = await Reimbursement.find(filter)
+      .populate('entity', 'code name')
       .populate('submittedBy', 'name email bankName bankAccountNumber fpsPhone')
       .populate('paymentRequest', 'requestNumber status')
       .sort({ createdAt: -1 });
@@ -75,6 +78,7 @@ router.get('/', async (req: AuthRequest, res, next) => {
 router.get('/:id', async (req, res, next) => {
   try {
     const reimbursement = await Reimbursement.findById(req.params.id)
+      .populate('entity', 'code name')
       .populate('submittedBy', 'name email bankName bankAccountNumber fpsPhone')
       .populate({
         path: 'paymentRequest',
@@ -110,6 +114,7 @@ router.post('/', roleGuard('admin', 'user'), async (req: AuthRequest, res, next)
 
     const paymentRequest = await PaymentRequest.create({
       requestNumber: payRequestNumber,
+      entity: data.entity || undefined,
       description: `Reimbursement ${reimbursementNumber}: ${data.title}`,
       items: data.items.map((item) => ({
         payee: payeeId,
@@ -132,6 +137,7 @@ router.post('/', roleGuard('admin', 'user'), async (req: AuthRequest, res, next)
 
     const reimbursement = await Reimbursement.create({
       reimbursementNumber,
+      entity: data.entity || undefined,
       title: data.title,
       submittedBy: targetUserId,
       items: data.items.map((item) => ({
@@ -192,6 +198,7 @@ router.post('/', roleGuard('admin', 'user'), async (req: AuthRequest, res, next)
     }
 
     const populated = await Reimbursement.findById(reimbursement._id)
+      .populate('entity', 'code name')
       .populate('submittedBy', 'name email bankName bankAccountNumber fpsPhone')
       .populate('paymentRequest', 'requestNumber status');
 
@@ -213,6 +220,7 @@ router.put('/:id', roleGuard('admin', 'user'), async (req: AuthRequest, res, nex
     }
 
     if (data.title) reimbursement.title = data.title;
+    if (data.entity !== undefined) reimbursement.entity = data.entity as any;
     if (data.notes !== undefined) reimbursement.notes = data.notes;
     if (data.items) {
       reimbursement.items = data.items.map((item) => ({
@@ -240,6 +248,9 @@ router.put('/:id', roleGuard('admin', 'user'), async (req: AuthRequest, res, nex
       if (data.title) {
         pr.description = `Reimbursement ${reimbursement.reimbursementNumber}: ${data.title}`;
       }
+      if (data.entity !== undefined) {
+        pr.entity = data.entity || undefined;
+      }
       pr.activityLog.push({
         action: 'updated',
         user: req.user!._id,
@@ -250,6 +261,7 @@ router.put('/:id', roleGuard('admin', 'user'), async (req: AuthRequest, res, nex
     }
 
     const populated = await Reimbursement.findById(reimbursement._id)
+      .populate('entity', 'code name')
       .populate('submittedBy', 'name email bankName bankAccountNumber fpsPhone')
       .populate('paymentRequest', 'requestNumber status');
 

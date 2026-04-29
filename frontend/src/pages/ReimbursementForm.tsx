@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   useCreateReimbursement, useUpdateReimbursement, useReimbursement,
-  useUsers, uploadFile,
+  useUsers, useEntities, uploadFile,
 } from '../api/hooks';
 import { useAuth } from '../contexts/AuthContext';
 import { formatMoney, decimalToCents, centsToDecimal } from '../utils/money';
@@ -38,10 +38,12 @@ export default function ReimbursementForm() {
   const updateReimbursement = useUpdateReimbursement();
   const { data: existing, isLoading: loadingExisting } = useReimbursement(id || '');
   const { data: users } = useUsers();
+  const { data: entities } = useEntities();
 
   const REIMBURSEMENT_CATEGORY = 'Reimbursement';
 
   const [title, setTitle] = useState('');
+  const [entity, setEntity] = useState('');
   const [onBehalfOfUserId, setOnBehalfOfUserId] = useState('');
   const [items, setItems] = useState<ItemRow[]>([emptyItem()]);
   const [notes, setNotes] = useState('');
@@ -66,6 +68,7 @@ export default function ReimbursementForm() {
   useEffect(() => {
     if (isEdit && existing && !loaded) {
       setTitle(existing.title || '');
+      setEntity(existing.entity && typeof existing.entity === 'object' ? (existing.entity as any)._id : (existing.entity || ''));
       setNotes(existing.notes || '');
       setItems(
         existing.items.map((item) => ({
@@ -119,8 +122,9 @@ export default function ReimbursementForm() {
       return;
     }
 
-    const payload: { title: string; onBehalfOfUserId?: string; items: any[]; notes: string } = {
+    const payload: { title: string; entity?: string; onBehalfOfUserId?: string; items: any[]; notes: string } = {
       title,
+      entity: entity || undefined,
       items: validItems.map((item) => ({
         date: item.date,
         description: item.description,
@@ -160,7 +164,21 @@ export default function ReimbursementForm() {
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && <div className="bg-red-50 text-red-600 text-sm p-3 rounded">{error}</div>}
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Entity *</label>
+            <select
+              value={entity}
+              onChange={(e) => setEntity(e.target.value)}
+              required
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select entity...</option>
+              {entities?.filter((e) => e.active).map((e) => (
+                <option key={e._id} value={e._id}>{e.code} -- {e.name}</option>
+              ))}
+            </select>
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
             <input
