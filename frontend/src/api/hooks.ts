@@ -951,8 +951,8 @@ export function usePendingCount() {
 export function useMatchPending() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, transactionId }: { id: string; transactionId: string }) =>
-      api.post(`/airwallex/pending/${id}/match`, { transactionId }).then((r) => r.data),
+    mutationFn: ({ id, transactionId, transactionIds }: { id: string; transactionId?: string; transactionIds?: string[] }) =>
+      api.post(`/airwallex/pending/${id}/match`, { transactionId, transactionIds }).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pending-bank-txns'] });
       qc.invalidateQueries({ queryKey: ['pending-bank-count'] });

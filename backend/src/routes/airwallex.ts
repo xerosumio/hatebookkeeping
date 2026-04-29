@@ -172,23 +172,31 @@ router.post('/pending/:id/match', async (req: AuthRequest, res, next) => {
     if (!pending) throw new AppError(404, 'Pending item not found');
     if (pending.status !== 'pending') throw new AppError(400, 'Item already resolved');
 
-    const { transactionId } = req.body;
-    if (!transactionId) throw new AppError(400, 'transactionId is required');
+    const { transactionId, transactionIds } = req.body;
+    const ids: string[] = transactionIds || (transactionId ? [transactionId] : []);
+    if (!ids.length) throw new AppError(400, 'transactionId or transactionIds is required');
 
-    const txn = await Transaction.findById(transactionId);
-    if (!txn) throw new AppError(404, 'Transaction not found');
+    let firstTxnId: any = null;
+    for (const tid of ids) {
+      const txn = await Transaction.findById(tid);
+      if (!txn) throw new AppError(404, `Transaction ${tid} not found`);
 
-    txn.reconciled = true;
-    if (pending.batchId) txn.bankReference = pending.batchId;
-    if (!txn.bankAccount && pending.entity) {
-      txn.bankAccount = FUND_NAME[pending.entity] || '';
+      txn.reconciled = true;
+      if (pending.batchId) txn.bankReference = pending.batchId;
+      if (!txn.bankAccount && pending.entity) {
+        txn.bankAccount = FUND_NAME[pending.entity] || '';
+      }
+      await txn.save();
+      if (!firstTxnId) firstTxnId = txn._id;
     }
-    await txn.save();
 
     pending.status = 'matched';
-    pending.matchedTransaction = txn._id;
+    pending.matchedTransaction = firstTxnId;
     pending.resolvedAt = new Date();
     pending.resolvedBy = req.user?._id;
+    if (ids.length > 1) {
+      pending.note = `Matched to ${ids.length} transactions`;
+    }
     await pending.save();
 
     res.json(pending);

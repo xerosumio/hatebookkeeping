@@ -23,10 +23,12 @@ interface PendingItem {
   description: string;
   sourceType: string;
   transactionType: string;
+  batchId?: string;
 }
 
 function MatchModal({ item, onClose }: { item: PendingItem; onClose: () => void }) {
   const matchMutation = useMatchPending();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const { data: unreconciledTxns, isLoading: loadingUnreconciled } = useTransactions({ reconciled: 'false', type: item.type });
   const { data: reconciledTxns, isLoading: loadingReconciled } = useTransactions({ reconciled: 'true', type: item.type });
 
@@ -44,45 +46,103 @@ function MatchModal({ item, onClose }: { item: PendingItem; onClose: () => void 
       return new Date(b.date).getTime() - new Date(a.date).getTime();
     });
 
-  function handleMatch(txnId: string) {
+  const selectedTotal = candidates
+    .filter((t) => selected.has(t._id))
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function handleMatchSingle(txnId: string) {
     matchMutation.mutate({ id: item._id, transactionId: txnId }, { onSuccess: onClose });
+  }
+
+  function handleMatchSelected() {
+    matchMutation.mutate({ id: item._id, transactionIds: Array.from(selected) }, { onSuccess: onClose });
   }
 
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-lg p-6 w-[640px] max-h-[80vh] overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-lg p-6 w-[720px] max-h-[80vh] overflow-y-auto">
         <div className="flex justify-between items-start mb-4">
           <div>
             <h3 className="text-lg font-bold">Link to Existing Transaction</h3>
             <p className="text-sm text-gray-500 mt-1">
               Bank: {item.type} of {formatMoney(item.amount)} on {new Date(item.date).toLocaleDateString()}
             </p>
+            {item.batchId && (
+              <p className="text-xs text-gray-400 mt-0.5 font-mono">Ref: {item.batchId}</p>
+            )}
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
 
+        {selected.size > 0 && (
+          <div className={`mb-3 p-3 rounded text-sm flex items-center justify-between ${
+            selectedTotal === item.amount ? 'bg-green-50 border border-green-200' : 'bg-amber-50 border border-amber-200'
+          }`}>
+            <span>
+              {selected.size} selected -- total: <span className="font-mono font-medium">{formatMoney(selectedTotal)}</span>
+              {selectedTotal === item.amount
+                ? <span className="text-green-700 ml-2 font-medium">Exact match</span>
+                : <span className="text-amber-700 ml-2">Bank amount: {formatMoney(item.amount)}</span>
+              }
+            </span>
+            <button
+              onClick={handleMatchSelected}
+              disabled={matchMutation.isPending}
+              className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700 disabled:opacity-50"
+            >
+              {matchMutation.isPending ? 'Linking...' : `Link ${selected.size} transactions`}
+            </button>
+          </div>
+        )}
+
         {isLoading ? (
-          <p className="text-gray-500 text-sm">Loading unreconciled transactions...</p>
+          <p className="text-gray-500 text-sm">Loading transactions...</p>
         ) : !candidates.length ? (
-          <p className="text-gray-500 text-sm">No unreconciled {item.type} transactions found for this bank account.</p>
+          <p className="text-gray-500 text-sm">No matching {item.type} transactions found.</p>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
+                <th className="px-2 py-2 w-8"></th>
                 <th className="text-left px-3 py-2 font-medium text-gray-600">Date</th>
                 <th className="text-left px-3 py-2 font-medium text-gray-600">Description</th>
                 <th className="text-left px-3 py-2 font-medium text-gray-600">Payee</th>
                 <th className="text-right px-3 py-2 font-medium text-gray-600">Amount</th>
-                <th className="text-left px-3 py-2 font-medium text-gray-600">Link</th>
-                <th className="px-3 py-2 w-20"></th>
+                <th className="text-left px-3 py-2 font-medium text-gray-600">PR</th>
+                <th className="px-3 py-2 w-16"></th>
               </tr>
             </thead>
             <tbody>
               {candidates.map((t) => {
                 const payeeName = t.payee && typeof t.payee === 'object' ? t.payee.name : '';
                 const prNum = t.paymentRequest && typeof t.paymentRequest === 'object' ? t.paymentRequest.requestNumber : '';
+                const isSelected = selected.has(t._id);
                 return (
-                  <tr key={t._id} className={`border-b border-gray-100 hover:bg-blue-50 ${t.amount === item.amount ? 'bg-green-50' : ''}`}>
+                  <tr
+                    key={t._id}
+                    onClick={() => toggleSelect(t._id)}
+                    className={`border-b border-gray-100 cursor-pointer ${
+                      isSelected ? 'bg-blue-50' : t.amount === item.amount ? 'bg-green-50 hover:bg-green-100' : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <td className="px-2 py-2 text-center">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(t._id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="rounded border-gray-300 text-blue-600"
+                      />
+                    </td>
                     <td className="px-3 py-2 text-gray-500">{new Date(t.date).toLocaleDateString()}</td>
                     <td className="px-3 py-2">{t.description}</td>
                     <td className="px-3 py-2 text-gray-500 text-xs">{payeeName}</td>
@@ -91,13 +151,15 @@ function MatchModal({ item, onClose }: { item: PendingItem; onClose: () => void 
                     </td>
                     <td className="px-3 py-2 text-xs text-gray-400">{prNum}</td>
                     <td className="px-3 py-2">
-                      <button
-                        onClick={() => handleMatch(t._id)}
-                        disabled={matchMutation.isPending}
-                        className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
-                      >
-                        Link
-                      </button>
+                      {!selected.size && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleMatchSingle(t._id); }}
+                          disabled={matchMutation.isPending}
+                          className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          Link
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );
@@ -256,7 +318,10 @@ export default function PendingBankTransactions() {
                 <td className={`px-4 py-3 text-right font-mono ${item.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
                   {item.type === 'income' ? '+' : '-'}{formatMoney(item.amount)}
                 </td>
-                <td className="px-4 py-3 text-gray-500 text-xs">{item.description}</td>
+                <td className="px-4 py-3 text-gray-500 text-xs">
+                  {item.description}
+                  {item.batchId && <span className="block font-mono text-gray-400 mt-0.5">{item.batchId}</span>}
+                </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-1.5">
                     <button
