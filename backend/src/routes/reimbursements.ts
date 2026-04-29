@@ -11,6 +11,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import { sendEmail, buildPaymentRequestEmailHtml, getSubjectForRequest } from '../utils/email.js';
 import { env } from '../config/env.js';
 import { formatMoney } from '../utils/pdf/formatMoney.js';
+import { Entity } from '../models/Entity.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -109,6 +110,15 @@ router.post('/', roleGuard('admin', 'user'), async (req: AuthRequest, res, next)
 
     const payeeId = await findOrCreatePayeeForUser(targetUser);
 
+    let sourceBankAccount = '';
+    if (data.entity) {
+      const entityDoc = await Entity.findById(data.entity).select('bankAccounts defaultBankAccountIndex');
+      if (entityDoc?.bankAccounts?.length) {
+        const idx = entityDoc.defaultBankAccountIndex || 0;
+        sourceBankAccount = entityDoc.bankAccounts[idx]?.name || entityDoc.bankAccounts[0]?.name || '';
+      }
+    }
+
     const reimbursementNumber = await getNextSequence('rb');
     const payRequestNumber = await getNextSequence('pay');
 
@@ -124,7 +134,7 @@ router.post('/', roleGuard('admin', 'user'), async (req: AuthRequest, res, next)
         recipient: '',
       })),
       totalAmount,
-      sourceBankAccount: '',
+      sourceBankAccount,
       status: 'pending',
       createdBy: req.user!._id,
       attachments: data.items.map((item) => item.receiptUrl).filter(Boolean),

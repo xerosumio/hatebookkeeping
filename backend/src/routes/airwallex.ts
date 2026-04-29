@@ -181,10 +181,13 @@ router.post('/pending/:id/match', async (req: AuthRequest, res, next) => {
       const txn = await Transaction.findById(tid);
       if (!txn) throw new AppError(404, `Transaction ${tid} not found`);
 
+      const hadNoBankAccount = !txn.bankAccount;
       txn.reconciled = true;
       if (pending.batchId) txn.bankReference = pending.batchId;
-      if (!txn.bankAccount && pending.entity) {
+      if (hadNoBankAccount && pending.entity) {
         txn.bankAccount = FUND_NAME[pending.entity] || '';
+        const balanceAdjust = txn.type === 'income' ? txn.amount : -txn.amount;
+        await adjustFundBalance(txn.bankAccount, balanceAdjust);
       }
       await txn.save();
       if (!firstTxnId) firstTxnId = txn._id;
