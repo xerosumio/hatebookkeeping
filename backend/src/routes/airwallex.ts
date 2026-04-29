@@ -180,6 +180,9 @@ router.post('/pending/:id/match', async (req: AuthRequest, res, next) => {
 
     txn.reconciled = true;
     if (pending.batchId) txn.bankReference = pending.batchId;
+    if (!txn.bankAccount && pending.entity) {
+      txn.bankAccount = FUND_NAME[pending.entity] || '';
+    }
     await txn.save();
 
     pending.status = 'matched';

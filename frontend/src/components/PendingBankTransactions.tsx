@@ -29,9 +29,15 @@ function MatchModal({ item, onClose }: { item: PendingItem; onClose: () => void 
   const matchMutation = useMatchPending();
   const { data: txns, isLoading } = useTransactions({ reconciled: 'false', type: item.type });
 
-  const candidates = (txns || []).filter((t) => {
-    return t.bankAccount === FUND_NAMES[item.entity];
-  });
+  const candidates = (txns || [])
+    .filter((t) => {
+      return t.bankAccount === FUND_NAMES[item.entity] || !t.bankAccount;
+    })
+    .sort((a, b) => {
+      const aMatch = a.amount === item.amount ? 0 : 1;
+      const bMatch = b.amount === item.amount ? 0 : 1;
+      return aMatch - bMatch;
+    });
 
   function handleMatch(txnId: string) {
     matchMutation.mutate({ id: item._id, transactionId: txnId }, { onSuccess: onClose });
