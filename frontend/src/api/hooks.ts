@@ -470,6 +470,18 @@ export function useGenerateRecurringInvoice() {
   });
 }
 
+export function useGenerateRecurringPaymentRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api.post<{ paymentRequestId: string; requestNumber: string }>(`/recurring/${id}/generate-payment-request`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['recurring'] });
+      qc.invalidateQueries({ queryKey: ['paymentRequests'] });
+    },
+  });
+}
+
 // Settings
 export function useSettings() {
   return useQuery({

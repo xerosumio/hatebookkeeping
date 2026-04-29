@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   useRecurringItems, useCreateRecurringItem, useUpdateRecurringItem,
   useDeleteRecurringItem, useGenerateRecurring, useGenerateRecurringInvoice,
+  useGenerateRecurringPaymentRequest,
   useSettings, useClients, usePayees, useEntities,
 } from '../api/hooks';
 import { formatMoney, decimalToCents, centsToDecimal } from '../utils/money';
@@ -93,6 +94,7 @@ export default function RecurringList() {
   const deleteItem = useDeleteRecurringItem();
   const generate = useGenerateRecurring();
   const generateInvoice = useGenerateRecurringInvoice();
+  const generatePaymentRequest = useGenerateRecurringPaymentRequest();
 
   const [tab, setTab] = useState<'expense' | 'income'>('expense');
   const [showForm, setShowForm] = useState(false);
@@ -216,6 +218,15 @@ export default function RecurringList() {
       navigate(`/invoices/${result.invoiceId}`);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to generate invoice');
+    }
+  }
+
+  async function handleGeneratePaymentRequest(itemId: string) {
+    try {
+      const result = await generatePaymentRequest.mutateAsync(itemId);
+      navigate(`/payment-requests/${result.paymentRequestId}`);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to generate payment request');
     }
   }
 
@@ -505,6 +516,16 @@ export default function RecurringList() {
                         title="Generate Invoice"
                       >
                         <Receipt size={14} />
+                      </button>
+                    )}
+                    {tab === 'expense' && item.active && (
+                      <button
+                        onClick={() => handleGeneratePaymentRequest(item._id)}
+                        disabled={generatePaymentRequest.isPending}
+                        className="p-1.5 rounded text-purple-600 hover:bg-purple-50 disabled:opacity-50"
+                        title="Generate Payment Request"
+                      >
+                        <CreditCard size={14} />
                       </button>
                     )}
                     <button

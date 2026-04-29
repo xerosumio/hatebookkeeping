@@ -391,4 +391,92 @@ router.post('/:id/generate-invoice', async (req: AuthRequest, res, next) => {
   }
 });
 
+router.post('/:id/generate-payment-request', async (req: AuthRequest, res, next) => {
+  try {
+    const now = new Date();
+    const item = await RecurringItem.findById(req.params.id)
+      .populate('client', 'name')
+      .populate('payee', 'name');
+    if (!item) throw new AppError(404, 'Recurring item not found');
+    if (item.type !== 'expense') throw new AppError(400, 'Only expense recurring items can generate payment requests');
+
+    const payRequestNumber = await getNextSequence('pay');
+    const payeeName = (item.payee && typeof item.payee === 'object') ? (item.payee as any).name : 'N/A';
+
+    const paymentRequest = await PaymentRequest.create({
+      requestNumber: payRequestNumber,
+      entity: item.entity,
+      description: `[Recurring] ${item.name}${item.description ? ' — ' + item.description : ''}`,
+      items: [{
+        payee: item.payee || undefined,
+        description: item.name + (item.description ? ` — ${item.description}` : ''),
+        amount: item.amount,
+        category: item.category,
+        recipient: '',
+      }],
+      totalAmount: item.amount,
+      sourceBankAccount: '',
+      status: 'pending',
+      createdBy: req.user!._id,
+      activityLog: [{
+        action: 'created',
+        user: req.user!._id,
+        timestamp: now,
+        note: `Manually created from recurring item: ${item.name}`,
+      }],
+    });
+
+    item.lastGeneratedDate = now;
+    item.lastGeneratedPaymentRequest = paymentRequest._id;
+    item.history.push({
+      date: now,
+      action: 'generated_payment_request',
+      referenceId: paymentRequest._id,
+      referenceModel: 'PaymentRequest',
+      note: `Payment request ${payRequestNumber} manually created`,
+    } as any);
+    await item.save();
+
+    const settings = await getSettings();
+    const companyName = settings.companyName || 'HateBookkeeping';
+    const admins = await User.find({ role: 'admin', active: true }).select('email name');
+    const adminEmails = admins.map((a) => a.email).filter(Boolean);
+
+    if (adminEmails.length > 0) {
+      const detailUrl = `${env.frontendUrl}/#/payment-requests/${paymentRequest._id}`;
+      const html = buildRecurringReminderEmailHtml({
+        companyName,
+        itemName: item.name,
+        type: 'expense',
+        requestNumber: payRequestNumber,
+        payeeName,
+        amount: formatMoney(item.amount),
+        frequency: item.frequency,
+        detailUrl,
+      });
+      const primary = adminEmails[0];
+      const cc = adminEmails.slice(1);
+      sendEmail({
+        to: primary,
+        cc: cc.length > 0 ? cc : undefined,
+        subject: `[${payRequestNumber}] Recurring Expense — Approval Required`,
+        html,
+      }).catch(() => {});
+
+      paymentRequest.notifiedEmails = adminEmails;
+      paymentRequest.activityLog.push({
+        action: 'notified',
+        user: req.user!._id,
+        timestamp: new Date(),
+        note: `Auto-notified admins: ${adminEmails.join(', ')}`,
+      } as any);
+      await paymentRequest.save();
+    }
+
+    res.json({ paymentRequestId: paymentRequest._id, requestNumber: payRequestNumber });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;
