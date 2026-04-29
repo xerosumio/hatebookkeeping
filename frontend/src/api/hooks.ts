@@ -878,6 +878,19 @@ export function useFundTransactions(fundId: string) {
   });
 }
 
+// Intercompany transfers
+export function useIntercompanyTransfer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { fromEntity: string; toEntity: string; amount: number; date: string; description: string; fromBankAccount?: string; toBankAccount?: string }) =>
+      api.post('/intercompany-transfers', data).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['transactions'] });
+      qc.invalidateQueries({ queryKey: ['funds'] });
+    },
+  });
+}
+
 // Airwallex sync
 export function useAirwallexStatus() {
   return useQuery({

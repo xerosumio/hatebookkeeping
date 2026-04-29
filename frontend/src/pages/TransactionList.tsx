@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useTransactions, useDeleteTransaction, useEntities } from '../api/hooks';
-import { formatMoney, titleCase } from '../utils/money';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { useTransactions, useDeleteTransaction, useEntities, useIntercompanyTransfer } from '../api/hooks';
+import { formatMoney, titleCase, decimalToCents } from '../utils/money';
+import { Plus, Pencil, Trash2, ArrowLeftRight } from 'lucide-react';
 import TransactionForm from './TransactionForm';
 import { PendingBanner } from '../components/PendingBankTransactions';
 import type { Transaction, Entity } from '../types';
@@ -13,6 +13,13 @@ export default function TransactionList() {
   const { data: entities } = useEntities();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Transaction | null>(null);
+  const [showIntercompany, setShowIntercompany] = useState(false);
+  const [icForm, setIcForm] = useState({
+    fromEntity: '', toEntity: '', amount: '', date: new Date().toISOString().slice(0, 10), description: '',
+    fromBankAccount: '', toBankAccount: '',
+  });
+  const [icError, setIcError] = useState('');
+  const intercompanyTransfer = useIntercompanyTransfer();
   const filters: Record<string, string> = {};
   if (typeFilter) filters.type = typeFilter;
   if (entityFilter) filters.entity = entityFilter;
@@ -33,6 +40,25 @@ export default function TransactionList() {
   function handleDelete(t: Transaction) {
     if (confirm(`Delete this ${t.type} transaction?\n${t.description}`)) {
       deleteTransaction.mutate(t._id);
+    }
+  }
+
+  async function handleIntercompanyTransfer() {
+    setIcError('');
+    try {
+      await intercompanyTransfer.mutateAsync({
+        fromEntity: icForm.fromEntity,
+        toEntity: icForm.toEntity,
+        amount: decimalToCents(Number(icForm.amount)),
+        date: icForm.date,
+        description: icForm.description,
+        fromBankAccount: icForm.fromBankAccount || undefined,
+        toBankAccount: icForm.toBankAccount || undefined,
+      });
+      setShowIntercompany(false);
+      setIcForm({ fromEntity: '', toEntity: '', amount: '', date: new Date().toISOString().slice(0, 10), description: '', fromBankAccount: '', toBankAccount: '' });
+    } catch (err: any) {
+      setIcError(err.response?.data?.error || 'Failed to create intercompany transfer');
     }
   }
 
@@ -73,12 +99,20 @@ export default function TransactionList() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Transactions</h1>
         {!showForm && (
-          <button
-            onClick={() => { setEditing(null); setShowForm(true); }}
-            className="flex items-center gap-1 bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700"
-          >
-            <Plus size={16} /> Add Transaction
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowIntercompany(true)}
+              className="flex items-center gap-1 border border-gray-300 text-gray-700 px-4 py-2 rounded text-sm font-medium hover:bg-gray-50"
+            >
+              <ArrowLeftRight size={16} /> Intercompany Transfer
+            </button>
+            <button
+              onClick={() => { setEditing(null); setShowForm(true); }}
+              className="flex items-center gap-1 bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700"
+            >
+              <Plus size={16} /> Add Transaction
+            </button>
+          </div>
         )}
       </div>
 
@@ -210,6 +244,83 @@ export default function TransactionList() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {showIntercompany && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-[28rem]">
+            <h3 className="text-lg font-bold mb-4">Intercompany Transfer</h3>
+            {icError && <div className="bg-red-50 text-red-600 text-sm p-2 rounded mb-3">{icError}</div>}
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">From Entity</label>
+                <select value={icForm.fromEntity} onChange={(e) => setIcForm({ ...icForm, fromEntity: e.target.value, fromBankAccount: '' })}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm">
+                  <option value="">Select...</option>
+                  {entities?.map((ent) => <option key={ent._id} value={ent._id}>{ent.code} -- {ent.name}</option>)}
+                </select>
+              </div>
+              {icForm.fromEntity && (() => {
+                const ent = entities?.find((e) => e._id === icForm.fromEntity);
+                return ent?.bankAccounts?.length ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">From Bank Account</label>
+                    <select value={icForm.fromBankAccount} onChange={(e) => setIcForm({ ...icForm, fromBankAccount: e.target.value })}
+                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm">
+                      <option value="">Select...</option>
+                      {ent.bankAccounts.map((acc, i) => <option key={i} value={acc.name}>{acc.name}{acc.bankName ? ` (${acc.bankName})` : ''}</option>)}
+                    </select>
+                  </div>
+                ) : null;
+              })()}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">To Entity</label>
+                <select value={icForm.toEntity} onChange={(e) => setIcForm({ ...icForm, toEntity: e.target.value, toBankAccount: '' })}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm">
+                  <option value="">Select...</option>
+                  {entities?.filter((e) => e._id !== icForm.fromEntity).map((ent) => <option key={ent._id} value={ent._id}>{ent.code} -- {ent.name}</option>)}
+                </select>
+              </div>
+              {icForm.toEntity && (() => {
+                const ent = entities?.find((e) => e._id === icForm.toEntity);
+                return ent?.bankAccounts?.length ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">To Bank Account</label>
+                    <select value={icForm.toBankAccount} onChange={(e) => setIcForm({ ...icForm, toBankAccount: e.target.value })}
+                      className="w-full border border-gray-300 rounded px-3 py-2 text-sm">
+                      <option value="">Select...</option>
+                      {ent.bankAccounts.map((acc, i) => <option key={i} value={acc.name}>{acc.name}{acc.bankName ? ` (${acc.bankName})` : ''}</option>)}
+                    </select>
+                  </div>
+                ) : null;
+              })()}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Amount (HKD)</label>
+                <input type="number" step="0.01" value={icForm.amount} onChange={(e) => setIcForm({ ...icForm, amount: e.target.value })}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm" placeholder="0.00" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <input type="date" value={icForm.date} onChange={(e) => setIcForm({ ...icForm, date: e.target.value })}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <input type="text" value={icForm.description} onChange={(e) => setIcForm({ ...icForm, description: e.target.value })}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm" placeholder="e.g. Window Server licenses" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-4">
+              <button onClick={handleIntercompanyTransfer}
+                disabled={!icForm.fromEntity || !icForm.toEntity || !icForm.amount || !icForm.description || intercompanyTransfer.isPending}
+                className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                {intercompanyTransfer.isPending ? 'Creating...' : 'Create Transfer'}
+              </button>
+              <button onClick={() => { setShowIntercompany(false); setIcError(''); }}
+                className="border border-gray-300 px-4 py-2 rounded text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

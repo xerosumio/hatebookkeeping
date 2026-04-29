@@ -24,6 +24,7 @@ import monthlyCloseRoutes from './routes/monthlyClose.js';
 import fundsRouter from './routes/funds.js';
 import airwallexRoutes from './routes/airwallex.js';
 import notificationRoutes from './routes/notifications.js';
+import intercompanyTransferRoutes from './routes/intercompanyTransfers.js';
 import mcpRoutes, { buildOAuthMetadata } from './routes/mcp.js';
 import { startScheduler } from './scheduler.js';
 
@@ -53,6 +54,7 @@ app.use('/api/monthly-close', monthlyCloseRoutes);
 app.use('/api/funds', fundsRouter);
 app.use('/api/airwallex', airwallexRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/intercompany-transfers', intercompanyTransferRoutes);
 app.use('/api/mcp', mcpRoutes);
 
 app.get('/api/health', (_req, res) => {
