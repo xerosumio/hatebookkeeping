@@ -127,6 +127,7 @@ router.post('/', roleGuard('admin', 'user'), async (req: AuthRequest, res, next)
       sourceBankAccount: '',
       status: 'pending',
       createdBy: req.user!._id,
+      attachments: data.items.map((item) => item.receiptUrl).filter(Boolean),
       activityLog: [{
         action: 'created',
         user: req.user!._id,
@@ -148,6 +149,9 @@ router.post('/', roleGuard('admin', 'user'), async (req: AuthRequest, res, next)
       paymentRequest: paymentRequest._id,
       notes: data.notes,
     });
+
+    paymentRequest.sourceReimbursement = reimbursement._id;
+    await paymentRequest.save();
 
     const admins = await User.find({ role: 'admin', active: true }).select('email name');
     const adminEmails = admins.map((a) => a.email).filter(Boolean);
@@ -244,6 +248,7 @@ router.put('/:id', roleGuard('admin', 'user'), async (req: AuthRequest, res, nex
           recipient: '',
         }));
         pr.totalAmount = reimbursement.totalAmount;
+        pr.attachments = data.items.map((item) => item.receiptUrl).filter(Boolean);
       }
       if (data.title) {
         pr.description = `Reimbursement ${reimbursement.reimbursementNumber}: ${data.title}`;

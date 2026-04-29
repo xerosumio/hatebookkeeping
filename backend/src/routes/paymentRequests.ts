@@ -83,7 +83,8 @@ router.get('/:id', async (req, res, next) => {
       .populate('approvedBy', 'name email')
       .populate('approvals.user', 'name')
       .populate('items.payee', 'name bankName bankAccountNumber bankCode')
-      .populate('activityLog.user', 'name');
+      .populate('activityLog.user', 'name')
+      .populate('sourceReimbursement', 'reimbursementNumber title items totalAmount');
     if (!request) throw new AppError(404, 'Payment request not found');
     res.json(request);
   } catch (error) {

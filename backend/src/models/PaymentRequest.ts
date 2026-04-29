@@ -35,6 +35,7 @@ export interface IPaymentRequest extends Document {
   rejectionReason?: string;
   executedAt?: Date;
   bankReference?: string;
+  sourceReimbursement?: mongoose.Types.ObjectId;
   attachments: string[];
   notifiedEmails: string[];
   activityLog: IActivityLogEntry[];
@@ -90,6 +91,7 @@ const paymentRequestSchema = new Schema<IPaymentRequest>(
     rejectionReason: { type: String },
     executedAt: { type: Date },
     bankReference: { type: String },
+    sourceReimbursement: { type: Schema.Types.ObjectId, ref: 'Reimbursement' },
     attachments: [{ type: String }],
     notifiedEmails: [{ type: String }],
     activityLog: [activityLogSchema],

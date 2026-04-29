@@ -12,7 +12,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { formatMoney, titleCase } from '../utils/money';
 import { Paperclip, Pencil, Trash2, Plus, CheckCircle, XCircle, Zap, Clock, Send, Mail } from 'lucide-react';
-import type { User, Payee, ActivityLogEntry, Entity, ApprovalEntry } from '../types';
+import type { User, Payee, ActivityLogEntry, Entity, ApprovalEntry, ReimbursementItem } from '../types';
 
 const statusColors: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-700',
@@ -225,6 +225,59 @@ export default function PaymentRequestDetail() {
             </tfoot>
           </table>
         </div>
+
+        {pr.sourceReimbursement && typeof pr.sourceReimbursement === 'object' && (
+          <div className="bg-white rounded-lg border border-gray-200 p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-gray-700">Source Reimbursement</h3>
+              <Link
+                to={`/reimbursements/${pr.sourceReimbursement._id}`}
+                className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+              >
+                {pr.sourceReimbursement.reimbursementNumber}: {pr.sourceReimbursement.title}
+              </Link>
+            </div>
+            {pr.sourceReimbursement.items.some((item: ReimbursementItem) => item.receiptUrl) && (
+              <div>
+                <p className="text-xs text-gray-500 mb-2">Receipts</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {pr.sourceReimbursement.items.map((item: ReimbursementItem, i: number) =>
+                    item.receiptUrl ? (
+                      <div key={i} className="border border-gray-100 rounded p-2 flex items-center gap-3">
+                        {/\.(jpg|jpeg|png|gif|webp)$/i.test(item.receiptUrl) ? (
+                          <a
+                            href={item.receiptUrl.startsWith('http') ? item.receiptUrl : `${apiUrl}${item.receiptUrl}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <img
+                              src={item.receiptUrl.startsWith('http') ? item.receiptUrl : `${apiUrl}${item.receiptUrl}`}
+                              alt={`Receipt for ${item.description}`}
+                              className="w-16 h-16 object-cover rounded border border-gray-200"
+                            />
+                          </a>
+                        ) : (
+                          <a
+                            href={item.receiptUrl.startsWith('http') ? item.receiptUrl : `${apiUrl}${item.receiptUrl}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline text-xs"
+                          >
+                            <Paperclip size={14} />
+                          </a>
+                        )}
+                        <div className="text-xs text-gray-600 min-w-0">
+                          <p className="font-medium truncate">{item.description}</p>
+                          <p className="text-gray-400">{new Date(item.date).toLocaleDateString()} -- {formatMoney(item.amount)}</p>
+                        </div>
+                      </div>
+                    ) : null,
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {pr.attachments?.length > 0 && (
           <div className="bg-white rounded-lg border border-gray-200 p-5">

@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { useReimbursements, useDeleteReimbursement } from '../api/hooks';
 import { formatMoney, titleCase } from '../utils/money';
 import { Plus, Trash2, Eye } from 'lucide-react';
-import type { Reimbursement, PaymentRequest } from '../types';
+import type { Reimbursement, PaymentRequest, Entity } from '../types';
 
 const statusColors: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-700',
@@ -49,6 +49,7 @@ export default function ReimbursementList() {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Number</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Entity</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Title</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Submitted By</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Date</th>
@@ -63,6 +64,9 @@ export default function ReimbursementList() {
                 return (
                   <tr key={r._id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="px-4 py-3 font-mono text-xs">{r.reimbursementNumber}</td>
+                    <td className="px-4 py-3 text-gray-600 text-xs">
+                      {r.entity && typeof r.entity === 'object' ? (r.entity as Entity).code : ''}
+                    </td>
                     <td className="px-4 py-3 font-medium">{r.title}</td>
                     <td className="px-4 py-3 text-gray-600">
                       {typeof r.submittedBy === 'object' ? r.submittedBy.name : ''}

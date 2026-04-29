@@ -332,6 +332,7 @@ export interface PaymentRequest {
   rejectionReason?: string;
   executedAt?: string;
   bankReference?: string;
+  sourceReimbursement?: string | { _id: string; reimbursementNumber: string; title: string; items: ReimbursementItem[]; totalAmount: number };
   attachments: string[];
   notifiedEmails?: string[];
   activityLog?: ActivityLogEntry[];
@@ -517,6 +518,7 @@ export interface ReimbursementItem {
 export interface Reimbursement {
   _id: string;
   reimbursementNumber: string;
+  entity?: string | Entity;
   title: string;
   submittedBy: string | { _id: string; name: string; email: string; bankName?: string; bankAccountNumber?: string; fpsPhone?: string };
   items: ReimbursementItem[];
