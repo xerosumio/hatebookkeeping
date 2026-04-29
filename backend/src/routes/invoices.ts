@@ -158,22 +158,38 @@ router.patch('/:id/status', async (req: AuthRequest, res, next) => {
     }
     await invoice.save();
 
-    // Auto-create income transaction when marking as paid (if no payment transaction exists yet)
+    // Auto-create receipt + income transaction when marking as paid (if no receipt exists yet)
     if (status === 'paid' && previousStatus !== 'paid') {
-      const existingTxn = await Transaction.findOne({ invoice: invoice._id, type: 'income' });
-      if (!existingTxn) {
-        const entityCode = (invoice.entity as any)?.code?.toLowerCase() as EntityKey | undefined;
+      const existingReceipt = await Receipt.findOne({ invoice: invoice._id });
+      if (!existingReceipt) {
+        const entityDoc = invoice.entity as any;
+        const entityId = entityDoc?._id || invoice.entity;
+        const entityCode = entityDoc?.code?.toLowerCase() as EntityKey | undefined;
         const bankAccount = entityCode && FUND_NAME[entityCode] ? FUND_NAME[entityCode] : '';
+
+        const receiptNumber = await getNextSequence('rec');
+        const receipt = await Receipt.create({
+          receiptNumber,
+          entity: entityId,
+          invoice: invoice._id,
+          client: invoice.client,
+          amount: invoice.total,
+          paymentMethod: 'bank_transfer',
+          paymentDate: new Date(),
+          bankAccount,
+          createdBy: req.user!._id,
+        });
 
         await Transaction.create({
           date: new Date(),
           type: 'income',
-          category: 'Invoice Payment',
-          description: `Payment for ${invoice.invoiceNumber}`,
+          category: 'revenue',
+          description: `Payment received — ${invoice.invoiceNumber}`,
           amount: invoice.total,
-          entity: (invoice.entity as any)?._id || invoice.entity,
+          entity: entityId,
           client: invoice.client,
           invoice: invoice._id,
+          receipt: receipt._id,
           bankAccount,
           reconciled: false,
           createdBy: req.user!._id,
@@ -185,14 +201,18 @@ router.patch('/:id/status', async (req: AuthRequest, res, next) => {
       }
     }
 
-    // Remove auto-created transaction when reverting from paid to unpaid/draft
+    // Remove auto-created receipt + transaction when reverting from paid to unpaid/draft
     if (previousStatus === 'paid' && status !== 'paid') {
-      const txn = await Transaction.findOne({ invoice: invoice._id, type: 'income', reconciled: false });
-      if (txn) {
-        if (txn.bankAccount) {
-          await adjustFundBalance(txn.bankAccount, -txn.amount);
+      const receipt = await Receipt.findOne({ invoice: invoice._id });
+      if (receipt) {
+        const txn = await Transaction.findOne({ receipt: receipt._id, reconciled: false });
+        if (txn) {
+          if (txn.bankAccount) {
+            await adjustFundBalance(txn.bankAccount, -txn.amount);
+          }
+          await Transaction.deleteOne({ _id: txn._id });
         }
-        await Transaction.deleteOne({ _id: txn._id });
+        await Receipt.deleteOne({ _id: receipt._id });
       }
     }
 
