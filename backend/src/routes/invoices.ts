@@ -10,6 +10,7 @@ import { Entity } from '../models/Entity.js';
 import { adjustFundBalance } from '../utils/fundBalance.js';
 import { getNextSequence } from '../models/Counter.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { FUND_NAME, type EntityKey } from '../config/bankAccounts.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { InvoicePDF } from '../utils/pdf/InvoicePDF.js';
 import { getSettings } from '../models/Settings.js';
@@ -137,15 +138,16 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-router.patch('/:id/status', async (req, res, next) => {
+router.patch('/:id/status', async (req: AuthRequest, res, next) => {
   try {
     const { status } = z.object({
       status: z.enum(['draft', 'unpaid', 'partial', 'paid']),
     }).parse(req.body);
 
-    const invoice = await Invoice.findById(req.params.id);
+    const invoice = await Invoice.findById(req.params.id).populate('entity');
     if (!invoice) throw new AppError(404, 'Invoice not found');
 
+    const previousStatus = invoice.status;
     invoice.status = status;
     if (status === 'paid') {
       invoice.amountPaid = invoice.total;
@@ -155,6 +157,45 @@ router.patch('/:id/status', async (req, res, next) => {
       invoice.amountDue = invoice.total;
     }
     await invoice.save();
+
+    // Auto-create income transaction when marking as paid (if no payment transaction exists yet)
+    if (status === 'paid' && previousStatus !== 'paid') {
+      const existingTxn = await Transaction.findOne({ invoice: invoice._id, type: 'income' });
+      if (!existingTxn) {
+        const entityCode = (invoice.entity as any)?.code?.toLowerCase() as EntityKey | undefined;
+        const bankAccount = entityCode && FUND_NAME[entityCode] ? FUND_NAME[entityCode] : '';
+
+        await Transaction.create({
+          date: new Date(),
+          type: 'income',
+          category: 'Invoice Payment',
+          description: `Payment for ${invoice.invoiceNumber}`,
+          amount: invoice.total,
+          entity: (invoice.entity as any)?._id || invoice.entity,
+          client: invoice.client,
+          invoice: invoice._id,
+          bankAccount,
+          reconciled: false,
+          createdBy: req.user!._id,
+        });
+
+        if (bankAccount) {
+          await adjustFundBalance(bankAccount, invoice.total);
+        }
+      }
+    }
+
+    // Remove auto-created transaction when reverting from paid to unpaid/draft
+    if (previousStatus === 'paid' && status !== 'paid') {
+      const txn = await Transaction.findOne({ invoice: invoice._id, type: 'income', reconciled: false });
+      if (txn) {
+        if (txn.bankAccount) {
+          await adjustFundBalance(txn.bankAccount, -txn.amount);
+        }
+        await Transaction.deleteOne({ _id: txn._id });
+      }
+    }
+
     res.json(invoice);
   } catch (error) {
     next(error);
