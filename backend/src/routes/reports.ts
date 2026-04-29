@@ -289,8 +289,11 @@ router.get('/balance-sheet', async (req, res, next) => {
     if (entity) fundFilter.entity = new mongoose.Types.ObjectId(entity);
     const funds = await Fund.find(fundFilter).populate('entity', 'code name').sort({ type: 1, name: 1 });
 
-    const cashBreakdown = funds.map((f) => ({ name: f.name, type: f.type, balance: f.balance }));
-    const totalCash = funds.reduce((s, f) => s + f.balance, 0);
+    // Exclude reserve funds held inside a bank account — their balances are
+    // already included in the parent bank fund's total.
+    const topLevelFunds = funds.filter((f) => !f.heldIn);
+    const cashBreakdown = topLevelFunds.map((f) => ({ name: f.name, type: f.type, balance: f.balance }));
+    const totalCash = topLevelFunds.reduce((s, f) => s + f.balance, 0);
 
     const arFilter: Record<string, unknown> = { status: { $in: ['unpaid', 'partial', 'sent'] } };
     if (entity) arFilter.entity = new mongoose.Types.ObjectId(entity);
