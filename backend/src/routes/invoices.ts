@@ -158,10 +158,11 @@ router.patch('/:id/status', async (req: AuthRequest, res, next) => {
     }
     await invoice.save();
 
-    // Auto-create receipt + income transaction when marking as paid (if no receipt exists yet)
+    // Auto-create receipt + income transaction when marking as paid (if none exist yet)
     if (status === 'paid' && previousStatus !== 'paid') {
       const existingReceipt = await Receipt.findOne({ invoice: invoice._id });
-      if (!existingReceipt) {
+      const existingTxn = await Transaction.findOne({ invoice: invoice._id, type: 'income' });
+      if (!existingReceipt && !existingTxn) {
         const entityDoc = invoice.entity as any;
         const entityId = entityDoc?._id || invoice.entity;
         const entityCode = entityDoc?.code?.toLowerCase() as EntityKey | undefined;
