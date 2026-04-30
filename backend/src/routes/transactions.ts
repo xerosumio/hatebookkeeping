@@ -151,6 +151,76 @@ router.put('/:id', roleGuard('admin', 'user'), async (req, res, next) => {
   }
 });
 
+const patchSchema = z.object({
+  date: z.string().optional(),
+  accountingDate: z.string().nullable().optional(),
+  type: z.enum(['income', 'expense']).optional(),
+  category: z.string().min(1).optional(),
+  description: z.string().min(1).optional(),
+  amount: z.number().int().positive().optional(),
+  entity: z.string().optional(),
+  client: z.string().nullable().optional(),
+  payee: z.string().nullable().optional(),
+  invoice: z.string().nullable().optional(),
+  receipt: z.string().nullable().optional(),
+  paymentRequest: z.string().nullable().optional(),
+  bankReference: z.string().optional(),
+  bankAccount: z.string().optional(),
+  reconciled: z.boolean().optional(),
+});
+
+router.patch('/:id', roleGuard('admin', 'user'), async (req, res, next) => {
+  try {
+    const data = patchSchema.parse(req.body);
+    const old = await Transaction.findById(req.params.id);
+    if (!old) throw new AppError(404, 'Transaction not found');
+
+    const $set: Record<string, unknown> = {};
+    const $unset: Record<string, 1> = {};
+
+    if (data.date) $set.date = new Date(data.date);
+    if (data.accountingDate) $set.accountingDate = new Date(data.accountingDate);
+    if (data.accountingDate === null) $unset.accountingDate = 1;
+    if (data.type) $set.type = data.type;
+    if (data.category) $set.category = data.category;
+    if (data.description) $set.description = data.description;
+    if (data.amount) $set.amount = data.amount;
+    if (data.entity) $set.entity = data.entity;
+    if (data.bankReference !== undefined) $set.bankReference = data.bankReference;
+    if (data.reconciled !== undefined) $set.reconciled = data.reconciled;
+
+    const refFields = ['client', 'payee', 'invoice', 'receipt', 'paymentRequest'] as const;
+    for (const f of refFields) {
+      if (data[f]) $set[f] = data[f];
+      else if (data[f] === null) $unset[f] = 1;
+    }
+
+    // Handle bankAccount change
+    if (data.bankAccount !== undefined && data.bankAccount !== old.bankAccount) {
+      if (old.bankAccount) {
+        const oldDelta = old.type === 'income' ? -old.amount : old.amount;
+        await adjustFundBalance(old.bankAccount, oldDelta);
+      }
+      $set.bankAccount = data.bankAccount;
+      if (data.bankAccount) {
+        const type = data.type || old.type;
+        const amount = data.amount || old.amount;
+        const newDelta = type === 'income' ? amount : -amount;
+        await adjustFundBalance(data.bankAccount, newDelta);
+      }
+    }
+
+    const update: Record<string, unknown> = {};
+    if (Object.keys($set).length) update.$set = $set;
+    if (Object.keys($unset).length) update.$unset = $unset;
+
+    const transaction = await Transaction.findByIdAndUpdate(req.params.id, update, { new: true });
+    res.json(transaction!);
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.delete('/:id', roleGuard('admin', 'user'), async (req, res, next) => {
   try {
     const transaction = await Transaction.findByIdAndDelete(req.params.id);

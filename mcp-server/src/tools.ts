@@ -247,12 +247,14 @@ export function registerTools(server: McpServer, api: ApiRequestFn = defaultApiR
     return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
   });
 
-  server.tool('update_transaction', 'Update a transaction', {
-    id: ReqStr, date: OptStr, type: OptStr, category: OptStr,
+  server.tool('update_transaction', 'Update a transaction (partial update)', {
+    id: ReqStr, date: OptStr, accountingDate: OptStr, type: OptStr, category: OptStr,
     amount: OptNum, description: OptStr, entity: OptStr,
-    bankAccount: OptStr, fund: OptStr, reference: OptStr,
+    client: OptStr, payee: OptStr, invoice: OptStr, receipt: OptStr,
+    paymentRequest: OptStr, bankReference: OptStr, bankAccount: OptStr,
+    reconciled: { type: 'boolean', nullable: true },
   }, async ({ id, ...body }) => {
-    const data = await api('PUT', `/transactions/${id}`, body);
+    const data = await api('PATCH', `/transactions/${id}`, body);
     return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
   });
 
