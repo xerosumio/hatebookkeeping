@@ -820,7 +820,7 @@ router.post('/:entity/:year/:month/finalize', roleGuard('admin'), async (req: Au
 
     // Create PaymentRequest for cash-transfer shareholders + fund transfers for offsets
     if (!dist.isLoss) {
-      const entityDoc = await Entity.findById(entityId).select('bankAccounts defaultBankAccountIndex');
+      const entityDoc = await Entity.findById(entityId).select('code name bankAccounts defaultBankAccountIndex');
       let sourceBankAccount = '';
       if (entityDoc?.bankAccounts?.length) {
         const idx = entityDoc.defaultBankAccountIndex || 0;
@@ -878,10 +878,12 @@ router.post('/:entity/:year/:month/finalize', roleGuard('admin'), async (req: Au
         const totalOffset = offsetDistributions.reduce((sum, d) => sum + (d.liabilityOffset || 0), 0);
 
         const bankFund = sourceBankAccount ? await Fund.findOne({ name: sourceBankAccount, type: 'bank' }) : null;
-        let poolFund = await Fund.findOne({ entity: entityId, type: 'reserve', name: /share purchase pool/i });
+        const entityCode = entityDoc?.code?.toUpperCase() || '';
+        const poolFundName = entityCode ? `Share Purchase Pool - ${entityCode}` : 'Share Purchase Pool';
+        let poolFund = await Fund.findOne({ name: poolFundName });
         if (!poolFund) {
           poolFund = await Fund.create({
-            name: 'Share Purchase Pool',
+            name: poolFundName,
             type: 'reserve',
             entity: entityId,
             openingBalance: 0,
