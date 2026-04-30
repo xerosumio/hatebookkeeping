@@ -813,6 +813,50 @@ export function usePreviewMonthlyClose() {
   });
 }
 
+export function useSubmitMonthlyClose() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entity, year, month, notes }: { entity: string; year: number; month: number; notes?: string }) =>
+      api.post<MonthlyClose>(`/monthly-close/${entity}/${year}/${month}/submit`, { notes }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['monthlyClose'] });
+    },
+  });
+}
+
+export function useApproveMonthlyClose() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entity, year, month }: { entity: string; year: number; month: number }) =>
+      api.patch<MonthlyClose>(`/monthly-close/${entity}/${year}/${month}/approve`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['monthlyClose'] });
+    },
+  });
+}
+
+export function useRejectMonthlyClose() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entity, year, month, reason }: { entity: string; year: number; month: number; reason: string }) =>
+      api.patch<MonthlyClose>(`/monthly-close/${entity}/${year}/${month}/reject`, { reason }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['monthlyClose'] });
+    },
+  });
+}
+
+export function useNotifyMonthlyClose() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ entity, year, month, emails }: { entity: string; year: number; month: number; emails: string[] }) =>
+      api.post<MonthlyClose>(`/monthly-close/${entity}/${year}/${month}/notify`, { emails }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['monthlyClose'] });
+    },
+  });
+}
+
 export function useFinalizeMonthlyClose() {
   const qc = useQueryClient();
   return useMutation({
@@ -821,6 +865,7 @@ export function useFinalizeMonthlyClose() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['monthlyClose'] });
       qc.invalidateQueries({ queryKey: ['shareholders'] });
+      qc.invalidateQueries({ queryKey: ['funds'] });
     },
   });
 }
@@ -833,6 +878,14 @@ export function useCreateCollectionRequests() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['paymentRequests'] });
     },
+  });
+}
+
+export function useMonthlyCloseSummary(year: number, month: number) {
+  return useQuery({
+    queryKey: ['monthlyClose', 'summary', year, month],
+    queryFn: () => api.get(`/monthly-close/summary/${year}/${month}`).then((r) => r.data),
+    enabled: year > 0 && month > 0,
   });
 }
 

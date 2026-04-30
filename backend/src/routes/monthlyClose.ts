@@ -140,30 +140,107 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// ── Group summary ────────────────────────────────────────────────────
+// ── Group summary (all entities for a year, or year+month) ───────────
 
-router.get('/summary/:year/:month', async (req, res, next) => {
+router.get('/summary/:year/:month?', async (req: any, res, next) => {
   try {
-    const year = parseInt(req.params.year as string);
-    const month = parseInt(req.params.month as string);
-    const closes = await MonthlyClose.find({ year, month })
-      .populate('entity', 'code name');
-    const totalIncome = closes.reduce((s, c) => s + c.totalIncome, 0);
-    const totalExpense = closes.reduce((s, c) => s + c.totalExpense, 0);
-    res.json({
-      year,
-      month,
-      totalIncome,
-      totalExpense,
-      netProfit: totalIncome - totalExpense,
-      entities: closes.map((c) => ({
-        entity: c.entity,
-        totalIncome: c.totalIncome,
-        totalExpense: c.totalExpense,
-        netProfit: c.netProfit,
-        status: c.status,
-      })),
-    });
+    const year = parseInt(req.params.year);
+    const monthParam = req.params.month ? parseInt(req.params.month) : undefined;
+
+    const filter: Record<string, unknown> = { year };
+    if (monthParam) filter.month = monthParam;
+
+    const closes = await MonthlyClose.find(filter)
+      .populate('entity', 'code name')
+      .populate('distributions.shareholder', 'name sharePercent');
+
+    if (monthParam) {
+      // Single month group summary
+      const totalIncome = closes.reduce((s, c) => s + c.totalIncome, 0);
+      const totalExpense = closes.reduce((s, c) => s + c.totalExpense, 0);
+      const totalOpeningCash = closes.reduce((s, c) => s + (c.openingCash || 0), 0);
+      const totalAvailableCash = closes.reduce((s, c) => s + (c.availableCash || 0), 0);
+      const totalShareholderDist = closes.reduce((s, c) => s + c.shareholderDistribution, 0);
+      const totalCompanyReserve = closes.reduce((s, c) => s + c.companyReserve, 0);
+      const totalStaffReserve = closes.reduce((s, c) => s + c.staffReserve, 0);
+
+      // Aggregate distributions by shareholder across entities
+      const shareholderMap = new Map<string, { name: string; sharePercent: number; total: number }>();
+      for (const c of closes) {
+        for (const d of c.distributions) {
+          const sh = d.shareholder as any;
+          const id = sh?._id?.toString() || d.shareholder?.toString();
+          const existing = shareholderMap.get(id);
+          if (existing) {
+            existing.total += d.amount;
+          } else {
+            shareholderMap.set(id, {
+              name: sh?.name || id,
+              sharePercent: d.sharePercent,
+              total: d.amount,
+            });
+          }
+        }
+      }
+
+      const allFinalized = closes.length > 0 && closes.every((c) => c.status === 'finalized');
+      const anyPending = closes.some((c) => c.status === 'pending_approval');
+
+      res.json({
+        year,
+        month: monthParam,
+        openingCash: totalOpeningCash,
+        totalIncome,
+        totalExpense,
+        netProfit: totalIncome - totalExpense,
+        availableCash: totalAvailableCash,
+        shareholderDistribution: totalShareholderDist,
+        companyReserve: totalCompanyReserve,
+        staffReserve: totalStaffReserve,
+        isLoss: totalAvailableCash < 0,
+        groupStatus: allFinalized ? 'finalized' : anyPending ? 'pending' : 'open',
+        entities: closes.map((c) => ({
+          entity: c.entity,
+          openingCash: c.openingCash || 0,
+          totalIncome: c.totalIncome,
+          totalExpense: c.totalExpense,
+          netProfit: c.netProfit,
+          availableCash: c.availableCash || 0,
+          shareholderDistribution: c.shareholderDistribution,
+          companyReserve: c.companyReserve,
+          staffReserve: c.staffReserve,
+          isLoss: c.isLoss,
+          status: c.status,
+        })),
+        distributions: [...shareholderMap.values()].sort((a, b) => b.sharePercent - a.sharePercent),
+      });
+    } else {
+      // Full year overview: group by month
+      const byMonth = new Map<number, typeof closes>();
+      for (const c of closes) {
+        const arr = byMonth.get(c.month) || [];
+        arr.push(c);
+        byMonth.set(c.month, arr);
+      }
+
+      const months = Array.from({ length: 12 }, (_, i) => {
+        const m = i + 1;
+        const monthCloses = byMonth.get(m) || [];
+        const totalIncome = monthCloses.reduce((s, c) => s + c.totalIncome, 0);
+        const totalExpense = monthCloses.reduce((s, c) => s + c.totalExpense, 0);
+        const allFinalized = monthCloses.length > 0 && monthCloses.every((c) => c.status === 'finalized');
+        return {
+          month: m,
+          entityCount: monthCloses.length,
+          totalIncome,
+          totalExpense,
+          netProfit: totalIncome - totalExpense,
+          status: monthCloses.length === 0 ? 'open' : allFinalized ? 'finalized' : 'partial',
+        };
+      });
+
+      res.json({ year, months });
+    }
   } catch (error) {
     next(error);
   }

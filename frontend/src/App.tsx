@@ -29,6 +29,7 @@ import ShareholderList from './pages/ShareholderList';
 import ShareholderDetail from './pages/ShareholderDetail';
 import MonthlyCloseList from './pages/MonthlyCloseList';
 import MonthlyCloseDetail from './pages/MonthlyCloseDetail';
+import MonthlyCloseSummary from './pages/MonthlyCloseSummary';
 import Reports from './pages/Reports';
 import UserList from './pages/UserList';
 import FundList from './pages/FundList';
@@ -93,6 +94,7 @@ export default function App() {
               <Route path="shareholders" element={<ShareholderList />} />
               <Route path="shareholders/:id" element={<ShareholderDetail />} />
               <Route path="monthly-close" element={<MonthlyCloseList />} />
+              <Route path="monthly-close/summary/:year" element={<MonthlyCloseSummary />} />
               <Route path="monthly-close/:entity/:year/:month" element={<MonthlyCloseDetail />} />
               <Route path="funds" element={<FundList />} />
               <Route path="funds/:id" element={<FundDetail />} />

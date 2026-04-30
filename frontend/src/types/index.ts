@@ -117,22 +117,43 @@ export interface MonthlyCloseDistribution {
   equityTransaction?: string;
 }
 
+export interface MonthlyCloseApproval {
+  user: string | { _id: string; name: string };
+  at: string;
+}
+
+export interface MonthlyCloseActivity {
+  action: 'created' | 'submitted' | 'approved' | 'rejected' | 'finalized' | 'notified';
+  user: string | { _id: string; name: string };
+  timestamp: string;
+  note?: string;
+}
+
 export interface MonthlyClose {
   _id?: string;
   entity: string | Entity;
   year: number;
   month: number;
-  status: 'draft' | 'finalized';
+  status: 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'finalized';
+  openingCash: number;
   totalIncome: number;
   totalExpense: number;
   netProfit: number;
+  availableCash: number;
   shareholderDistribution: number;
   companyReserve: number;
   staffReserve: number;
+  closingCash: number;
   distributions: MonthlyCloseDistribution[];
   isLoss: boolean;
+  approvals: MonthlyCloseApproval[];
+  approvedBy?: string | { _id: string; name: string };
+  approvedAt?: string;
+  rejectionReason?: string;
   closedBy?: string | { _id: string; name: string };
   closedAt?: string;
+  notifiedEmails: string[];
+  activityLog: MonthlyCloseActivity[];
   notes?: string;
   createdAt?: string;
   updatedAt?: string;

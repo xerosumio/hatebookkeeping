@@ -6,6 +6,14 @@ import type { Entity } from '../types';
 
 const MONTH_NAMES = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+const STATUS_BADGES: Record<string, { bg: string; text: string; label: string }> = {
+  draft: { bg: 'bg-gray-100', text: 'text-gray-500', label: 'Open' },
+  pending_approval: { bg: 'bg-amber-50', text: 'text-amber-700', label: 'Pending' },
+  approved: { bg: 'bg-blue-50', text: 'text-blue-700', label: 'Approved' },
+  rejected: { bg: 'bg-red-50', text: 'text-red-700', label: 'Rejected' },
+  finalized: { bg: 'bg-green-50', text: 'text-green-700', label: 'Finalized' },
+};
+
 export default function MonthlyCloseList() {
   const navigate = useNavigate();
   const { data: entities } = useEntities();
@@ -24,6 +32,16 @@ export default function MonthlyCloseList() {
 
   if (isLoading) return <p className="text-gray-500">Loading...</p>;
 
+  function renderStatusBadge(status?: string) {
+    const s = status || 'draft';
+    const badge = STATUS_BADGES[s] || STATUS_BADGES.draft;
+    return (
+      <span className={`text-xs px-2 py-0.5 rounded ${badge.bg} ${badge.text}`}>
+        {badge.label}
+      </span>
+    );
+  }
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
@@ -36,9 +54,15 @@ export default function MonthlyCloseList() {
           >
             <option value="">All Entities</option>
             {entities?.map((ent: Entity) => (
-              <option key={ent._id} value={ent._id}>{ent.code} — {ent.name}</option>
+              <option key={ent._id} value={ent._id}>{ent.code} -- {ent.name}</option>
             ))}
           </select>
+          <button
+            onClick={() => navigate(`/monthly-close/summary/${year}`)}
+            className="px-3 py-1.5 text-sm border border-blue-300 text-blue-600 rounded hover:bg-blue-50"
+          >
+            Group Summary
+          </button>
           <div className="flex items-center gap-2">
             <button onClick={() => setYear(year - 1)} className="px-2 py-1 text-sm border rounded hover:bg-gray-50">&larr;</button>
             <span className="text-sm font-medium">{year}</span>
@@ -49,7 +73,7 @@ export default function MonthlyCloseList() {
 
       {!entityFilter && (
         <p className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-4">
-          Select an entity to view or finalize monthly close. The table below shows all entities combined.
+          Select an entity to view or manage monthly close. The table below shows all entities combined.
         </p>
       )}
 
@@ -71,17 +95,13 @@ export default function MonthlyCloseList() {
               months.map(({ month, data: d }) => (
                 <tr key={month} className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium">{MONTH_NAMES[month]} {year}</td>
-                  <td className="px-4 py-3 text-right font-mono">{d ? formatMoney(d.totalIncome) : '—'}</td>
-                  <td className="px-4 py-3 text-right font-mono">{d ? formatMoney(d.totalExpense) : '—'}</td>
+                  <td className="px-4 py-3 text-right font-mono">{d ? formatMoney(d.totalIncome) : '--'}</td>
+                  <td className="px-4 py-3 text-right font-mono">{d ? formatMoney(d.totalExpense) : '--'}</td>
                   <td className={`px-4 py-3 text-right font-mono ${d && d.netProfit < 0 ? 'text-red-600' : d && d.netProfit > 0 ? 'text-green-600' : ''}`}>
-                    {d ? formatMoney(d.netProfit) : '—'}
+                    {d ? formatMoney(d.netProfit) : '--'}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    {d?.status === 'finalized' ? (
-                      <span className="text-xs px-2 py-0.5 rounded bg-green-50 text-green-700">Finalized</span>
-                    ) : (
-                      <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-500">Open</span>
-                    )}
+                    {renderStatusBadge(d?.status)}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
@@ -108,11 +128,7 @@ export default function MonthlyCloseList() {
                         {formatMoney(d.netProfit)}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        {d.status === 'finalized' ? (
-                          <span className="text-xs px-2 py-0.5 rounded bg-green-50 text-green-700">Finalized</span>
-                        ) : (
-                          <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-500">Open</span>
-                        )}
+                        {renderStatusBadge(d.status)}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <button
@@ -128,7 +144,7 @@ export default function MonthlyCloseList() {
               ) : (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
-                    No finalized closes for {year}. Select an entity to review and finalize.
+                    No closes for {year}. Select an entity to review and submit.
                   </td>
                 </tr>
               )
