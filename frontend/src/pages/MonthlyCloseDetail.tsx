@@ -3,12 +3,21 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   useMonthlyClose, useSubmitMonthlyClose, useApproveMonthlyClose,
   useRejectMonthlyClose, useNotifyMonthlyClose, useFinalizeMonthlyClose,
-  useCreateCollectionRequests, useUsers,
+  useCreateCollectionRequests, useUsers, useDistributionOptions,
 } from '../api/hooks';
 import { useAuth } from '../contexts/AuthContext';
 import { formatMoney } from '../utils/money';
 import { CheckCircle, XCircle, Send, FileText, Bell, AlertTriangle } from 'lucide-react';
 import type { Entity, MonthlyCloseActivity } from '../types';
+
+interface DistributionOption {
+  shareholder: string | { _id: string };
+  name: string;
+  sharePercent: number;
+  amount: number;
+  outstandingLiability: number;
+  canOffsetLiability: boolean;
+}
 
 const MONTH_NAMES = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -62,6 +71,11 @@ export default function MonthlyCloseDetail() {
   const [showCollectionModal, setShowCollectionModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set());
+  const [distMethods, setDistMethods] = useState<Record<string, 'cash' | 'offset_liability'>>({});
+
+  const { data: distOptions } = useDistributionOptions(
+    entityId || '', year, month, showFinalizeModal,
+  );
 
   if (isLoading) return <p className="text-gray-500">Loading...</p>;
   if (!data) return <p className="text-gray-500">No data</p>;
@@ -107,8 +121,13 @@ export default function MonthlyCloseDetail() {
 
   async function handleFinalize() {
     if (!entityId) return;
-    await finalizeMutation.mutateAsync({ entity: entityId, year, month, notes });
+    const distributionMethods = Object.entries(distMethods).map(([shareholder, method]) => ({
+      shareholder,
+      method,
+    }));
+    await finalizeMutation.mutateAsync({ entity: entityId, year, month, notes, distributionMethods });
     setShowFinalizeModal(false);
+    setDistMethods({});
     refetch();
   }
 
@@ -499,7 +518,7 @@ export default function MonthlyCloseDetail() {
       {/* Finalize modal */}
       {showFinalizeModal && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-[480px]">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-[640px] max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold mb-2">Finalize {MONTH_NAMES[month]} {year}</h3>
             <p className="text-sm text-gray-600 mb-4">This action will:</p>
             <ul className="text-sm text-gray-600 mb-4 space-y-1">
@@ -508,8 +527,81 @@ export default function MonthlyCloseDetail() {
               {!data.isLoss && <li>- Transfer {formatMoney(data.staffReserve)} to Staff Reserve fund</li>}
               <li>- Lock this month (cannot be undone)</li>
             </ul>
+
+            {!data.isLoss && distOptions?.distributions && (
+              <div className="mb-4">
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">Distribution Method per Shareholder</h4>
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium text-gray-600">Shareholder</th>
+                        <th className="text-right px-3 py-2 font-medium text-gray-600">Amount</th>
+                        <th className="text-right px-3 py-2 font-medium text-gray-600">Outstanding Liability</th>
+                        <th className="text-center px-3 py-2 font-medium text-gray-600">Method</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {distOptions.distributions.map((d: DistributionOption) => {
+                        const shId = typeof d.shareholder === 'object' ? d.shareholder._id : d.shareholder;
+                        const method = distMethods[shId] || 'cash';
+                        return (
+                          <tr key={shId}>
+                            <td className="px-3 py-2 font-medium">{d.name}</td>
+                            <td className="px-3 py-2 text-right text-green-600">{formatMoney(d.amount)}</td>
+                            <td className="px-3 py-2 text-right">
+                              {d.outstandingLiability > 0
+                                ? <span className="text-red-600">{formatMoney(d.outstandingLiability)}</span>
+                                : <span className="text-gray-400">None</span>
+                              }
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <select
+                                value={method}
+                                onChange={(e) => setDistMethods((prev) => ({
+                                  ...prev,
+                                  [shId]: e.target.value as 'cash' | 'offset_liability',
+                                }))}
+                                disabled={!d.canOffsetLiability}
+                                className="text-xs border border-gray-300 rounded px-2 py-1 disabled:opacity-50 disabled:bg-gray-50"
+                              >
+                                <option value="cash">Cash Transfer</option>
+                                {d.canOffsetLiability && (
+                                  <option value="offset_liability">Offset Liability</option>
+                                )}
+                              </select>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {(() => {
+                  const totalCash = (distOptions.distributions as DistributionOption[])
+                    .filter((d) => {
+                      const shId = typeof d.shareholder === 'object' ? d.shareholder._id : d.shareholder;
+                      return (distMethods[shId] || 'cash') === 'cash';
+                    })
+                    .reduce((sum, d) => sum + d.amount, 0);
+                  const totalOffset = (distOptions.distributions as DistributionOption[])
+                    .filter((d) => {
+                      const shId = typeof d.shareholder === 'object' ? d.shareholder._id : d.shareholder;
+                      return distMethods[shId] === 'offset_liability';
+                    })
+                    .reduce((sum, d) => sum + Math.min(d.amount, d.outstandingLiability), 0);
+                  return (
+                    <div className="mt-3 flex gap-4 text-xs text-gray-600">
+                      <span>Net cash out: <strong className="text-gray-900">{formatMoney(totalCash)}</strong></span>
+                      <span>Offset against liabilities: <strong className="text-gray-900">{formatMoney(totalOffset)}</strong></span>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
             <div className="flex justify-end gap-2">
-              <button onClick={() => setShowFinalizeModal(false)} className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50">
+              <button onClick={() => { setShowFinalizeModal(false); setDistMethods({}); }} className="px-4 py-2 text-sm border border-gray-300 rounded hover:bg-gray-50">
                 Cancel
               </button>
               <button

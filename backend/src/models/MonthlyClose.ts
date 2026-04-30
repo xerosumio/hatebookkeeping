@@ -5,6 +5,8 @@ export interface IDistributionEntry {
   sharePercent: number;
   amount: number;
   equityTransaction?: mongoose.Types.ObjectId;
+  method?: 'cash' | 'offset_liability';
+  liabilityOffset?: number;
 }
 
 export interface IApprovalEntry {
@@ -54,6 +56,8 @@ const distributionEntrySchema = new Schema<IDistributionEntry>(
     sharePercent: { type: Number, required: true },
     amount: { type: Number, required: true },
     equityTransaction: { type: Schema.Types.ObjectId, ref: 'EquityTransaction' },
+    method: { type: String, enum: ['cash', 'offset_liability'], default: 'cash' },
+    liabilityOffset: { type: Number },
   },
   { _id: false },
 );

@@ -857,11 +857,25 @@ export function useNotifyMonthlyClose() {
   });
 }
 
+export function useDistributionOptions(entity: string, year: number, month: number, enabled: boolean) {
+  return useQuery({
+    queryKey: ['monthlyClose', 'distributionOptions', entity, year, month],
+    queryFn: () => api.get(`/monthly-close/${entity}/${year}/${month}/distribution-options`).then((r) => r.data),
+    enabled: !!entity && year > 0 && month > 0 && enabled,
+  });
+}
+
 export function useFinalizeMonthlyClose() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ entity, year, month, notes }: { entity: string; year: number; month: number; notes?: string }) =>
-      api.post<MonthlyClose>(`/monthly-close/${entity}/${year}/${month}/finalize`, { notes }).then((r) => r.data),
+    mutationFn: ({ entity, year, month, notes, distributionMethods }: {
+      entity: string;
+      year: number;
+      month: number;
+      notes?: string;
+      distributionMethods?: Array<{ shareholder: string; method: 'cash' | 'offset_liability' }>;
+    }) =>
+      api.post<MonthlyClose>(`/monthly-close/${entity}/${year}/${month}/finalize`, { notes, distributionMethods }).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['monthlyClose'] });
       qc.invalidateQueries({ queryKey: ['shareholders'] });

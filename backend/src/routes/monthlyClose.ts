@@ -5,6 +5,7 @@ import { MonthlyClose } from '../models/MonthlyClose.js';
 import { Transaction } from '../models/Transaction.js';
 import { Shareholder } from '../models/Shareholder.js';
 import { EquityTransaction } from '../models/EquityTransaction.js';
+import { ShareLiability } from '../models/ShareLiability.js';
 import { Payee } from '../models/Payee.js';
 import { PaymentRequest } from '../models/PaymentRequest.js';
 import { Fund } from '../models/Fund.js';
@@ -608,6 +609,49 @@ router.post('/:entity/:year/:month/notify', async (req: AuthRequest, res, next) 
   }
 });
 
+// ── Distribution options (for finalize modal) ────────────────────────
+
+router.get('/:entity/:year/:month/distribution-options', roleGuard('admin'), async (req: AuthRequest, res, next) => {
+  try {
+    const entityId = req.params.entity as string;
+    const year = parseInt(req.params.year as string);
+    const month = parseInt(req.params.month as string);
+
+    const figures = await computeMonthlyFigures(year, month, entityId);
+    const shareholders = await Shareholder.find({ active: true }).sort({ sharePercent: -1 });
+    const dist = computeDistribution(figures.availableCash, shareholders);
+
+    const options = await Promise.all(
+      dist.distributions.map(async (d) => {
+        const liabilityTotals = await ShareLiability.aggregate([
+          { $match: { shareholder: d.shareholder } },
+          { $group: { _id: '$type', total: { $sum: '$amount' } } },
+        ]);
+        let owed = 0;
+        let paid = 0;
+        for (const lt of liabilityTotals) {
+          if (lt._id === 'purchase') owed = lt.total;
+          if (lt._id === 'payment') paid = lt.total;
+        }
+        const outstanding = Math.max(0, owed - paid);
+        const sh = shareholders.find((s) => s._id.toString() === d.shareholder.toString());
+        return {
+          shareholder: d.shareholder,
+          name: sh?.name || '',
+          sharePercent: d.sharePercent,
+          amount: d.amount,
+          outstandingLiability: outstanding,
+          canOffsetLiability: outstanding > 0,
+        };
+      }),
+    );
+
+    res.json({ isLoss: dist.isLoss, distributions: options });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ── Finalize (requires approved status) ──────────────────────────────
 
 router.post('/:entity/:year/:month/finalize', roleGuard('admin'), async (req: AuthRequest, res, next) => {
@@ -615,7 +659,13 @@ router.post('/:entity/:year/:month/finalize', roleGuard('admin'), async (req: Au
     const entityId = req.params.entity as string;
     const year = parseInt(req.params.year as string);
     const month = parseInt(req.params.month as string);
-    const { notes } = z.object({ notes: z.string().optional().default('') }).parse(req.body);
+    const { notes, distributionMethods } = z.object({
+      notes: z.string().optional().default(''),
+      distributionMethods: z.array(z.object({
+        shareholder: z.string(),
+        method: z.enum(['cash', 'offset_liability']),
+      })).optional().default([]),
+    }).parse(req.body);
 
     const existing = await MonthlyClose.findOne({ entity: entityId, year, month });
     if (existing?.status === 'finalized') throw new AppError(400, 'Month already finalized');
@@ -627,6 +677,12 @@ router.post('/:entity/:year/:month/finalize', roleGuard('admin'), async (req: Au
     const figures = await computeMonthlyFigures(year, month, entityId);
     const shareholders = await Shareholder.find({ active: true }).sort({ sharePercent: -1 });
     const dist = computeDistribution(figures.availableCash, shareholders);
+
+    // Build a lookup for distribution methods
+    const methodMap = new Map<string, 'cash' | 'offset_liability'>();
+    for (const dm of distributionMethods) {
+      methodMap.set(dm.shareholder, dm.method);
+    }
 
     existing.set({
       ...figures,
@@ -649,9 +705,12 @@ router.post('/:entity/:year/:month/finalize', roleGuard('admin'), async (req: Au
     // Create equity transactions for each shareholder
     const distributions = [];
     for (const d of dist.distributions) {
+      const shareholderId = d.shareholder.toString();
+      const method = methodMap.get(shareholderId) || 'cash';
+
       const lastTxn = await EquityTransaction.findOne({ shareholder: d.shareholder })
         .sort({ date: -1, createdAt: -1 });
-      const currentBalance = lastTxn?.balanceAfter ?? 0;
+      let currentBalance = lastTxn?.balanceAfter ?? 0;
 
       const eqType = dist.isLoss ? 'collection' : 'distribution';
       const amount = dist.isLoss ? Math.abs(d.amount) : -Math.abs(d.amount);
@@ -673,11 +732,55 @@ router.post('/:entity/:year/:month/finalize', roleGuard('admin'), async (req: Au
         createdBy: req.user!._id,
       });
 
+      let liabilityOffset = 0;
+
+      // Handle offset_liability: create ShareLiability payment + investment EquityTransaction
+      if (method === 'offset_liability' && !dist.isLoss && d.amount > 0) {
+        const liabilityTotals = await ShareLiability.aggregate([
+          { $match: { shareholder: new mongoose.Types.ObjectId(shareholderId) } },
+          { $group: { _id: '$type', total: { $sum: '$amount' } } },
+        ]);
+        let owed = 0;
+        let paid = 0;
+        for (const lt of liabilityTotals) {
+          if (lt._id === 'purchase') owed = lt.total;
+          if (lt._id === 'payment') paid = lt.total;
+        }
+        const outstanding = Math.max(0, owed - paid);
+        liabilityOffset = Math.min(d.amount, outstanding);
+
+        if (liabilityOffset > 0) {
+          await ShareLiability.create({
+            shareholder: new mongoose.Types.ObjectId(shareholderId),
+            type: 'payment',
+            amount: liabilityOffset,
+            date: new Date(year, month - 1, 28),
+            description: `Offset from profit distribution — ${monthName} ${year}`,
+            createdBy: req.user!._id,
+          });
+
+          const postDistBalance = balanceAfter;
+          const investBalanceAfter = postDistBalance + liabilityOffset;
+          await EquityTransaction.create({
+            type: 'investment',
+            shareholder: d.shareholder,
+            amount: liabilityOffset,
+            date: new Date(year, month - 1, 28),
+            description: `Share purchase payment (offset from distribution) — ${monthName} ${year}`,
+            monthlyClose: existing._id,
+            balanceAfter: investBalanceAfter,
+            createdBy: req.user!._id,
+          });
+        }
+      }
+
       distributions.push({
         shareholder: d.shareholder,
         sharePercent: d.sharePercent,
         amount: d.amount,
         equityTransaction: eqTxn._id,
+        method,
+        liabilityOffset: liabilityOffset || undefined,
       });
     }
 
