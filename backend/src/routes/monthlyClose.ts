@@ -39,22 +39,38 @@ async function computeOpeningCash(year: number, month: number, entityId: string)
     return priorClose.closingCash;
   }
 
-  // First month: use sum of bank fund opening balances for this entity
+  // First month: derive actual bank balance at month start
+  // = current bank balance - net of all transactions from this month onwards
   const bankFunds = await Fund.find({
     entity: new mongoose.Types.ObjectId(entityId),
     type: 'bank',
     active: true,
   });
+  const currentBankBalance = bankFunds.reduce((sum, f) => sum + (f.balance || 0), 0);
 
-  return bankFunds.reduce((sum, f) => sum + (f.openingBalance || 0), 0);
+  const startDate = new Date(year, month - 1, 1);
+  const txnResults = await Transaction.aggregate([
+    { $match: { entity: new mongoose.Types.ObjectId(entityId), date: { $gte: startDate } } },
+    { $group: { _id: '$type', total: { $sum: '$amount' } } },
+  ]);
+
+  let txnIncome = 0;
+  let txnExpense = 0;
+  for (const r of txnResults) {
+    if (r._id === 'income') txnIncome = r.total;
+    if (r._id === 'expense') txnExpense = r.total;
+  }
+
+  return currentBankBalance - (txnIncome - txnExpense);
 }
 
 async function computeMonthlyFigures(year: number, month: number, entityId: string) {
   const startDate = new Date(year, month - 1, 1);
   const endDate = new Date(year, month, 1);
 
+  // P&L by accountingDate, excluding non-operational categories (for reporting)
   const NON_OPERATIONAL_CATEGORIES = ['Currency Conversion', 'Intercompany Transfer'];
-  const results = await Transaction.aggregate([
+  const plResults = await Transaction.aggregate([
     { $addFields: { _effectiveDate: { $ifNull: ['$accountingDate', '$date'] } } },
     { $match: { _effectiveDate: { $gte: startDate, $lt: endDate }, category: { $nin: NON_OPERATIONAL_CATEGORIES }, entity: new mongoose.Types.ObjectId(entityId) } },
     { $group: { _id: '$type', total: { $sum: '$amount' } } },
@@ -62,14 +78,28 @@ async function computeMonthlyFigures(year: number, month: number, entityId: stri
 
   let totalIncome = 0;
   let totalExpense = 0;
-  for (const r of results) {
+  for (const r of plResults) {
     if (r._id === 'income') totalIncome = r.total;
     if (r._id === 'expense') totalExpense = r.total;
   }
 
+  // Actual cash flow by bank date, all categories (for cash position)
+  const cashResults = await Transaction.aggregate([
+    { $match: { date: { $gte: startDate, $lt: endDate }, entity: new mongoose.Types.ObjectId(entityId) } },
+    { $group: { _id: '$type', total: { $sum: '$amount' } } },
+  ]);
+
+  let cashIn = 0;
+  let cashOut = 0;
+  for (const r of cashResults) {
+    if (r._id === 'income') cashIn = r.total;
+    if (r._id === 'expense') cashOut = r.total;
+  }
+
   const openingCash = await computeOpeningCash(year, month, entityId);
   const netProfit = totalIncome - totalExpense;
-  const availableCash = openingCash + netProfit;
+  const cashFlow = cashIn - cashOut;
+  const availableCash = openingCash + cashFlow;
 
   return { openingCash, totalIncome, totalExpense, netProfit, availableCash };
 }
