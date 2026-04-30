@@ -7,7 +7,7 @@ import {
 } from '../api/hooks';
 import { useAuth } from '../contexts/AuthContext';
 import { formatMoney } from '../utils/money';
-import { CheckCircle, XCircle, Clock, Send, FileText, Bell, AlertTriangle } from 'lucide-react';
+import { CheckCircle, XCircle, Send, FileText, Bell, AlertTriangle } from 'lucide-react';
 import type { Entity, MonthlyCloseActivity } from '../types';
 
 const MONTH_NAMES = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
