@@ -69,7 +69,7 @@ async function computeMonthlyFigures(year: number, month: number, entityId: stri
   const endDate = new Date(year, month, 1);
 
   // P&L by accountingDate, excluding non-operational categories (for reporting)
-  const NON_OPERATIONAL_CATEGORIES = ['Currency Conversion', 'Intercompany Transfer'];
+  const NON_OPERATIONAL_CATEGORIES = ['Currency Conversion'];
   const plResults = await Transaction.aggregate([
     { $addFields: { _effectiveDate: { $ifNull: ['$accountingDate', '$date'] } } },
     { $match: { _effectiveDate: { $gte: startDate, $lt: endDate }, category: { $nin: NON_OPERATIONAL_CATEGORIES }, entity: new mongoose.Types.ObjectId(entityId) } },
