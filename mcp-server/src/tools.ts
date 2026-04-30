@@ -525,7 +525,35 @@ export function registerTools(server: McpServer, api: ApiRequestFn = defaultApiR
     return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
   });
 
-  server.tool('finalize_monthly_close', 'Finalize a monthly close (admin)', {
+  server.tool('submit_monthly_close', 'Submit monthly close for approval (admin)', {
+    entity: ReqStr, year: z.number(), month: z.number(), notes: OptStr,
+  }, async ({ entity, year, month, notes }) => {
+    const data = await api('POST', `/monthly-close/${entity}/${year}/${month}/submit`, { notes });
+    return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+  });
+
+  server.tool('approve_monthly_close', 'Approve a pending monthly close (admin)', {
+    entity: ReqStr, year: z.number(), month: z.number(),
+  }, async ({ entity, year, month }) => {
+    const data = await api('PATCH', `/monthly-close/${entity}/${year}/${month}/approve`);
+    return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+  });
+
+  server.tool('reject_monthly_close', 'Reject a pending monthly close (admin)', {
+    entity: ReqStr, year: z.number(), month: z.number(), reason: ReqStr,
+  }, async ({ entity, year, month, reason }) => {
+    const data = await api('PATCH', `/monthly-close/${entity}/${year}/${month}/reject`, { reason });
+    return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+  });
+
+  server.tool('notify_monthly_close', 'Send monthly close notification emails', {
+    entity: ReqStr, year: z.number(), month: z.number(), emails: z.array(z.string()),
+  }, async ({ entity, year, month, emails }) => {
+    const data = await api('POST', `/monthly-close/${entity}/${year}/${month}/notify`, { emails });
+    return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+  });
+
+  server.tool('finalize_monthly_close', 'Finalize an approved monthly close (admin)', {
     entity: ReqStr, year: z.number(), month: z.number(), notes: OptStr,
   }, async ({ entity, year, month, notes }) => {
     const data = await api('POST', `/monthly-close/${entity}/${year}/${month}/finalize`, { notes });

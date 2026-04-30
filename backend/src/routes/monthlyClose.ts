@@ -9,12 +9,45 @@ import { Payee } from '../models/Payee.js';
 import { PaymentRequest } from '../models/PaymentRequest.js';
 import { Fund } from '../models/Fund.js';
 import { FundTransfer } from '../models/FundTransfer.js';
+import { User } from '../models/User.js';
+import { Settings } from '../models/Settings.js';
 import { getNextSequence } from '../models/Counter.js';
-import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { authMiddleware, AuthRequest, roleGuard } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { getRequiredApproverIds, hasFullApproval } from '../utils/dualApproval.js';
+import { sendEmail, buildStatusChangeEmailHtml, buildMonthlyCloseEmailHtml } from '../utils/email.js';
+import { env } from '../config/env.js';
 
 const router = Router();
 router.use(authMiddleware);
+
+// ── Helpers ──────────────────────────────────────────────────────────
+
+async function computeOpeningCash(year: number, month: number, entityId: string): Promise<number> {
+  let prevYear = year;
+  let prevMonth = month - 1;
+  if (prevMonth < 1) { prevYear--; prevMonth = 12; }
+
+  const priorClose = await MonthlyClose.findOne({
+    entity: entityId,
+    year: prevYear,
+    month: prevMonth,
+    status: 'finalized',
+  });
+
+  if (priorClose) {
+    return priorClose.closingCash;
+  }
+
+  // First month: use sum of bank fund opening balances for this entity
+  const bankFunds = await Fund.find({
+    entity: new mongoose.Types.ObjectId(entityId),
+    type: 'bank',
+    active: true,
+  });
+
+  return bankFunds.reduce((sum, f) => sum + (f.openingBalance || 0), 0);
+}
 
 async function computeMonthlyFigures(year: number, month: number, entityId: string) {
   const startDate = new Date(year, month - 1, 1);
@@ -34,21 +67,25 @@ async function computeMonthlyFigures(year: number, month: number, entityId: stri
     if (r._id === 'expense') totalExpense = r.total;
   }
 
-  return { totalIncome, totalExpense, netProfit: totalIncome - totalExpense };
+  const openingCash = await computeOpeningCash(year, month, entityId);
+  const netProfit = totalIncome - totalExpense;
+  const availableCash = openingCash + netProfit;
+
+  return { openingCash, totalIncome, totalExpense, netProfit, availableCash };
 }
 
-function computeDistribution(netProfit: number, shareholders: Array<{ _id: any; sharePercent: number }>) {
-  const isLoss = netProfit < 0;
+function computeDistribution(availableCash: number, shareholders: Array<{ _id: any; sharePercent: number }>) {
+  const isLoss = availableCash < 0;
   let shareholderPool = 0;
   let companyReserve = 0;
   let staffReserve = 0;
 
   if (!isLoss) {
-    shareholderPool = Math.round(netProfit * 0.75);
-    companyReserve = Math.round(netProfit * 0.20);
-    staffReserve = netProfit - shareholderPool - companyReserve;
+    shareholderPool = Math.round(availableCash * 0.75);
+    companyReserve = Math.round(availableCash * 0.20);
+    staffReserve = availableCash - shareholderPool - companyReserve;
   } else {
-    shareholderPool = netProfit;
+    shareholderPool = availableCash;
   }
 
   const distributions = shareholders.map((sh) => ({
@@ -64,10 +101,31 @@ function computeDistribution(netProfit: number, shareholders: Array<{ _id: any; 
     distributions[0].amount += remainder * sign;
   }
 
-  return { shareholderPool: Math.abs(shareholderPool), companyReserve, staffReserve, isLoss, distributions };
+  const closingCash = isLoss ? 0 : companyReserve;
+
+  return { shareholderPool: Math.abs(shareholderPool), companyReserve, staffReserve, closingCash, isLoss, distributions };
 }
 
-// List all closes, optionally filter by entity
+function getMonthLabel(year: number, month: number): string {
+  return new Date(year, month - 1).toLocaleString('en', { month: 'long', year: 'numeric' });
+}
+
+function formatCents(amount: number): string {
+  return `HK$ ${(Math.abs(amount) / 100).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function populateClose(query: any) {
+  return query
+    .populate('distributions.shareholder', 'name sharePercent')
+    .populate('closedBy', 'name')
+    .populate('approvedBy', 'name')
+    .populate('approvals.user', 'name')
+    .populate('activityLog.user', 'name')
+    .populate('entity', 'code name');
+}
+
+// ── List all closes ──────────────────────────────────────────────────
+
 router.get('/', async (req, res, next) => {
   try {
     const filter: Record<string, unknown> = {};
@@ -82,7 +140,8 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// Group summary for a year/month across all entities
+// ── Group summary ────────────────────────────────────────────────────
+
 router.get('/summary/:year/:month', async (req, res, next) => {
   try {
     const year = parseInt(req.params.year as string);
@@ -110,20 +169,21 @@ router.get('/summary/:year/:month', async (req, res, next) => {
   }
 });
 
+// ── Get / preview (draft) ────────────────────────────────────────────
+
 router.get('/:entity/:year/:month', async (req, res, next) => {
   try {
     const entityId = req.params.entity as string;
     const year = parseInt(req.params.year as string);
     const month = parseInt(req.params.month as string);
-    const existing = await MonthlyClose.findOne({ entity: entityId, year, month })
-      .populate('distributions.shareholder', 'name sharePercent')
-      .populate('closedBy', 'name')
-      .populate('entity', 'code name');
+    const existing = await populateClose(
+      MonthlyClose.findOne({ entity: entityId, year, month }),
+    );
     if (existing) return res.json(existing);
 
     const figures = await computeMonthlyFigures(year, month, entityId);
     const shareholders = await Shareholder.find({ active: true }).sort({ sharePercent: -1 });
-    const dist = computeDistribution(figures.netProfit, shareholders);
+    const dist = computeDistribution(figures.availableCash, shareholders);
 
     res.json({
       entity: entityId,
@@ -134,16 +194,22 @@ router.get('/:entity/:year/:month', async (req, res, next) => {
       shareholderDistribution: dist.shareholderPool,
       companyReserve: dist.companyReserve,
       staffReserve: dist.staffReserve,
+      closingCash: dist.closingCash,
       isLoss: dist.isLoss,
       distributions: dist.distributions.map((d) => {
         const sh = shareholders.find((s) => s._id.equals(d.shareholder));
         return { ...d, shareholder: { _id: sh!._id, name: sh!.name, sharePercent: sh!.sharePercent } };
       }),
+      approvals: [],
+      activityLog: [],
+      notifiedEmails: [],
     });
   } catch (error) {
     next(error);
   }
 });
+
+// ── Recompute preview ────────────────────────────────────────────────
 
 router.post('/:entity/:year/:month/preview', async (req, res, next) => {
   try {
@@ -153,7 +219,7 @@ router.post('/:entity/:year/:month/preview', async (req, res, next) => {
 
     const figures = await computeMonthlyFigures(year, month, entityId);
     const shareholders = await Shareholder.find({ active: true }).sort({ sharePercent: -1 });
-    const dist = computeDistribution(figures.netProfit, shareholders);
+    const dist = computeDistribution(figures.availableCash, shareholders);
 
     res.json({
       entity: entityId,
@@ -163,6 +229,7 @@ router.post('/:entity/:year/:month/preview', async (req, res, next) => {
       shareholderDistribution: dist.shareholderPool,
       companyReserve: dist.companyReserve,
       staffReserve: dist.staffReserve,
+      closingCash: dist.closingCash,
       isLoss: dist.isLoss,
       distributions: dist.distributions.map((d) => {
         const sh = shareholders.find((s) => s._id.equals(d.shareholder));
@@ -174,10 +241,10 @@ router.post('/:entity/:year/:month/preview', async (req, res, next) => {
   }
 });
 
-router.post('/:entity/:year/:month/finalize', async (req: AuthRequest, res, next) => {
-  try {
-    if (req.user!.role !== 'admin') throw new AppError(403, 'Admin only');
+// ── Submit for approval ──────────────────────────────────────────────
 
+router.post('/:entity/:year/:month/submit', roleGuard('admin'), async (req: AuthRequest, res, next) => {
+  try {
     const entityId = req.params.entity as string;
     const year = parseInt(req.params.year as string);
     const month = parseInt(req.params.month as string);
@@ -185,10 +252,19 @@ router.post('/:entity/:year/:month/finalize', async (req: AuthRequest, res, next
 
     const existing = await MonthlyClose.findOne({ entity: entityId, year, month });
     if (existing?.status === 'finalized') throw new AppError(400, 'Month already finalized');
+    if (existing?.status === 'pending_approval') throw new AppError(400, 'Already pending approval');
 
     const figures = await computeMonthlyFigures(year, month, entityId);
     const shareholders = await Shareholder.find({ active: true }).sort({ sharePercent: -1 });
-    const dist = computeDistribution(figures.netProfit, shareholders);
+    const dist = computeDistribution(figures.availableCash, shareholders);
+
+    const distEntries = dist.distributions.map((d) => ({
+      shareholder: d.shareholder,
+      sharePercent: d.sharePercent,
+      amount: d.amount,
+    }));
+
+    const activityLog = [{ action: 'submitted' as const, user: req.user!._id, timestamp: new Date() }];
 
     const closeDoc = existing
       ? await MonthlyClose.findByIdAndUpdate(existing._id, {
@@ -196,11 +272,16 @@ router.post('/:entity/:year/:month/finalize', async (req: AuthRequest, res, next
           shareholderDistribution: dist.shareholderPool,
           companyReserve: dist.companyReserve,
           staffReserve: dist.staffReserve,
+          closingCash: dist.closingCash,
           isLoss: dist.isLoss,
-          status: 'finalized',
-          closedBy: req.user!._id,
-          closedAt: new Date(),
+          status: 'pending_approval',
+          distributions: distEntries,
+          approvals: [],
+          approvedBy: undefined,
+          approvedAt: undefined,
+          rejectionReason: undefined,
           notes,
+          $push: { activityLog: activityLog[0] },
         }, { new: true })
       : await MonthlyClose.create({
           entity: entityId,
@@ -210,14 +291,255 @@ router.post('/:entity/:year/:month/finalize', async (req: AuthRequest, res, next
           shareholderDistribution: dist.shareholderPool,
           companyReserve: dist.companyReserve,
           staffReserve: dist.staffReserve,
+          closingCash: dist.closingCash,
           isLoss: dist.isLoss,
-          status: 'finalized',
-          closedBy: req.user!._id,
-          closedAt: new Date(),
+          status: 'pending_approval',
+          distributions: distEntries,
           notes,
-          distributions: [],
+          activityLog,
         });
 
+    const result = await populateClose(MonthlyClose.findById(closeDoc!._id));
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── Approve ──────────────────────────────────────────────────────────
+
+router.patch('/:entity/:year/:month/approve', roleGuard('admin'), async (req: AuthRequest, res, next) => {
+  try {
+    const entityId = req.params.entity as string;
+    const year = parseInt(req.params.year as string);
+    const month = parseInt(req.params.month as string);
+
+    const close = await MonthlyClose.findOne({ entity: entityId, year, month });
+    if (!close) throw new AppError(404, 'Monthly close not found');
+    if (close.status !== 'pending_approval') {
+      throw new AppError(400, 'Can only approve pending closes');
+    }
+
+    const alreadyApproved = (close.approvals || []).some(
+      (a) => a.user.toString() === req.user!._id.toString(),
+    );
+    if (alreadyApproved) throw new AppError(400, 'You have already approved this close');
+
+    close.approvals.push({ user: req.user!._id, at: new Date() });
+    close.activityLog.push({
+      action: 'approved',
+      user: req.user!._id,
+      timestamp: new Date(),
+    } as any);
+
+    const requiredIds = await getRequiredApproverIds();
+    if (hasFullApproval(close.approvals, requiredIds)) {
+      close.status = 'approved';
+      close.approvedBy = req.user!._id;
+      close.approvedAt = new Date();
+    }
+
+    await close.save();
+
+    // Send email when fully approved
+    if (close.status === 'approved') {
+      const settings = await Settings.findOne();
+      const companyName = settings?.companyName || 'HateBookkeeping';
+      const detailUrl = `${env.frontendUrl}/#/monthly-close/${entityId}/${year}/${month}`;
+      const recipientEmails = [...new Set(close.notifiedEmails || [])];
+
+      if (recipientEmails.length > 0) {
+        const html = buildStatusChangeEmailHtml({
+          companyName,
+          requestNumber: getMonthLabel(year, month),
+          requestLabel: 'Monthly Close',
+          newStatus: 'approved',
+          actorName: req.user!.name,
+          detailUrl,
+        });
+        const primary = recipientEmails[0];
+        const cc = recipientEmails.slice(1);
+        sendEmail({ to: primary, cc: cc.length > 0 ? cc : undefined, subject: `Re: [Monthly Close] ${getMonthLabel(year, month)}`, html }).catch(() => {});
+      }
+    }
+
+    const result = await populateClose(MonthlyClose.findById(close._id));
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── Reject ───────────────────────────────────────────────────────────
+
+router.patch('/:entity/:year/:month/reject', roleGuard('admin'), async (req: AuthRequest, res, next) => {
+  try {
+    const { reason } = z.object({ reason: z.string().min(1) }).parse(req.body);
+    const entityId = req.params.entity as string;
+    const year = parseInt(req.params.year as string);
+    const month = parseInt(req.params.month as string);
+
+    const close = await MonthlyClose.findOne({ entity: entityId, year, month });
+    if (!close) throw new AppError(404, 'Monthly close not found');
+    if (close.status !== 'pending_approval') {
+      throw new AppError(400, 'Can only reject pending closes');
+    }
+
+    close.status = 'rejected';
+    close.approvedBy = req.user!._id;
+    close.rejectionReason = reason;
+    close.approvals = [];
+    close.activityLog.push({
+      action: 'rejected',
+      user: req.user!._id,
+      timestamp: new Date(),
+      note: reason,
+    } as any);
+    await close.save();
+
+    // Send rejection email
+    const settings = await Settings.findOne();
+    const companyName = settings?.companyName || 'HateBookkeeping';
+    const detailUrl = `${env.frontendUrl}/#/monthly-close/${entityId}/${year}/${month}`;
+    const recipientEmails = [...new Set(close.notifiedEmails || [])];
+
+    if (recipientEmails.length > 0) {
+      const html = buildStatusChangeEmailHtml({
+        companyName,
+        requestNumber: getMonthLabel(year, month),
+        requestLabel: 'Monthly Close',
+        newStatus: 'rejected',
+        actorName: req.user!.name,
+        reason,
+        detailUrl,
+      });
+      const primary = recipientEmails[0];
+      const cc = recipientEmails.slice(1);
+      sendEmail({ to: primary, cc: cc.length > 0 ? cc : undefined, subject: `Re: [Monthly Close] ${getMonthLabel(year, month)}`, html }).catch(() => {});
+    }
+
+    const result = await populateClose(MonthlyClose.findById(close._id));
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── Notify (send for approval email) ─────────────────────────────────
+
+router.post('/:entity/:year/:month/notify', async (req: AuthRequest, res, next) => {
+  try {
+    const { emails } = z.object({ emails: z.array(z.string().email()) }).parse(req.body);
+    const entityId = req.params.entity as string;
+    const year = parseInt(req.params.year as string);
+    const month = parseInt(req.params.month as string);
+
+    const close = await MonthlyClose.findOne({ entity: entityId, year, month });
+    if (!close) throw new AppError(404, 'Monthly close not found');
+
+    // Merge emails
+    const existing = new Set(close.notifiedEmails || []);
+    emails.forEach((e) => existing.add(e));
+    close.notifiedEmails = [...existing];
+    close.activityLog.push({
+      action: 'notified',
+      user: req.user!._id,
+      timestamp: new Date(),
+      note: `Sent to: ${emails.join(', ')}`,
+    } as any);
+    await close.save();
+
+    // Send email
+    const settings = await Settings.findOne();
+    const companyName = settings?.companyName || 'HateBookkeeping';
+    const entity = await mongoose.model('Entity').findById(entityId);
+    const entityName = entity?.name || 'Unknown';
+    const detailUrl = `${env.frontendUrl}/#/monthly-close/${entityId}/${year}/${month}`;
+    const monthLabel = getMonthLabel(year, month);
+
+    const shareholders = await Shareholder.find({ active: true }).sort({ sharePercent: -1 });
+    const distItems = close.distributions.map((d) => {
+      const sh = shareholders.find((s) => s._id.equals(d.shareholder));
+      return {
+        name: sh?.name || 'Unknown',
+        sharePercent: d.sharePercent,
+        amount: formatCents(d.amount),
+        isNegative: d.amount < 0,
+      };
+    });
+
+    const html = buildMonthlyCloseEmailHtml({
+      companyName,
+      entityName,
+      monthLabel,
+      openingCash: formatCents(close.openingCash),
+      totalIncome: formatCents(close.totalIncome),
+      totalExpense: formatCents(close.totalExpense),
+      netProfit: formatCents(close.netProfit),
+      availableCash: formatCents(close.availableCash),
+      isLoss: close.isLoss,
+      shareholderDistribution: formatCents(close.shareholderDistribution),
+      companyReserve: formatCents(close.companyReserve),
+      staffReserve: formatCents(close.staffReserve),
+      distributions: distItems,
+      detailUrl,
+    });
+
+    const primary = emails[0];
+    const cc = emails.slice(1);
+    sendEmail({
+      to: primary,
+      cc: cc.length > 0 ? cc : undefined,
+      subject: `[Monthly Close] ${entityName} - ${monthLabel}`,
+      html,
+    }).catch(() => {});
+
+    const result = await populateClose(MonthlyClose.findById(close._id));
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ── Finalize (requires approved status) ──────────────────────────────
+
+router.post('/:entity/:year/:month/finalize', roleGuard('admin'), async (req: AuthRequest, res, next) => {
+  try {
+    const entityId = req.params.entity as string;
+    const year = parseInt(req.params.year as string);
+    const month = parseInt(req.params.month as string);
+    const { notes } = z.object({ notes: z.string().optional().default('') }).parse(req.body);
+
+    const existing = await MonthlyClose.findOne({ entity: entityId, year, month });
+    if (existing?.status === 'finalized') throw new AppError(400, 'Month already finalized');
+    if (!existing || existing.status !== 'approved') {
+      throw new AppError(400, 'Monthly close must be approved before finalizing');
+    }
+
+    // Recompute figures at finalization time
+    const figures = await computeMonthlyFigures(year, month, entityId);
+    const shareholders = await Shareholder.find({ active: true }).sort({ sharePercent: -1 });
+    const dist = computeDistribution(figures.availableCash, shareholders);
+
+    existing.set({
+      ...figures,
+      shareholderDistribution: dist.shareholderPool,
+      companyReserve: dist.companyReserve,
+      staffReserve: dist.staffReserve,
+      closingCash: dist.closingCash,
+      isLoss: dist.isLoss,
+      status: 'finalized',
+      closedBy: req.user!._id,
+      closedAt: new Date(),
+      notes: notes || existing.notes,
+    });
+    existing.activityLog.push({
+      action: 'finalized',
+      user: req.user!._id,
+      timestamp: new Date(),
+    } as any);
+
+    // Create equity transactions for each shareholder
     const distributions = [];
     for (const d of dist.distributions) {
       const lastTxn = await EquityTransaction.findOne({ shareholder: d.shareholder })
@@ -228,7 +550,6 @@ router.post('/:entity/:year/:month/finalize', async (req: AuthRequest, res, next
       const amount = dist.isLoss ? Math.abs(d.amount) : -Math.abs(d.amount);
       const balanceAfter = currentBalance + amount;
 
-      const sh = shareholders.find((s) => s._id.equals(d.shareholder));
       const monthName = new Date(year, month - 1).toLocaleString('en', { month: 'long' });
       const description = dist.isLoss
         ? `Capital collection — ${monthName} ${year} loss`
@@ -240,7 +561,7 @@ router.post('/:entity/:year/:month/finalize', async (req: AuthRequest, res, next
         amount,
         date: new Date(year, month - 1, 28),
         description,
-        monthlyClose: closeDoc!._id,
+        monthlyClose: existing._id,
         balanceAfter,
         createdBy: req.user!._id,
       });
@@ -253,53 +574,69 @@ router.post('/:entity/:year/:month/finalize', async (req: AuthRequest, res, next
       });
     }
 
-    closeDoc!.distributions = distributions;
-    await closeDoc!.save();
+    existing.distributions = distributions;
+    await existing.save();
 
-    // Auto-create fund transfers for reserves (profit scenario)
+    // Auto fund transfers for reserves (profit scenario)
     if (!dist.isLoss && dist.companyReserve > 0) {
-      const companyReserveFund = await Fund.findOne({ name: 'Company Reserve' });
+      const companyReserveFund = await Fund.findOne({ entity: entityId, type: 'reserve', name: /company reserve/i });
       if (companyReserveFund) {
         await Fund.findByIdAndUpdate(companyReserveFund._id, { $inc: { balance: dist.companyReserve } });
         await FundTransfer.create({
           toFund: companyReserveFund._id,
           amount: dist.companyReserve,
           date: new Date(year, month - 1, 28),
-          description: `Company reserve allocation — ${new Date(year, month - 1).toLocaleString('en', { month: 'long' })} ${year}`,
-          reference: `monthly-close:${closeDoc!._id}`,
+          description: `Company reserve allocation — ${getMonthLabel(year, month)}`,
+          reference: `monthly-close:${existing._id}`,
           createdBy: req.user!._id,
         });
       }
     }
     if (!dist.isLoss && dist.staffReserve > 0) {
-      const staffReserveFund = await Fund.findOne({ name: 'Staff Reserve' });
+      const staffReserveFund = await Fund.findOne({ entity: entityId, type: 'reserve', name: /staff reserve/i });
       if (staffReserveFund) {
         await Fund.findByIdAndUpdate(staffReserveFund._id, { $inc: { balance: dist.staffReserve } });
         await FundTransfer.create({
           toFund: staffReserveFund._id,
           amount: dist.staffReserve,
           date: new Date(year, month - 1, 28),
-          description: `Staff reserve allocation — ${new Date(year, month - 1).toLocaleString('en', { month: 'long' })} ${year}`,
-          reference: `monthly-close:${closeDoc!._id}`,
+          description: `Staff reserve allocation — ${getMonthLabel(year, month)}`,
+          reference: `monthly-close:${existing._id}`,
           createdBy: req.user!._id,
         });
       }
     }
 
-    const result = await MonthlyClose.findById(closeDoc!._id)
-      .populate('distributions.shareholder', 'name sharePercent')
-      .populate('closedBy', 'name')
-      .populate('entity', 'code name');
+    // Send finalized notification
+    const settings = await Settings.findOne();
+    const companyName = settings?.companyName || 'HateBookkeeping';
+    const detailUrl = `${env.frontendUrl}/#/monthly-close/${entityId}/${year}/${month}`;
+    const recipientEmails = [...new Set(existing.notifiedEmails || [])];
+    if (recipientEmails.length > 0) {
+      const html = buildStatusChangeEmailHtml({
+        companyName,
+        requestNumber: getMonthLabel(year, month),
+        requestLabel: 'Monthly Close',
+        newStatus: 'executed',
+        actorName: req.user!.name,
+        detailUrl,
+      });
+      const primary = recipientEmails[0];
+      const cc = recipientEmails.slice(1);
+      sendEmail({ to: primary, cc: cc.length > 0 ? cc : undefined, subject: `Re: [Monthly Close] ${getMonthLabel(year, month)}`, html }).catch(() => {});
+    }
+
+    const result = await populateClose(MonthlyClose.findById(existing._id));
     res.json(result);
   } catch (error) {
     next(error);
   }
 });
 
-router.post('/:entity/:year/:month/create-collection-requests', async (req: AuthRequest, res, next) => {
-  try {
-    if (req.user!.role !== 'admin') throw new AppError(403, 'Admin only');
+// ── Create collection requests (loss scenario) ──────────────────────
 
+router.post('/:entity/:year/:month/create-collection-requests', roleGuard('admin'), async (req: AuthRequest, res, next) => {
+  try {
     const entityId = req.params.entity as string;
     const year = parseInt(req.params.year as string);
     const month = parseInt(req.params.month as string);
