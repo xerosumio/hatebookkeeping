@@ -6,6 +6,7 @@ import { Transaction } from '../models/Transaction.js';
 import { Shareholder } from '../models/Shareholder.js';
 import { EquityTransaction } from '../models/EquityTransaction.js';
 import { ShareLiability } from '../models/ShareLiability.js';
+import { Entity } from '../models/Entity.js';
 import { Payee } from '../models/Payee.js';
 import { PaymentRequest } from '../models/PaymentRequest.js';
 import { Fund } from '../models/Fund.js';
@@ -811,6 +812,96 @@ router.post('/:entity/:year/:month/finalize', roleGuard('admin'), async (req: Au
           amount: dist.staffReserve,
           date: new Date(year, month - 1, 28),
           description: `Staff reserve allocation — ${getMonthLabel(year, month)}`,
+          reference: `monthly-close:${existing._id}`,
+          createdBy: req.user!._id,
+        });
+      }
+    }
+
+    // Create PaymentRequest for cash-transfer shareholders + fund transfers for offsets
+    if (!dist.isLoss) {
+      const entityDoc = await Entity.findById(entityId).select('bankAccounts defaultBankAccountIndex');
+      let sourceBankAccount = '';
+      if (entityDoc?.bankAccounts?.length) {
+        const idx = entityDoc.defaultBankAccountIndex || 0;
+        sourceBankAccount = entityDoc.bankAccounts[idx]?.name || entityDoc.bankAccounts[0]?.name || '';
+      }
+
+      const cashDistributions = distributions.filter((d) => d.method === 'cash' || !d.method);
+      if (cashDistributions.length > 0) {
+        const monthName = new Date(year, month - 1).toLocaleString('en', { month: 'long' });
+        const prItems = [];
+        for (const cd of cashDistributions) {
+          const sh = shareholders.find((s) => s._id.toString() === cd.shareholder.toString());
+          const shName = sh?.name || 'Shareholder';
+          let payee = await Payee.findOne({ name: shName });
+          if (!payee) {
+            payee = await Payee.create({
+              name: shName,
+              bankName: '',
+              bankAccountNumber: '',
+              bankCode: '',
+              notes: 'Shareholder',
+              createdBy: req.user!._id,
+            });
+          }
+          prItems.push({
+            payee: payee._id,
+            description: `Profit distribution — ${shName} (${cd.sharePercent.toFixed(2)}%)`,
+            amount: cd.amount,
+            category: 'Shareholder Distribution',
+            recipient: shName,
+          });
+        }
+
+        const requestNumber = await getNextSequence('pay');
+        await PaymentRequest.create({
+          requestNumber,
+          entity: entityId,
+          description: `Shareholder profit distribution — ${monthName} ${year}`,
+          items: prItems,
+          totalAmount: prItems.reduce((sum, i) => sum + i.amount, 0),
+          sourceBankAccount,
+          status: 'approved',
+          createdBy: req.user!._id,
+          approvals: [{ user: req.user!._id, at: new Date() }],
+          activityLog: [
+            { action: 'created', user: req.user!._id, timestamp: new Date() },
+            { action: 'approved', user: req.user!._id, timestamp: new Date(), note: 'Auto-approved via monthly close finalization' },
+          ],
+        });
+      }
+
+      // Fund transfer for offset-liability shareholders
+      const offsetDistributions = distributions.filter((d) => d.method === 'offset_liability' && d.liabilityOffset && d.liabilityOffset > 0);
+      if (offsetDistributions.length > 0) {
+        const totalOffset = offsetDistributions.reduce((sum, d) => sum + (d.liabilityOffset || 0), 0);
+
+        const bankFund = sourceBankAccount ? await Fund.findOne({ name: sourceBankAccount, type: 'bank' }) : null;
+        let poolFund = await Fund.findOne({ entity: entityId, type: 'reserve', name: /share purchase pool/i });
+        if (!poolFund) {
+          poolFund = await Fund.create({
+            name: 'Share Purchase Pool',
+            type: 'reserve',
+            entity: entityId,
+            openingBalance: 0,
+            balance: 0,
+            active: true,
+          });
+        }
+
+        if (bankFund) {
+          await Fund.findByIdAndUpdate(bankFund._id, { $inc: { balance: -totalOffset } });
+        }
+        await Fund.findByIdAndUpdate(poolFund._id, { $inc: { balance: totalOffset } });
+
+        const monthName2 = new Date(year, month - 1).toLocaleString('en', { month: 'long' });
+        await FundTransfer.create({
+          fromFund: bankFund?._id,
+          toFund: poolFund._id,
+          amount: totalOffset,
+          date: new Date(year, month - 1, 28),
+          description: `Share purchase offset from distribution — ${monthName2} ${year}`,
           reference: `monthly-close:${existing._id}`,
           createdBy: req.user!._id,
         });
