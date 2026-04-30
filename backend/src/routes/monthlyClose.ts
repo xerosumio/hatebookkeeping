@@ -877,7 +877,6 @@ router.post('/:entity/:year/:month/finalize', roleGuard('admin'), async (req: Au
       if (offsetDistributions.length > 0) {
         const totalOffset = offsetDistributions.reduce((sum, d) => sum + (d.liabilityOffset || 0), 0);
 
-        const bankFund = sourceBankAccount ? await Fund.findOne({ name: sourceBankAccount, type: 'bank' }) : null;
         const entityCode = entityDoc?.code?.toUpperCase() || '';
         const poolFundName = entityCode ? `Share Purchase Pool - ${entityCode}` : 'Share Purchase Pool';
         let poolFund = await Fund.findOne({ name: poolFundName });
@@ -892,14 +891,10 @@ router.post('/:entity/:year/:month/finalize', roleGuard('admin'), async (req: Au
           });
         }
 
-        if (bankFund) {
-          await Fund.findByIdAndUpdate(bankFund._id, { $inc: { balance: -totalOffset } });
-        }
         await Fund.findByIdAndUpdate(poolFund._id, { $inc: { balance: totalOffset } });
 
         const monthName2 = new Date(year, month - 1).toLocaleString('en', { month: 'long' });
         await FundTransfer.create({
-          fromFund: bankFund?._id,
           toFund: poolFund._id,
           amount: totalOffset,
           date: new Date(year, month - 1, 28),
