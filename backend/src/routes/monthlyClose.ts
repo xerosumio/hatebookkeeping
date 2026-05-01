@@ -717,34 +717,34 @@ router.post('/:entity/:year/:month/finalize', roleGuard('admin'), async (req: Au
     for (const d of dist.distributions) {
       const shareholderId = d.shareholder.toString();
       const method = methodMap.get(shareholderId) || 'cash';
-
-      const lastTxn = await EquityTransaction.findOne({ shareholder: d.shareholder })
-        .sort({ date: -1, createdAt: -1 });
-      let currentBalance = lastTxn?.balanceAfter ?? 0;
-
-      const eqType = dist.isLoss ? 'collection' : 'distribution';
-      const amount = dist.isLoss ? Math.abs(d.amount) : -Math.abs(d.amount);
-      const balanceAfter = currentBalance + amount;
-
       const monthName = new Date(year, month - 1).toLocaleString('en', { month: 'long' });
-      const description = dist.isLoss
-        ? `Capital collection — ${monthName} ${year} loss`
-        : `Profit distribution — ${monthName} ${year}`;
 
-      const eqTxn = await EquityTransaction.create({
-        type: eqType,
-        shareholder: d.shareholder,
-        amount,
-        date: new Date(year, month - 1, 28),
-        description,
-        monthlyClose: existing._id,
-        balanceAfter,
-        createdBy: req.user!._id,
-      });
+      let eqTxnId: mongoose.Types.ObjectId | undefined;
+
+      // Only create equity transaction for loss months (collection from shareholders)
+      // Profit distributions don't affect equity — they come from profit, not capital
+      if (dist.isLoss) {
+        const lastTxn = await EquityTransaction.findOne({ shareholder: d.shareholder })
+          .sort({ date: -1, createdAt: -1 });
+        const currentBalance = lastTxn?.balanceAfter ?? 0;
+        const amount = Math.abs(d.amount);
+        const balanceAfter = currentBalance + amount;
+
+        const eqTxn = await EquityTransaction.create({
+          type: 'collection',
+          shareholder: d.shareholder,
+          amount,
+          date: new Date(year, month - 1, 28),
+          description: `Capital collection — ${monthName} ${year} loss`,
+          monthlyClose: existing._id,
+          balanceAfter,
+          createdBy: req.user!._id,
+        });
+        eqTxnId = eqTxn._id;
+      }
 
       let liabilityOffset = 0;
 
-      // Handle offset_liability: create ShareLiability payment + investment EquityTransaction
       if (method === 'offset_liability' && !dist.isLoss && d.amount > 0) {
         const liabilityTotals = await ShareLiability.aggregate([
           { $match: { shareholder: new mongoose.Types.ObjectId(shareholderId) } },
@@ -768,19 +768,6 @@ router.post('/:entity/:year/:month/finalize', roleGuard('admin'), async (req: Au
             description: `Offset from profit distribution — ${monthName} ${year}`,
             createdBy: req.user!._id,
           });
-
-          const postDistBalance = balanceAfter;
-          const investBalanceAfter = postDistBalance + liabilityOffset;
-          await EquityTransaction.create({
-            type: 'liability_offset',
-            shareholder: d.shareholder,
-            amount: liabilityOffset,
-            date: new Date(year, month - 1, 28),
-            description: `Share purchase payment (offset from distribution) — ${monthName} ${year}`,
-            monthlyClose: existing._id,
-            balanceAfter: investBalanceAfter,
-            createdBy: req.user!._id,
-          });
         }
       }
 
@@ -788,7 +775,7 @@ router.post('/:entity/:year/:month/finalize', roleGuard('admin'), async (req: Au
         shareholder: d.shareholder,
         sharePercent: d.sharePercent,
         amount: d.amount,
-        equityTransaction: eqTxn._id,
+        equityTransaction: eqTxnId,
         method,
         liabilityOffset: liabilityOffset || undefined,
       });

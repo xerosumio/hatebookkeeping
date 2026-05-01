@@ -276,21 +276,6 @@ router.post('/:id/liabilities', async (req: AuthRequest, res, next) => {
       createdBy: req.user!._id,
     });
 
-    if (data.type === 'payment') {
-      const lastTxn = await EquityTransaction.findOne({ shareholder: shareholder._id })
-        .sort({ date: -1, createdAt: -1 });
-      const currentBalance = lastTxn?.balanceAfter ?? 0;
-      await EquityTransaction.create({
-        type: 'investment',
-        shareholder: shareholder._id,
-        amount: data.amount,
-        date: new Date(data.date),
-        description: data.description || 'Share purchase payment',
-        balanceAfter: currentBalance + data.amount,
-        createdBy: req.user!._id,
-      });
-    }
-
     res.status(201).json(entry);
   } catch (error) {
     next(error);
