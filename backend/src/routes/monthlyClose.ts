@@ -789,8 +789,22 @@ router.post('/:entity/:year/:month/finalize', roleGuard('admin'), async (req: Au
     await existing.save();
 
     // Auto fund transfers for reserves (profit scenario)
+    // Look up the entity's bank fund so we can also match reserves by heldIn
+    const entityBankFund = !dist.isLoss
+      ? await (async () => {
+          const ed = await Entity.findById(entityId).select('bankAccounts defaultBankAccountIndex');
+          if (!ed?.bankAccounts?.length) return null;
+          const idx = ed.defaultBankAccountIndex || 0;
+          const bankName = ed.bankAccounts[idx]?.name || ed.bankAccounts[0]?.name || '';
+          return bankName ? await Fund.findOne({ name: bankName, type: 'bank' }) : null;
+        })()
+      : null;
+
     if (!dist.isLoss && dist.companyReserve > 0) {
-      const companyReserveFund = await Fund.findOne({ entity: entityId, type: 'reserve', name: /company reserve/i });
+      const companyReserveFund = await Fund.findOne({
+        $or: [{ entity: entityId }, ...(entityBankFund ? [{ heldIn: entityBankFund._id }] : [])],
+        type: 'reserve', name: /company reserve/i,
+      });
       if (companyReserveFund) {
         await Fund.findByIdAndUpdate(companyReserveFund._id, { $inc: { balance: dist.companyReserve } });
         await FundTransfer.create({
@@ -804,7 +818,10 @@ router.post('/:entity/:year/:month/finalize', roleGuard('admin'), async (req: Au
       }
     }
     if (!dist.isLoss && dist.staffReserve > 0) {
-      const staffReserveFund = await Fund.findOne({ entity: entityId, type: 'reserve', name: /staff reserve/i });
+      const staffReserveFund = await Fund.findOne({
+        $or: [{ entity: entityId }, ...(entityBankFund ? [{ heldIn: entityBankFund._id }] : [])],
+        type: 'reserve', name: /staff reserve/i,
+      });
       if (staffReserveFund) {
         await Fund.findByIdAndUpdate(staffReserveFund._id, { $inc: { balance: dist.staffReserve } });
         await FundTransfer.create({
@@ -879,12 +896,14 @@ router.post('/:entity/:year/:month/finalize', roleGuard('admin'), async (req: Au
 
         const entityCode = entityDoc?.code?.toUpperCase() || '';
         const poolFundName = entityCode ? `Share Purchase Pool - ${entityCode}` : 'Share Purchase Pool';
+        const poolBankFund = sourceBankAccount ? await Fund.findOne({ name: sourceBankAccount, type: 'bank' }) : null;
         let poolFund = await Fund.findOne({ name: poolFundName });
         if (!poolFund) {
           poolFund = await Fund.create({
             name: poolFundName,
             type: 'reserve',
             entity: entityId,
+            heldIn: poolBankFund?._id,
             openingBalance: 0,
             balance: 0,
             active: true,
