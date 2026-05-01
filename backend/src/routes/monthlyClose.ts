@@ -41,14 +41,23 @@ async function computeOpeningCash(year: number, month: number, entityId: string)
     return priorClose.closingCash;
   }
 
-  // First month: derive actual bank balance at month start
-  // = current bank balance - net of all transactions from this month onwards
+  // First month: derive operating balance at month start
+  // = bank balance - earmarked reserves (company/staff/pool held in same bank)
+  // then subtract net of all transactions from this month onwards
   const bankFunds = await Fund.find({
     entity: new mongoose.Types.ObjectId(entityId),
     type: 'bank',
     active: true,
   });
   const currentBankBalance = bankFunds.reduce((sum, f) => sum + (f.balance || 0), 0);
+
+  const bankFundIds = bankFunds.map((f) => f._id);
+  const reservesInBank = await Fund.aggregate([
+    { $match: { heldIn: { $in: bankFundIds }, type: 'reserve', active: true } },
+    { $group: { _id: null, total: { $sum: '$balance' } } },
+  ]);
+  const totalReserves = reservesInBank[0]?.total ?? 0;
+  const operatingBalance = currentBankBalance - totalReserves;
 
   const startDate = new Date(year, month - 1, 1);
   const txnResults = await Transaction.aggregate([
@@ -63,7 +72,7 @@ async function computeOpeningCash(year: number, month: number, entityId: string)
     if (r._id === 'expense') txnExpense = r.total;
   }
 
-  return currentBankBalance - (txnIncome - txnExpense);
+  return operatingBalance - (txnIncome - txnExpense);
 }
 
 async function computeMonthlyFigures(year: number, month: number, entityId: string) {
