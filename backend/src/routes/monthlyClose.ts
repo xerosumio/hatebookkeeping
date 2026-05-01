@@ -809,23 +809,6 @@ router.post('/:entity/:year/:month/finalize', roleGuard('admin'), async (req: Au
         })()
       : null;
 
-    if (!dist.isLoss && dist.companyReserve > 0) {
-      const companyReserveFund = await Fund.findOne({
-        $or: [{ entity: entityId }, ...(entityBankFund ? [{ heldIn: entityBankFund._id }] : [])],
-        type: 'reserve', name: /company reserve/i,
-      });
-      if (companyReserveFund) {
-        await Fund.findByIdAndUpdate(companyReserveFund._id, { $inc: { balance: dist.companyReserve } });
-        await FundTransfer.create({
-          toFund: companyReserveFund._id,
-          amount: dist.companyReserve,
-          date: new Date(year, month - 1, 28),
-          description: `Company reserve allocation — ${getMonthLabel(year, month)}`,
-          reference: `monthly-close:${existing._id}`,
-          createdBy: req.user!._id,
-        });
-      }
-    }
     if (!dist.isLoss && dist.staffReserve > 0) {
       const staffReserveFund = await Fund.findOne({
         $or: [{ entity: entityId }, ...(entityBankFund ? [{ heldIn: entityBankFund._id }] : [])],
@@ -834,6 +817,7 @@ router.post('/:entity/:year/:month/finalize', roleGuard('admin'), async (req: Au
       if (staffReserveFund) {
         await Fund.findByIdAndUpdate(staffReserveFund._id, { $inc: { balance: dist.staffReserve } });
         await FundTransfer.create({
+          fromFund: entityBankFund?._id,
           toFund: staffReserveFund._id,
           amount: dist.staffReserve,
           date: new Date(year, month - 1, 28),
@@ -923,6 +907,7 @@ router.post('/:entity/:year/:month/finalize', roleGuard('admin'), async (req: Au
 
         const monthName2 = new Date(year, month - 1).toLocaleString('en', { month: 'long' });
         await FundTransfer.create({
+          fromFund: poolBankFund?._id,
           toFund: poolFund._id,
           amount: totalOffset,
           date: new Date(year, month - 1, 28),

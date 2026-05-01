@@ -224,21 +224,17 @@ export default function MonthlyCloseDetail() {
 
       {/* Distribution split (profit only) */}
       {!data.isLoss && data.availableCash > 0 && (
-        <div className="grid grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-3 gap-3 mb-6">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <div className="text-xs text-blue-600">Shareholder Distribution (75%)</div>
             <div className="text-lg font-bold font-mono">{formatMoney(data.shareholderDistribution)}</div>
-          </div>
-          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-            <div className="text-xs text-purple-600">Company Reserve (20%)</div>
-            <div className="text-lg font-bold font-mono">{formatMoney(data.companyReserve)}</div>
           </div>
           <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
             <div className="text-xs text-teal-600">Staff Reserve (5%)</div>
             <div className="text-lg font-bold font-mono">{formatMoney(data.staffReserve)}</div>
           </div>
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-            <div className="text-xs text-gray-500">Closing Cash (next month opening)</div>
+            <div className="text-xs text-gray-500">Closing Cash / Next Month Opening (20%)</div>
             <div className="text-lg font-bold font-mono">{formatMoney(data.closingCash)}</div>
           </div>
         </div>
@@ -523,7 +519,6 @@ export default function MonthlyCloseDetail() {
             <p className="text-sm text-gray-600 mb-4">This action will:</p>
             <ul className="text-sm text-gray-600 mb-4 space-y-1">
               <li>- Create equity transactions for all shareholders</li>
-              {!data.isLoss && <li>- Transfer {formatMoney(data.companyReserve)} to Company Reserve fund</li>}
               {!data.isLoss && <li>- Transfer {formatMoney(data.staffReserve)} to Staff Reserve fund</li>}
               <li>- Lock this month (cannot be undone)</li>
             </ul>

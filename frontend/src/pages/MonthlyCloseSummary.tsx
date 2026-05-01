@@ -129,13 +129,13 @@ export default function MonthlyCloseSummary() {
                 <div className="text-xs text-blue-600">Shareholder Distribution (75%)</div>
                 <div className="text-lg font-bold font-mono">{formatMoney(monthData.shareholderDistribution)}</div>
               </div>
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                <div className="text-xs text-purple-600">Company Reserve (20%)</div>
-                <div className="text-lg font-bold font-mono">{formatMoney(monthData.companyReserve)}</div>
-              </div>
               <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
                 <div className="text-xs text-teal-600">Staff Reserve (5%)</div>
                 <div className="text-lg font-bold font-mono">{formatMoney(monthData.staffReserve)}</div>
+              </div>
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <div className="text-xs text-gray-500">Closing Cash / Next Month Opening (20%)</div>
+                <div className="text-lg font-bold font-mono">{formatMoney(monthData.companyReserve)}</div>
               </div>
             </div>
           )}
