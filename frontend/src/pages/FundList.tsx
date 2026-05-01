@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useFunds, useCreateFund, useUpdateFund, useDeleteFund, useFundTransfer, useEntities } from '../api/hooks';
+import { useFunds, useUpdateFund, useFundTransfer, useEntities } from '../api/hooks';
 import { formatMoney } from '../utils/money';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil } from 'lucide-react';
 import type { Fund, Entity } from '../types';
 
 const typeLabels: Record<string, string> = {
@@ -25,33 +25,13 @@ function getHeldInId(fund: Fund): string | undefined {
 export default function FundList() {
   const { data: funds, isLoading } = useFunds();
   const { data: entities } = useEntities();
-  const createMutation = useCreateFund();
   const updateMutation = useUpdateFund();
   const transferMutation = useFundTransfer();
 
-  const deleteMutation = useDeleteFund();
-
-  const [showCreate, setShowCreate] = useState(false);
-  const [createForm, setCreateForm] = useState({ name: '', type: 'reserve' as string, entity: '', heldIn: '', balance: '' });
   const [showTransfer, setShowTransfer] = useState(false);
   const [transferForm, setTransferForm] = useState({ fromFund: '', toFund: '', amount: '', description: '', date: new Date().toISOString().split('T')[0] });
   const [editingFund, setEditingFund] = useState<Fund | null>(null);
   const [editForm, setEditForm] = useState({ name: '', type: 'reserve' as string, entity: '', heldIn: '', balance: '' });
-
-  async function handleCreate() {
-    if (!createForm.name || !createForm.type) return;
-    const cents = createForm.balance ? Math.round(parseFloat(createForm.balance) * 100) : 0;
-    await createMutation.mutateAsync({
-      name: createForm.name,
-      type: createForm.type,
-      entity: createForm.entity || undefined,
-      heldIn: createForm.heldIn || undefined,
-      openingBalance: cents,
-      balance: cents,
-    });
-    setCreateForm({ name: '', type: 'reserve', entity: '', heldIn: '', balance: '' });
-    setShowCreate(false);
-  }
 
   async function handleTransfer() {
     if (!transferForm.amount || !transferForm.description || (!transferForm.fromFund && !transferForm.toFund)) return;
@@ -91,22 +71,13 @@ export default function FundList() {
     setEditingFund(null);
   }
 
-  function handleDeleteFund(fund: Fund) {
-    if (fund.balance !== 0) {
-      alert('Cannot delete a fund with non-zero balance. Transfer the balance first.');
-      return;
-    }
-    if (confirm(`Delete fund "${fund.name}"?`)) {
-      deleteMutation.mutate(fund._id);
-    }
-  }
-
-  const totalBalance = funds?.reduce((s, f) => s + f.balance, 0) || 0;
-  const bankFunds = funds?.filter((f) => f.type === 'bank') || [];
-  const standaloneFunds = funds?.filter((f) => f.type !== 'bank' && !getHeldInId(f)) || [];
+  const activeFunds = funds?.filter((f) => f.active) || [];
+  const totalBalance = activeFunds.reduce((s, f) => s + f.balance, 0);
+  const bankFunds = activeFunds.filter((f) => f.type === 'bank');
+  const standaloneFunds = activeFunds.filter((f) => f.type !== 'bank' && !getHeldInId(f));
 
   function childrenOf(bankId: string) {
-    return funds?.filter((f) => getHeldInId(f) === bankId) || [];
+    return activeFunds.filter((f) => getHeldInId(f) === bankId);
   }
 
   if (isLoading) return <p className="text-gray-500">Loading...</p>;
@@ -115,14 +86,9 @@ export default function FundList() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Funds</h1>
-        <div className="flex gap-2">
-          <button onClick={() => setShowTransfer(true)} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700">
-            Transfer
-          </button>
-          <button onClick={() => setShowCreate(true)} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700">
-            + New Fund
-          </button>
-        </div>
+        <button onClick={() => setShowTransfer(true)} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700">
+          Transfer
+        </button>
       </div>
 
       <div className="grid grid-cols-4 gap-4 mb-6">
@@ -133,7 +99,7 @@ export default function FundList() {
           </div>
         </div>
         {['reserve', 'bank', 'petty_cash'].map((t) => {
-          const grouped = funds?.filter((f) => f.type === t) || [];
+          const grouped = activeFunds.filter((f) => f.type === t);
           const sum = grouped.reduce((s, f) => s + f.balance, 0);
           return (
             <div key={t} className="bg-white border border-gray-200 rounded-lg p-4">
@@ -148,8 +114,6 @@ export default function FundList() {
       <div className="space-y-4">
         {bankFunds.map((bank) => {
           const children = childrenOf(bank._id);
-          const childTotal = children.reduce((s, c) => s + c.balance, 0);
-          const operatingBalance = bank.balance - childTotal;
           const entObj = bank.entity && typeof bank.entity === 'object' ? bank.entity as Entity : null;
 
           return (
@@ -163,23 +127,18 @@ export default function FundList() {
                 <div className="flex items-center gap-4">
                   <span className="font-mono font-bold text-blue-800">{formatMoney(bank.balance)}</span>
                   <button onClick={() => openEdit(bank)} className="text-xs text-gray-500 hover:text-blue-600"><Pencil size={12} className="inline" /></button>
-                  <button onClick={() => handleDeleteFund(bank)} className="text-xs text-gray-500 hover:text-red-600"><Trash2 size={12} className="inline" /></button>
                   <Link to={`/funds/${bank._id}`} className="text-xs text-blue-600 hover:underline">History</Link>
-                  <FundStatusToggle fund={bank} onToggle={updateMutation} />
                 </div>
               </div>
-              <table className="w-full text-sm">
-                <tbody className="divide-y divide-gray-100">
-                  {children.map((child) => (
-                    <FundSubRow key={child._id} fund={child} onToggle={updateMutation} onEdit={openEdit} onDelete={handleDeleteFund} />
-                  ))}
-                  <tr className="bg-gray-50">
-                    <td className="px-4 py-2.5 pl-8 text-gray-600 italic">Operating Balance</td>
-                    <td className="px-4 py-2.5 text-right font-mono font-medium text-gray-600">{formatMoney(operatingBalance)}</td>
-                    <td className="px-4 py-2.5 w-32"></td>
-                  </tr>
-                </tbody>
-              </table>
+              {children.length > 0 && (
+                <table className="w-full text-sm">
+                  <tbody className="divide-y divide-gray-100">
+                    {children.map((child) => (
+                      <FundSubRow key={child._id} fund={child} onEdit={openEdit} />
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           );
         })}
@@ -192,67 +151,13 @@ export default function FundList() {
             <table className="w-full text-sm">
               <tbody className="divide-y divide-gray-100">
                 {standaloneFunds.map((fund) => (
-                  <FundSubRow key={fund._id} fund={fund} onToggle={updateMutation} onEdit={openEdit} onDelete={handleDeleteFund} />
+                  <FundSubRow key={fund._id} fund={fund} onEdit={openEdit} />
                 ))}
               </tbody>
             </table>
           </div>
         )}
       </div>
-
-      {showCreate && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 w-96">
-            <h3 className="text-lg font-bold mb-4">Create Fund</h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                <input type="text" value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm" placeholder="e.g. Company Reserve" autoFocus />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                <select value={createForm.type} onChange={(e) => setCreateForm({ ...createForm, type: e.target.value, heldIn: '' })}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm">
-                  <option value="reserve">Reserve</option>
-                  <option value="bank">Bank Account</option>
-                  <option value="petty_cash">Petty Cash</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Entity (optional)</label>
-                <select value={createForm.entity} onChange={(e) => setCreateForm({ ...createForm, entity: e.target.value })}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm">
-                  <option value="">None (Group-level)</option>
-                  {entities?.map((ent) => <option key={ent._id} value={ent._id}>{ent.code} — {ent.name}</option>)}
-                </select>
-              </div>
-              {createForm.type !== 'bank' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Held In (Bank Account)</label>
-                  <select value={createForm.heldIn} onChange={(e) => setCreateForm({ ...createForm, heldIn: e.target.value })}
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm">
-                    <option value="">None (standalone)</option>
-                    {bankFunds.map((b) => <option key={b._id} value={b._id}>{b.name}</option>)}
-                  </select>
-                </div>
-              )}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Opening Balance ($)</label>
-                <input type="number" step="0.01" value={createForm.balance} onChange={(e) => setCreateForm({ ...createForm, balance: e.target.value })}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm" placeholder="0.00" />
-              </div>
-            </div>
-            <div className="flex gap-3 mt-4">
-              <button onClick={handleCreate} disabled={!createForm.name || createMutation.isPending}
-                className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-                {createMutation.isPending ? 'Creating...' : 'Create'}
-              </button>
-              <button onClick={() => setShowCreate(false)} className="border border-gray-300 px-4 py-2 rounded text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showTransfer && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
@@ -264,7 +169,7 @@ export default function FundList() {
                 <select value={transferForm.fromFund} onChange={(e) => setTransferForm({ ...transferForm, fromFund: e.target.value })}
                   className="w-full border border-gray-300 rounded px-3 py-2 text-sm">
                   <option value="">External (inflow)</option>
-                  {funds?.filter((f) => f.active).map((f) => <option key={f._id} value={f._id}>{f.name}</option>)}
+                  {activeFunds.map((f) => <option key={f._id} value={f._id}>{f.name}</option>)}
                 </select>
               </div>
               <div>
@@ -272,7 +177,7 @@ export default function FundList() {
                 <select value={transferForm.toFund} onChange={(e) => setTransferForm({ ...transferForm, toFund: e.target.value })}
                   className="w-full border border-gray-300 rounded px-3 py-2 text-sm">
                   <option value="">External (outflow)</option>
-                  {funds?.filter((f) => f.active).map((f) => <option key={f._id} value={f._id}>{f.name}</option>)}
+                  {activeFunds.map((f) => <option key={f._id} value={f._id}>{f.name}</option>)}
                 </select>
               </div>
               <div>
@@ -312,15 +217,6 @@ export default function FundList() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
                 <input type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                   className="w-full border border-gray-300 rounded px-3 py-2 text-sm" autoFocus />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                <select value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value, heldIn: '' })}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm">
-                  <option value="reserve">Reserve</option>
-                  <option value="bank">Bank Account</option>
-                  <option value="petty_cash">Petty Cash</option>
-                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Entity (optional)</label>
@@ -366,7 +262,7 @@ export default function FundList() {
   );
 }
 
-function FundSubRow({ fund, onToggle, onEdit, onDelete }: { fund: Fund; onToggle: ReturnType<typeof useUpdateFund>; onEdit: (f: Fund) => void; onDelete: (f: Fund) => void }) {
+function FundSubRow({ fund, onEdit }: { fund: Fund; onEdit: (f: Fund) => void }) {
   const entObj = fund.entity && typeof fund.entity === 'object' ? fund.entity as Entity : null;
   return (
     <tr className="hover:bg-gray-50 group">
@@ -375,32 +271,15 @@ function FundSubRow({ fund, onToggle, onEdit, onDelete }: { fund: Fund; onToggle
           <span className="font-medium">{fund.name}</span>
           <span className={`text-xs px-1.5 py-0.5 rounded ${typeColors[fund.type]}`}>{typeLabels[fund.type]}</span>
           {entObj && <span className="text-xs text-gray-400">{entObj.code}</span>}
-          {!fund.active && <span className="text-xs text-gray-400">(Inactive)</span>}
         </div>
       </td>
       <td className={`px-4 py-2.5 text-right font-mono font-medium ${fund.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
         {formatMoney(fund.balance)}
       </td>
-      <td className="px-4 py-2.5 text-right w-44 space-x-2">
+      <td className="px-4 py-2.5 text-right w-32 space-x-2">
         <button onClick={() => onEdit(fund)} className="text-xs text-gray-500 hover:text-blue-600"><Pencil size={12} className="inline" /></button>
-        <button onClick={() => onDelete(fund)} className="text-xs text-gray-500 hover:text-red-600"><Trash2 size={12} className="inline" /></button>
         <Link to={`/funds/${fund._id}`} className="text-xs text-blue-600 hover:underline">History</Link>
-        <FundStatusToggle fund={fund} onToggle={onToggle} />
       </td>
     </tr>
   );
 }
-
-function FundStatusToggle({ fund, onToggle }: { fund: Fund; onToggle: ReturnType<typeof useUpdateFund> }) {
-  if (fund.active) {
-    return (
-      <button onClick={() => onToggle.mutate({ id: fund._id, data: { active: false } })}
-        className="text-xs text-gray-500 hover:text-red-600">Deactivate</button>
-    );
-  }
-  return (
-    <button onClick={() => onToggle.mutate({ id: fund._id, data: { active: true } })}
-      className="text-xs text-gray-500 hover:text-green-600">Activate</button>
-  );
-}
-

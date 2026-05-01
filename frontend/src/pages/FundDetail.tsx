@@ -1,8 +1,10 @@
 import { useParams, Link } from 'react-router-dom';
-import { useFunds, useFundTransactions } from '../api/hooks';
+import { useFunds, useFundTransactions, useMonthlyCloses } from '../api/hooks';
 import { formatMoney } from '../utils/money';
 import { ArrowLeft } from 'lucide-react';
-import type { FundLedgerEntry } from '../types';
+import type { Entity, MonthlyClose, FundLedgerEntry } from '../types';
+
+const MONTH_NAMES = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 const typeLabels: Record<string, string> = {
   reserve: 'Reserve',
@@ -22,6 +24,16 @@ export default function FundDetail() {
   const fund = funds?.find((f) => f._id === id);
   const { data: ledger, isLoading } = useFundTransactions(id || '');
   const entries = ledger?.entries ?? [];
+
+  const entityId = fund?.entity && typeof fund.entity === 'object' ? (fund.entity as Entity)._id : (fund?.entity || '');
+  const { data: monthlyCloses } = useMonthlyCloses(fund?.type === 'bank' ? entityId : undefined);
+
+  const finalizedCloses = (monthlyCloses || [])
+    .filter((c: MonthlyClose) => c.status === 'finalized')
+    .sort((a: MonthlyClose, b: MonthlyClose) => {
+      if (a.year !== b.year) return b.year - a.year;
+      return b.month - a.month;
+    });
 
   if (!fund) {
     return (
@@ -55,6 +67,68 @@ export default function FundDetail() {
           )}
         </div>
       </div>
+
+      {fund.type === 'bank' && finalizedCloses.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold text-gray-700 mb-3">Monthly Close History</h2>
+          <div className="space-y-3">
+            {finalizedCloses.map((c: MonthlyClose) => (
+              <div key={`${c.year}-${c.month}`} className="bg-white border border-gray-200 rounded-lg p-4">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="font-semibold text-gray-800">{MONTH_NAMES[c.month]} {c.year}</h3>
+                  <span className="text-xs px-2 py-0.5 rounded bg-green-50 text-green-700">Finalized</span>
+                </div>
+                <div className="grid grid-cols-5 gap-2 text-sm mb-3">
+                  <div className="bg-gray-50 rounded p-2">
+                    <div className="text-xs text-gray-500">Opening Cash</div>
+                    <div className="font-mono font-medium">{formatMoney(c.openingCash)}</div>
+                  </div>
+                  <div className="bg-gray-50 rounded p-2">
+                    <div className="text-xs text-gray-500">Income</div>
+                    <div className="font-mono font-medium text-green-600">+{formatMoney(c.totalIncome)}</div>
+                  </div>
+                  <div className="bg-gray-50 rounded p-2">
+                    <div className="text-xs text-gray-500">Expenses</div>
+                    <div className="font-mono font-medium text-red-600">-{formatMoney(c.totalExpense)}</div>
+                  </div>
+                  <div className="bg-gray-50 rounded p-2">
+                    <div className="text-xs text-gray-500">Net P&L</div>
+                    <div className={`font-mono font-medium ${c.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatMoney(c.netProfit)}</div>
+                  </div>
+                  <div className="bg-blue-50 rounded p-2">
+                    <div className="text-xs text-blue-600">Available Cash</div>
+                    <div className="font-mono font-bold">{formatMoney(c.availableCash)}</div>
+                  </div>
+                </div>
+                {!c.isLoss && c.availableCash > 0 && (
+                  <div className="border-t border-gray-100 pt-3">
+                    <div className="text-xs text-gray-500 mb-2">Distribution Split</div>
+                    <div className="grid grid-cols-3 gap-2 text-sm">
+                      <div className="flex justify-between items-center bg-blue-50 rounded px-3 py-2">
+                        <span className="text-xs text-blue-700">75% Shareholders</span>
+                        <span className="font-mono text-blue-800">{formatMoney(c.shareholderDistribution)}</span>
+                      </div>
+                      <div className="flex justify-between items-center bg-teal-50 rounded px-3 py-2">
+                        <span className="text-xs text-teal-700">5% Staff Reserve</span>
+                        <span className="font-mono text-teal-800">{formatMoney(c.staffReserve)}</span>
+                      </div>
+                      <div className="flex justify-between items-center bg-gray-100 rounded px-3 py-2">
+                        <span className="text-xs text-gray-600">20% Closing Cash</span>
+                        <span className="font-mono text-gray-800">{formatMoney(c.closingCash)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {c.isLoss && (
+                  <div className="border-t border-gray-100 pt-3">
+                    <div className="text-xs text-red-500">Loss month — shareholders required to inject funds</div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <h2 className="text-lg font-semibold text-gray-700 mb-3">Transaction History</h2>
 

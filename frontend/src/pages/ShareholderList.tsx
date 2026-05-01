@@ -129,7 +129,6 @@ export default function ShareholderList() {
               <th className="text-left px-4 py-3 font-medium text-gray-600">Name</th>
               <th className="text-right px-4 py-3 font-medium text-gray-600">Share %</th>
               <th className="text-right px-4 py-3 font-medium text-gray-600">Share Value (HKD)</th>
-              <th className="text-right px-4 py-3 font-medium text-gray-600">Total Invested</th>
               <th className="text-right px-4 py-3 font-medium text-gray-600">Actions</th>
             </tr>
           </thead>
@@ -151,7 +150,6 @@ export default function ShareholderList() {
                 <td className="px-4 py-3 text-right font-mono text-gray-600">
                   {formatMoney(Math.round(sh.sharePercent * valuePerPercent))}
                 </td>
-                <td className="px-4 py-3 text-right font-mono">{formatMoney(sh.totalInvested || 0)}</td>
                 <td className="px-4 py-3 text-right">
                   <button
                     onClick={() => {
