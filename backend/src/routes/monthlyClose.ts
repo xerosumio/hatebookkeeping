@@ -763,7 +763,7 @@ router.post('/:entity/:year/:month/finalize', roleGuard('admin'), async (req: Au
           const postDistBalance = balanceAfter;
           const investBalanceAfter = postDistBalance + liabilityOffset;
           await EquityTransaction.create({
-            type: 'investment',
+            type: 'liability_offset',
             shareholder: d.shareholder,
             amount: liabilityOffset,
             date: new Date(year, month - 1, 28),

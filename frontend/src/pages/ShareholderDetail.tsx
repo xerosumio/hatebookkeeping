@@ -8,6 +8,7 @@ const TYPE_LABELS: Record<string, string> = {
   distribution: 'Distribution',
   collection: 'Collection',
   adjustment: 'Adjustment',
+  liability_offset: 'Liability Offset',
 };
 
 const TYPE_COLORS: Record<string, string> = {
@@ -15,6 +16,7 @@ const TYPE_COLORS: Record<string, string> = {
   distribution: 'bg-blue-50 text-blue-700',
   collection: 'bg-amber-50 text-amber-700',
   adjustment: 'bg-gray-50 text-gray-700',
+  liability_offset: 'bg-purple-50 text-purple-700',
 };
 
 export default function ShareholderDetail() {

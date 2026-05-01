@@ -98,7 +98,7 @@ export interface ShareLiabilityEntry {
 
 export interface EquityTransaction {
   _id: string;
-  type: 'investment' | 'distribution' | 'collection' | 'adjustment';
+  type: 'investment' | 'distribution' | 'collection' | 'adjustment' | 'liability_offset';
   shareholder: string | Shareholder;
   amount: number;
   date: string;

@@ -1,7 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IEquityTransaction extends Document {
-  type: 'investment' | 'distribution' | 'collection' | 'adjustment';
+  type: 'investment' | 'distribution' | 'collection' | 'adjustment' | 'liability_offset';
   shareholder: mongoose.Types.ObjectId;
   amount: number;
   date: Date;
@@ -17,7 +17,7 @@ const equityTransactionSchema = new Schema<IEquityTransaction>(
   {
     type: {
       type: String,
-      enum: ['investment', 'distribution', 'collection', 'adjustment'],
+      enum: ['investment', 'distribution', 'collection', 'adjustment', 'liability_offset'],
       required: true,
     },
     shareholder: { type: Schema.Types.ObjectId, ref: 'Shareholder', required: true },
