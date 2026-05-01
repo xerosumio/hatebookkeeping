@@ -444,4 +444,160 @@ router.get('/monthly-summary', async (req, res, next) => {
   }
 });
 
+// Breakeven analysis — combines recurring obligations, actuals, AR and AP into a single gap figure
+router.get('/breakeven-analysis', async (req, res, next) => {
+  try {
+    const now = new Date();
+    const year = parseInt(req.query.year as string) || now.getFullYear();
+    const month = parseInt(req.query.month as string) || (now.getMonth() + 1);
+    const entity = req.query.entity as string | undefined;
+
+    const monthStart = new Date(year, month - 1, 1);
+    const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
+    const entityMatch = entity ? { entity: new mongoose.Types.ObjectId(entity) } : {};
+
+    const [recurringItems, monthTxns, arResult, apResult] = await Promise.all([
+      RecurringItem.find({ active: true, ...(entity ? { entity } : {}) }),
+      Transaction.aggregate([
+        { $addFields: { _effectiveDate: { $ifNull: ['$accountingDate', '$date'] } } },
+        { $match: { _effectiveDate: { $gte: monthStart, $lte: monthEnd }, ...excludeNonOperational, ...entityMatch } },
+        { $group: { _id: '$type', total: { $sum: '$amount' }, count: { $sum: 1 } } },
+      ]),
+      Invoice.aggregate([
+        { $match: { status: { $in: ['unpaid', 'partial'] }, ...(entity ? { entity: new mongoose.Types.ObjectId(entity) } : {}) } },
+        { $group: { _id: null, total: { $sum: '$amountDue' }, count: { $sum: 1 } } },
+      ]),
+      PaymentRequest.aggregate([
+        { $match: { status: { $in: ['pending', 'approved'] }, ...(entity ? { entity: new mongoose.Types.ObjectId(entity) } : {}) } },
+        { $group: { _id: null, total: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
+      ]),
+    ]);
+
+    const prorate = (item: { frequency: string; amount: number }) => {
+      if (item.frequency === 'monthly') return item.amount;
+      if (item.frequency === 'quarterly') return Math.round(item.amount / 3);
+      if (item.frequency === 'yearly') return Math.round(item.amount / 12);
+      return 0;
+    };
+
+    const monthlyRecurringIncome = recurringItems
+      .filter((i) => i.type === 'income')
+      .reduce((sum, i) => sum + prorate(i), 0);
+    const monthlyRecurringExpense = recurringItems
+      .filter((i) => i.type === 'expense')
+      .reduce((sum, i) => sum + prorate(i), 0);
+
+    let actualIncome = 0, actualExpense = 0;
+    for (const r of monthTxns) {
+      if (r._id === 'income') actualIncome = r.total;
+      else actualExpense = r.total;
+    }
+
+    const arCollectible = arResult[0]?.total || 0;
+    const arCount = arResult[0]?.count || 0;
+    const apDue = apResult[0]?.total || 0;
+    const apCount = apResult[0]?.count || 0;
+
+    const gapToBreakeven = Math.max(0, monthlyRecurringExpense + apDue - monthlyRecurringIncome - arCollectible);
+    const remainingToBreakeven = Math.max(0, gapToBreakeven - (actualIncome - actualExpense));
+
+    res.json({
+      period: { year, month },
+      recurring: {
+        monthlyRecurringIncome,
+        monthlyRecurringExpense,
+        monthlyRecurringNet: monthlyRecurringIncome - monthlyRecurringExpense,
+      },
+      currentMonthActuals: {
+        income: actualIncome,
+        expense: actualExpense,
+        net: actualIncome - actualExpense,
+      },
+      obligations: {
+        arCollectible,
+        arCount,
+        apDue,
+        apCount,
+      },
+      breakeven: {
+        gapToBreakeven,
+        remainingToBreakeven,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Client health — AR aging per client with recurring income flags
+router.get('/client-health', async (req, res, next) => {
+  try {
+    const entity = req.query.entity as string | undefined;
+    const now = new Date();
+
+    const invoiceFilter: Record<string, unknown> = { status: { $in: ['unpaid', 'partial'] } };
+    if (entity) invoiceFilter.entity = new mongoose.Types.ObjectId(entity);
+
+    const [arByClient, recurringByClient] = await Promise.all([
+      Invoice.aggregate([
+        { $match: invoiceFilter },
+        {
+          $group: {
+            _id: '$client',
+            totalOwed: { $sum: '$amountDue' },
+            invoiceCount: { $sum: 1 },
+            oldestDueDate: { $min: '$dueDate' },
+            oldestCreatedAt: { $min: '$createdAt' },
+          },
+        },
+        {
+          $lookup: {
+            from: 'clients',
+            localField: '_id',
+            foreignField: '_id',
+            as: 'client',
+          },
+        },
+        { $unwind: { path: '$client', preserveNullAndEmptyArrays: true } },
+        { $sort: { totalOwed: -1 } },
+      ]),
+      RecurringItem.find({ active: true, type: 'income', ...(entity ? { entity } : {}) })
+        .select('client amount frequency')
+        .lean(),
+    ]);
+
+    const recurringMap = new Map<string, number>();
+    for (const item of recurringByClient) {
+      if (!item.client) continue;
+      const clientId = String(item.client);
+      let monthly = 0;
+      if (item.frequency === 'monthly') monthly = item.amount;
+      else if (item.frequency === 'quarterly') monthly = Math.round(item.amount / 3);
+      else if (item.frequency === 'yearly') monthly = Math.round(item.amount / 12);
+      recurringMap.set(clientId, (recurringMap.get(clientId) || 0) + monthly);
+    }
+
+    const clients = arByClient.map((row) => {
+      const clientId = row._id ? String(row._id) : null;
+      const referenceDate = row.oldestDueDate || row.oldestCreatedAt;
+      const oldestOverdueDays = referenceDate ? Math.max(0, Math.floor((now.getTime() - new Date(referenceDate).getTime()) / 86400000)) : 0;
+      const recurringMonthlyValue = clientId ? (recurringMap.get(clientId) || 0) : 0;
+
+      return {
+        clientId,
+        clientName: row.client?.name || 'Unknown',
+        totalOwed: row.totalOwed,
+        invoiceCount: row.invoiceCount,
+        oldestOverdueDays,
+        hasRecurringIncome: recurringMonthlyValue > 0,
+        recurringMonthlyValue,
+      };
+    });
+
+    res.json({ clients });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;

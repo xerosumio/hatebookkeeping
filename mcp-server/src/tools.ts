@@ -655,6 +655,20 @@ export function registerTools(server: McpServer, api: ApiRequestFn = defaultApiR
     return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
   });
 
+  server.tool('get_breakeven_analysis', 'Get breakeven analysis: recurring obligations vs income, AR/AP, and gap to breakeven for a given month', {
+    year: z.string().optional(), month: z.string().optional(), entity: OptStr,
+  }, async (args) => {
+    const data = await api('GET', '/reports/breakeven-analysis', undefined, args);
+    return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+  });
+
+  server.tool('get_client_health', 'Get per-client AR aging, overdue days, and recurring income flags to identify retention-critical clients', {
+    entity: OptStr,
+  }, async (args) => {
+    const data = await api('GET', '/reports/client-health', undefined, args);
+    return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+  });
+
   // ──────────────────────────────────────────
   // Users
   // ──────────────────────────────────────────
