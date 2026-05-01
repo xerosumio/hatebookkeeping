@@ -25,7 +25,9 @@ export default function FundDetail() {
   const { data: ledger, isLoading } = useFundTransactions(id || '');
   const entries = ledger?.entries ?? [];
 
-  const entityId = fund?.entity && typeof fund.entity === 'object' ? (fund.entity as Entity)._id : (fund?.entity || '');
+  const entityId: string | undefined = fund?.entity
+    ? (typeof fund.entity === 'object' ? (fund.entity as Entity)._id : fund.entity)
+    : undefined;
   const { data: monthlyCloses } = useMonthlyCloses(fund?.type === 'bank' ? entityId : undefined);
 
   const finalizedCloses = (monthlyCloses || [])
