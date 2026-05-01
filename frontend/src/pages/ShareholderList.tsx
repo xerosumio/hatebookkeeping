@@ -40,9 +40,8 @@ export default function ShareholderList() {
 
   const [historyModal, setHistoryModal] = useState<{ id: string; name: string } | null>(null);
 
-  const totalEquity = shareholders?.reduce((sum, s) => sum + (s.currentEquity || 0), 0) || 0;
   const totalInvested = shareholders?.reduce((sum, s) => sum + (s.totalInvested || 0), 0) || 0;
-  const valuePerPercent = totalEquity / 100;
+  const valuePerPercent = totalInvested / 100;
 
   async function handleInvest() {
     if (!investModal || !investAmount) return;
@@ -112,14 +111,10 @@ export default function ShareholderList() {
         <h1 className="text-2xl font-bold">Shareholders</h1>
       </div>
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-2 gap-4 mb-6">
         <div className="bg-white border border-gray-200 rounded-lg p-4">
           <div className="text-sm text-gray-500">Total Invested</div>
           <div className="text-xl font-bold font-mono">{formatMoney(totalInvested)}</div>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <div className="text-sm text-gray-500">Current Total Equity</div>
-          <div className="text-xl font-bold font-mono">{formatMoney(totalEquity)}</div>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg p-4">
           <div className="text-sm text-gray-500">Value per 1%</div>
@@ -135,7 +130,6 @@ export default function ShareholderList() {
               <th className="text-right px-4 py-3 font-medium text-gray-600">Share %</th>
               <th className="text-right px-4 py-3 font-medium text-gray-600">Share Value (HKD)</th>
               <th className="text-right px-4 py-3 font-medium text-gray-600">Total Invested</th>
-              <th className="text-right px-4 py-3 font-medium text-gray-600">Current Equity</th>
               <th className="text-right px-4 py-3 font-medium text-gray-600">Actions</th>
             </tr>
           </thead>
@@ -158,7 +152,6 @@ export default function ShareholderList() {
                   {formatMoney(Math.round(sh.sharePercent * valuePerPercent))}
                 </td>
                 <td className="px-4 py-3 text-right font-mono">{formatMoney(sh.totalInvested || 0)}</td>
-                <td className="px-4 py-3 text-right font-mono">{formatMoney(sh.currentEquity || 0)}</td>
                 <td className="px-4 py-3 text-right">
                   <button
                     onClick={() => {
