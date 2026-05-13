@@ -252,7 +252,7 @@ export function registerTools(server: McpServer, api: ApiRequestFn = defaultApiR
     amount: OptNum, description: OptStr, entity: OptStr,
     client: OptStr, payee: OptStr, invoice: OptStr, receipt: OptStr,
     paymentRequest: OptStr, bankReference: OptStr, bankAccount: OptStr,
-    reconciled: { type: 'boolean', nullable: true },
+    reconciled: z.boolean().nullish(),
   }, async ({ id, ...body }) => {
     const data = await api('PATCH', `/transactions/${id}`, body);
     return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
