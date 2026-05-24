@@ -17,10 +17,10 @@ import { Shareholder } from './models/Shareholder.js';
 import { EquityTransaction } from './models/EquityTransaction.js';
 import { MonthlyClose } from './models/MonthlyClose.js';
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://root:4EIFI87eFad5uzpvccOiXW95p4adEtkY1hEFdMQTLOcVP9yioGMYgKXIcKmm5Q6k@34.96.151.31:27017';
+import { env } from './config/env.js';
 
 async function seed() {
-  await mongoose.connect(MONGO_URI, { dbName: 'hatebookkeeping', authSource: 'admin' });
+  await mongoose.connect(env.mongodbUri);
   console.log('Connected to MongoDB');
 
   // ── Clear ALL collections ──

@@ -1,17 +1,27 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { registerTools } from './tools.js';
+import { registerPrompts } from './prompts.js';
+import { registerResources } from './resources.js';
 import { createApiRequest } from './client.js';
 
 export interface McpHttpHandlerOptions {
   apiBaseUrl: string;
 }
 
-/**
- * Creates Express-compatible request handlers for the MCP Streamable HTTP transport.
- * Each POST request creates a fresh stateless MCP server with tools authenticated
- * using the Bearer token from the incoming request.
- */
+const SERVER_INSTRUCTIONS = `You are interacting with HateBookkeeping, a financial management system for small businesses.
+
+CRITICAL RULES:
+- All monetary amounts are in CENTS (smallest currency unit). HK$520 = 52000 cents. Always multiply display amounts by 100.
+- Use get_settings to discover valid income/expense categories before creating transactions or recurring items.
+- Use list_entities to discover available entities (companies) and their IDs.
+- When creating invoices or quotations, you must compute subtotal and total from line items yourself.
+- Line item unitPrice and amount fields are also in cents.
+- For recurring income items, the "client" field is REQUIRED.
+- For recurring expense items, the "payee" field is recommended.
+- Update tools use PATCH (partial update) — only send fields you want to change.
+- Approval workflows (quotations, payment requests, monthly close) require admin privileges.`;
+
 export function createMcpHttpHandler(opts: McpHttpHandlerOptions) {
   return {
     async handlePost(req: { headers: Record<string, string | string[] | undefined>; body: unknown }, res: any) {
@@ -31,11 +41,14 @@ export function createMcpHttpHandler(opts: McpHttpHandlerOptions) {
       try {
         const server = new McpServer({
           name: 'hatebookkeeping',
-          version: '1.0.0',
+          version: '2.0.0',
+          description: SERVER_INSTRUCTIONS,
         });
 
         const apiRequestFn = createApiRequest(token, opts.apiBaseUrl);
         registerTools(server, apiRequestFn);
+        registerPrompts(server);
+        registerResources(server, apiRequestFn);
 
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: undefined,

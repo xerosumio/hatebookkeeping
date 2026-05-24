@@ -20,6 +20,7 @@ import {
   Landmark,
   RefreshCw,
   Plug,
+  BookOpen,
 } from 'lucide-react';
 
 const navItems = [
@@ -119,6 +120,17 @@ export default function AppShell() {
               >
                 <Plug size={18} />
                 Endpoint
+              </NavLink>
+              <NavLink
+                to="/agent-guide"
+                className={({ isActive }) =>
+                  `flex items-center gap-2 px-3 py-2 rounded text-sm ${
+                    isActive ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-100'
+                  }`
+                }
+              >
+                <BookOpen size={18} />
+                Agent Guide
               </NavLink>
             </>
           )}

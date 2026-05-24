@@ -61,6 +61,17 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
+router.patch('/:id', async (req, res, next) => {
+  try {
+    const data = clientSchema.partial().parse(req.body);
+    const client = await Client.findByIdAndUpdate(req.params.id, { $set: data }, { new: true });
+    if (!client) throw new AppError(404, 'Client not found');
+    res.json(client);
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.delete('/:id', async (req, res, next) => {
   try {
     const client = await Client.findByIdAndDelete(req.params.id);

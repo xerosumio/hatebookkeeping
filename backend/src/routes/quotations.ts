@@ -133,6 +133,29 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
+router.patch('/:id', async (req, res, next) => {
+  try {
+    const existing = await Quotation.findById(req.params.id);
+    if (!existing) throw new AppError(404, 'Quotation not found');
+    if (existing.status !== 'draft') {
+      throw new AppError(400, 'Can only edit draft quotations');
+    }
+
+    const data = quotationSchema.partial().parse(req.body);
+    const quotation = await Quotation.findByIdAndUpdate(
+      req.params.id,
+      {
+        $set: data,
+        $push: { activityLog: { action: 'updated', user: (req as AuthRequest).user!._id, timestamp: new Date() } },
+      },
+      { new: true },
+    );
+    res.json(quotation);
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.patch('/:id/status', async (req, res, next) => {
   try {
     const { status } = statusSchema.parse(req.body);

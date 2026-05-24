@@ -138,6 +138,28 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
+router.patch('/:id', async (req, res, next) => {
+  try {
+    const data = invoiceSchema.partial().parse(req.body);
+    const update: Record<string, unknown> = { ...data };
+    if (data.invoiceDate) update.invoiceDate = new Date(data.invoiceDate);
+    if (data.total != null) update.amountDue = data.total;
+    if (data.dueDate || data.paymentTerms) {
+      const invoiceDate = data.invoiceDate ? new Date(data.invoiceDate) : undefined;
+      update.dueDate = data.dueDate || computeDueDate(data.paymentTerms || '', invoiceDate);
+    }
+    const invoice = await Invoice.findByIdAndUpdate(
+      req.params.id,
+      { $set: update },
+      { new: true },
+    );
+    if (!invoice) throw new AppError(404, 'Invoice not found');
+    res.json(invoice);
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.patch('/:id/status', async (req: AuthRequest, res, next) => {
   try {
     const { status } = z.object({

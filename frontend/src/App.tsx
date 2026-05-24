@@ -37,6 +37,7 @@ import FundDetail from './pages/FundDetail';
 import SettingsPage from './pages/Settings';
 import AirwallexSync from './pages/AirwallexSync';
 import Endpoint from './pages/Endpoint';
+import AgentGuide from './pages/AgentGuide';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -103,6 +104,7 @@ export default function App() {
               <Route path="settings" element={<SettingsPage />} />
               <Route path="airwallex-sync" element={<AirwallexSync />} />
               <Route path="endpoint" element={<Endpoint />} />
+              <Route path="agent-guide" element={<AgentGuide />} />
             </Route>
           </Routes>
         </HashRouter>

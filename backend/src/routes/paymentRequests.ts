@@ -75,6 +75,38 @@ router.post('/', roleGuard('admin', 'user'), async (req: AuthRequest, res, next)
   }
 });
 
+router.patch('/:id', roleGuard('admin', 'user'), async (req: AuthRequest, res, next) => {
+  try {
+    const data = createSchema.partial().parse(req.body);
+    const request = await PaymentRequest.findById(req.params.id);
+    if (!request) throw new AppError(404, 'Payment request not found');
+    if (request.status === 'executed') {
+      throw new AppError(400, 'Cannot edit executed requests');
+    }
+
+    if (data.entity !== undefined) request.entity = data.entity ? (data.entity as any) : undefined;
+    if (data.description !== undefined) request.description = data.description;
+    if (data.items !== undefined) {
+      request.items = data.items as any;
+      request.totalAmount = data.items.reduce((sum, item) => sum + item.amount, 0);
+    }
+    if (data.sourceBankAccount !== undefined) request.sourceBankAccount = data.sourceBankAccount;
+    if (data.attachments !== undefined) request.attachments = data.attachments;
+
+    request.activityLog.push({
+      action: 'updated',
+      user: req.user!._id,
+      timestamp: new Date(),
+      note: 'Partial update via PATCH',
+    } as any);
+    await request.save();
+
+    res.json(request);
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/:id', async (req, res, next) => {
   try {
     const request = await PaymentRequest.findById(req.params.id)

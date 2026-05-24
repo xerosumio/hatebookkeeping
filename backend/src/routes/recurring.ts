@@ -198,6 +198,39 @@ router.put('/:id', async (req: AuthRequest, res, next) => {
   }
 });
 
+router.patch('/:id', async (req: AuthRequest, res, next) => {
+  try {
+    const data = recurringSchema.partial().parse(req.body);
+
+    if (data.type === 'income' && data.client === undefined) {
+      const existing = await RecurringItem.findById(req.params.id);
+      if (existing && !existing.client) {
+        throw new AppError(400, 'Client is required for income recurring items');
+      }
+    }
+
+    const item = await RecurringItem.findByIdAndUpdate(
+      req.params.id,
+      {
+        $set: {
+          ...data,
+          ...(data.startDate ? { startDate: new Date(data.startDate) } : {}),
+          ...(data.endDate ? { endDate: new Date(data.endDate) } : {}),
+        },
+      },
+      { new: true },
+    );
+    if (!item) throw new AppError(404, 'Recurring item not found');
+
+    const populated = await RecurringItem.findById(item._id)
+      .populate('client', 'name')
+      .populate('payee', 'name');
+    res.json(populated);
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.delete('/:id', async (req, res, next) => {
   try {
     const item = await RecurringItem.findByIdAndDelete(req.params.id);

@@ -49,6 +49,17 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
+router.patch('/:id', async (req, res, next) => {
+  try {
+    const data = payeeSchema.partial().parse(req.body);
+    const payee = await Payee.findByIdAndUpdate(req.params.id, { $set: data }, { new: true });
+    if (!payee) throw new AppError(404, 'Payee not found');
+    res.json(payee);
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.delete('/:id', async (req, res, next) => {
   try {
     const payee = await Payee.findByIdAndDelete(req.params.id);
