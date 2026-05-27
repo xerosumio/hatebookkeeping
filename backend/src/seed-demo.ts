@@ -20,6 +20,11 @@ import { MonthlyClose } from './models/MonthlyClose.js';
 import { env } from './config/env.js';
 
 async function seed() {
+  if (!env.mongodbUri.includes('localhost') && !env.mongodbUri.includes('127.0.0.1')) {
+    console.error('ABORT: seed-demo refuses to run against a non-local database.');
+    console.error(`  MONGODB_URI = ${env.mongodbUri}`);
+    process.exit(1);
+  }
   await mongoose.connect(env.mongodbUri);
   console.log('Connected to MongoDB');
 
