@@ -52,6 +52,34 @@ router.post('/', authMiddleware, upload.single('file'), async (req, res, next) =
   }
 });
 
+router.post('/base64', authMiddleware, async (req, res, next) => {
+  try {
+    const { filename, data, mimeType } = req.body;
+    if (!filename || !data) {
+      throw new AppError(400, 'filename and data (base64) are required');
+    }
+    const buffer = Buffer.from(data, 'base64');
+    if (buffer.length > 5 * 1024 * 1024) {
+      throw new AppError(400, 'File exceeds 5 MB limit');
+    }
+    const ext = path.extname(filename).toLowerCase();
+    const allowed = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.pdf'];
+    if (!allowed.includes(ext)) {
+      throw new AppError(400, `File type not allowed: ${ext}`);
+    }
+    const contentType = mimeType || MIME_MAP[ext] || 'application/octet-stream';
+    const doc = await FileUpload.create({
+      filename,
+      contentType,
+      data: buffer,
+      size: buffer.length,
+    });
+    res.json({ path: `/api/uploads/${doc._id}`, filename: doc.filename, size: doc.size });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/:id', async (req, res, next) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
