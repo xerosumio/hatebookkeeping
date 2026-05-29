@@ -69,7 +69,7 @@ export default function ReimbursementList() {
                     </td>
                     <td className="px-4 py-3 font-medium">{r.title}</td>
                     <td className="px-4 py-3 text-gray-600">
-                      {typeof r.submittedBy === 'object' ? r.submittedBy.name : ''}
+                      {r.submittedBy && typeof r.submittedBy === 'object' ? r.submittedBy.name : ''}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {new Date(r.createdAt).toLocaleDateString()}
