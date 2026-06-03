@@ -189,6 +189,29 @@ router.delete('/:id', roleGuard('admin', 'user'), async (req: AuthRequest, res, 
   }
 });
 
+router.patch('/:id/revert-to-pending', roleGuard('admin'), async (req: AuthRequest, res, next) => {
+  try {
+    const request = await PaymentRequest.findById(req.params.id);
+    if (!request) throw new AppError(404, 'Payment request not found');
+    if (request.status !== 'executed') {
+      throw new AppError(400, 'Can only revert executed requests');
+    }
+    request.status = 'pending';
+    request.executedAt = undefined as any;
+    request.approvals = [];
+    request.activityLog.push({
+      action: 'updated',
+      user: req.user!._id,
+      timestamp: new Date(),
+      note: 'Reverted from executed to pending',
+    } as any);
+    await request.save();
+    res.json(request);
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.patch('/:id/approve', roleGuard('admin'), async (req: AuthRequest, res, next) => {
   try {
     const request = await PaymentRequest.findById(req.params.id);
