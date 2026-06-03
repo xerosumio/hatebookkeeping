@@ -27,9 +27,9 @@ router.get('/balance/:entity', async (req, res, next) => {
     const hkd = balances.find((b) => b.currency === 'HKD');
     res.json({
       currency: 'HKD',
-      total_amount: hkd?.total_amount ?? 0,
-      available_amount: hkd?.available_amount ?? 0,
-      pending_amount: hkd?.pending_amount ?? 0,
+      total_amount: Math.round((hkd?.total_amount ?? 0) * 100),
+      available_amount: Math.round((hkd?.available_amount ?? 0) * 100),
+      pending_amount: Math.round((hkd?.pending_amount ?? 0) * 100),
     });
   } catch (error) {
     next(error);
@@ -45,7 +45,8 @@ router.get('/transactions/:entity', async (req, res, next) => {
       to: to as string,
       currency: (currency as string) || 'HKD',
     });
-    res.json(txns);
+    const toCents = (v: number) => Math.round(v * 100);
+    res.json(txns.map((t) => ({ ...t, amount: toCents(t.amount), fee: toCents(t.fee), net: toCents(t.net) })));
   } catch (error) {
     next(error);
   }
@@ -69,7 +70,8 @@ router.get('/global-accounts/:entity/:accountId/transactions', async (req, res, 
       from: from as string,
       to: to as string,
     });
-    res.json(txns);
+    const toCents = (v: number) => Math.round(v * 100);
+    res.json(txns.map((t) => ({ ...t, amount: toCents(t.amount), fee: toCents(t.fee) })));
   } catch (error) {
     next(error);
   }

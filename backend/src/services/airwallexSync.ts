@@ -156,7 +156,7 @@ export async function runSync(entity: EntityKey) {
         unmatched++;
         unmatchedItems.push({
           airwallexId: bt.id,
-          amount: bt.amount,
+          amount: isDebit ? -amountCents : amountCents,
           date: bt.created_at,
           description: `${bt.transaction_type} | ${bt.source_type}`,
         });
