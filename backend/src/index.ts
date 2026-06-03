@@ -32,7 +32,7 @@ const app = express();
 
 const allowedOrigins = env.corsOrigin.split(',').map(o => o.trim()).filter(Boolean);
 app.use(cors({
-  origin: allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins,
+  origin: allowedOrigins.includes('*') ? true : allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins,
   credentials: true,
 }));
 app.use('/api/uploads', express.json({ limit: '10mb' }), uploadRoutes);
@@ -77,6 +77,7 @@ async function start() {
   startScheduler();
   app.listen(env.port, () => {
     console.log(`Server running on port ${env.port}`);
+    console.log(`CORS allowed origins: ${allowedOrigins.join(', ')}`);
   });
 }
 
