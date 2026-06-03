@@ -12,6 +12,7 @@ import { sendEmail, buildPaymentRequestEmailHtml, buildStatusChangeEmailHtml, ge
 import { env } from '../config/env.js';
 import { formatMoney } from '../utils/pdf/formatMoney.js';
 import { getRequiredApproverIds, hasFullApproval } from '../utils/dualApproval.js';
+import { ShareLiability } from '../models/ShareLiability.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -22,6 +23,8 @@ const itemSchema = z.object({
   amount: z.number().int().positive(),
   category: z.string().min(1),
   recipient: z.string().optional().default(''),
+  disbursementType: z.enum(['bank', 'liability_offset']).optional().default('bank'),
+  shareholderId: z.string().optional(),
 });
 
 const createSchema = z.object({
@@ -115,6 +118,7 @@ router.get('/:id', async (req, res, next) => {
       .populate('approvedBy', 'name email')
       .populate('approvals.user', 'name')
       .populate('items.payee', 'name bankName bankAccountNumber bankCode')
+      .populate('items.shareholderId', 'name')
       .populate('activityLog.user', 'name')
       .populate('sourceReimbursement', 'reimbursementNumber title items totalAmount');
     if (!request) throw new AppError(404, 'Payment request not found');
@@ -345,13 +349,11 @@ router.patch('/:id/execute', roleGuard('admin', 'user'), async (req: AuthRequest
     };
 
     for (const item of request.items) {
-      const payeeName = typeof item.payee === 'object' && (item.payee as any).name
-        ? (item.payee as any).name
-        : 'Unknown';
-
       const payeeId = typeof item.payee === 'object' && (item.payee as any)._id
         ? (item.payee as any)._id
         : item.payee;
+
+      const isBankItem = item.disbursementType !== 'liability_offset';
 
       await Transaction.create({
         date: new Date(),
@@ -362,14 +364,25 @@ router.patch('/:id/execute', roleGuard('admin', 'user'), async (req: AuthRequest
         entity: request.entity,
         payee: payeeId,
         paymentRequest: request._id,
-        bankAccount: request.sourceBankAccount,
-        bankReference,
-        reconciled: !!bankReference,
+        bankAccount: isBankItem ? request.sourceBankAccount : '',
+        bankReference: isBankItem ? bankReference : '',
+        reconciled: isBankItem ? !!bankReference : true,
         createdBy: req.user!._id,
       });
 
-      if (request.sourceBankAccount) {
+      if (isBankItem && request.sourceBankAccount) {
         await adjustFundBalance(request.sourceBankAccount, -item.amount);
+      }
+
+      if (!isBankItem && item.shareholderId) {
+        await ShareLiability.create({
+          shareholder: item.shareholderId,
+          type: 'payment',
+          amount: item.amount,
+          date: new Date(),
+          description: `${item.description} (via ${request.requestNumber})`,
+          createdBy: req.user!._id,
+        });
       }
     }
 

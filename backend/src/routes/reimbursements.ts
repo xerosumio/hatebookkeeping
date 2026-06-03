@@ -132,6 +132,7 @@ router.post('/', roleGuard('admin', 'user'), async (req: AuthRequest, res, next)
         amount: item.amount,
         category: item.category,
         recipient: '',
+        disbursementType: 'bank' as const,
       })),
       totalAmount,
       sourceBankAccount,
@@ -256,6 +257,7 @@ router.put('/:id', roleGuard('admin', 'user'), async (req: AuthRequest, res, nex
           amount: item.amount,
           category: item.category,
           recipient: '',
+          disbursementType: 'bank' as const,
         }));
         pr.totalAmount = reimbursement.totalAmount;
         pr.attachments = data.items.map((item) => item.receiptUrl).filter(Boolean);

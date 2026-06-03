@@ -62,6 +62,7 @@ export default function PaymentRequestDetail() {
   const canNotify = pr.status === 'pending';
 
   const hasRecipients = pr.items.some((item) => item.recipient);
+  const hasOffsetItems = pr.items.some((item) => item.disbursementType === 'liability_offset');
 
   function openNotifyModal() {
     const adminEmails = (allUsers || [])
@@ -193,6 +194,7 @@ export default function PaymentRequestDetail() {
                 {hasRecipients && <th className="text-left px-4 py-3 font-medium text-gray-600">Recipient</th>}
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Description</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Category</th>
+                {hasOffsetItems && <th className="text-left px-4 py-3 font-medium text-gray-600">Type</th>}
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Amount</th>
               </tr>
             </thead>
@@ -212,6 +214,13 @@ export default function PaymentRequestDetail() {
                     )}
                     <td className="px-4 py-3 text-gray-600">{item.description}</td>
                     <td className="px-4 py-3 text-gray-500">{item.category}</td>
+                    {hasOffsetItems && (
+                      <td className="px-4 py-3">
+                        {item.disbursementType === 'liability_offset'
+                          ? <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">Offset</span>
+                          : <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">Bank</span>}
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-right font-mono tabular-nums">{formatMoney(item.amount)}</td>
                   </tr>
                 );
@@ -219,7 +228,7 @@ export default function PaymentRequestDetail() {
             </tbody>
             <tfoot>
               <tr className="bg-gray-50 border-t border-gray-200">
-                <td colSpan={hasRecipients ? 6 : 5} className="px-4 py-3 text-right font-medium">Total</td>
+                <td colSpan={(hasRecipients ? 6 : 5) + (hasOffsetItems ? 1 : 0)} className="px-4 py-3 text-right font-medium">Total</td>
                 <td className="px-4 py-3 text-right font-mono font-bold tabular-nums">{formatMoney(pr.totalAmount)}</td>
               </tr>
             </tfoot>

@@ -364,7 +364,7 @@ export function registerTools(server: McpServer, api: ApiRequestFn = defaultApiR
 
   server.tool('create_payment_request', 'Create a new expense approval request', {
     entity: OptStr, description: OptStr,
-    items: z.string().describe('JSON array of {payee, description, amount (cents int), category, recipient?}'),
+    items: z.string().describe('JSON array of {payee, description, amount (cents int), category, recipient?, disbursementType? ("bank"|"liability_offset"), shareholderId?}'),
     sourceBankAccount: OptStr, attachments: z.string().optional().describe('JSON array of attachment URLs'),
   }, async ({ items, attachments, ...rest }) => {
     try {
@@ -376,7 +376,7 @@ export function registerTools(server: McpServer, api: ApiRequestFn = defaultApiR
 
   server.tool('update_payment_request', 'Update a payment request (partial update)', {
     id: ReqStr, description: OptStr,
-    items: z.string().optional().describe('JSON array of items'),
+    items: z.string().optional().describe('JSON array of {payee, description, amount (cents int), category, recipient?, disbursementType? ("bank"|"liability_offset"), shareholderId?}'),
     sourceBankAccount: OptStr, attachments: z.string().optional().describe('JSON array of attachment URLs'),
   }, async ({ id, items, attachments, ...rest }) => {
     try {

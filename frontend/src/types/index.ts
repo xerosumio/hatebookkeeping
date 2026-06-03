@@ -328,6 +328,8 @@ export interface PaymentRequestItem {
   amount: number;
   category: string;
   recipient?: string;
+  disbursementType?: 'bank' | 'liability_offset';
+  shareholderId?: string | { _id: string; name: string };
 }
 
 export interface ActivityLogEntry {

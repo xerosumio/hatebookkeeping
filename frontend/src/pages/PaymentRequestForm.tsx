@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   useCreatePaymentRequest, useUpdatePaymentRequest, usePaymentRequest,
-  usePayees, useCreatePayee, useSettings, uploadFile, useEntities,
+  usePayees, useCreatePayee, useSettings, uploadFile, useEntities, useShareholders,
 } from '../api/hooks';
 import { formatMoney, decimalToCents, centsToDecimal } from '../utils/money';
 import { Plus, X, Upload, Trash2 } from 'lucide-react';
@@ -16,9 +16,11 @@ interface ItemRow {
   amount: string;
   category: string;
   recipient: string;
+  disbursementType: 'bank' | 'liability_offset';
+  shareholderId: string;
 }
 
-const emptyItem = (): ItemRow => ({ payee: '', description: '', amount: '', category: '', recipient: '' });
+const emptyItem = (): ItemRow => ({ payee: '', description: '', amount: '', category: '', recipient: '', disbursementType: 'bank', shareholderId: '' });
 
 export default function PaymentRequestForm() {
   const navigate = useNavigate();
@@ -33,6 +35,7 @@ export default function PaymentRequestForm() {
   const { data: entities } = useEntities();
   const expenseCategories = (settings?.chartOfAccounts || []).filter((a) => a.active && a.type === 'expense');
   const createPayee = useCreatePayee();
+  const { data: shareholders } = useShareholders();
 
   const [entity, setEntity] = useState('');
   const [status, setStatus] = useState('');
@@ -71,6 +74,10 @@ export default function PaymentRequestForm() {
           amount: String(centsToDecimal(item.amount)),
           category: item.category,
           recipient: item.recipient || '',
+          disbursementType: item.disbursementType || 'bank',
+          shareholderId: item.shareholderId
+            ? (typeof item.shareholderId === 'object' ? item.shareholderId._id : item.shareholderId)
+            : '',
         })),
       );
       setLoaded(true);
@@ -144,6 +151,8 @@ export default function PaymentRequestForm() {
         amount: decimalToCents(Number(item.amount)),
         category: item.category,
         recipient: item.recipient,
+        disbursementType: item.disbursementType,
+        ...(item.disbursementType === 'liability_offset' && item.shareholderId ? { shareholderId: item.shareholderId } : {}),
       })),
       attachments,
       ...(isEdit && status ? { status } : {}),
@@ -259,38 +268,53 @@ export default function PaymentRequestForm() {
 
           <div className="space-y-2">
             {items.map((item, i) => (
-              <div key={i} className="grid grid-cols-12 gap-2 items-start">
-                <div className="col-span-2">
-                  {i === 0 && <label className="block text-xs text-gray-500 mb-1">Payee</label>}
-                  <select value={item.payee} onChange={(e) => updateItem(i, { payee: e.target.value })} className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm">
-                    <option value="">Select...</option>
-                    {payees?.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}
-                  </select>
+              <div key={i} className="space-y-1">
+                <div className="grid grid-cols-12 gap-2 items-start">
+                  <div className="col-span-2">
+                    {i === 0 && <label className="block text-xs text-gray-500 mb-1">Payee</label>}
+                    <select value={item.payee} onChange={(e) => updateItem(i, { payee: e.target.value })} className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm">
+                      <option value="">Select...</option>
+                      {payees?.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="col-span-3">
+                    {i === 0 && <label className="block text-xs text-gray-500 mb-1">Description</label>}
+                    <input type="text" value={item.description} onChange={(e) => updateItem(i, { description: e.target.value })} placeholder="What for" className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
+                  </div>
+                  <div className="col-span-2">
+                    {i === 0 && <label className="block text-xs text-gray-500 mb-1">Category</label>}
+                    <select value={item.category} onChange={(e) => updateItem(i, { category: e.target.value })} className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm">
+                      <option value="">Select...</option>
+                      {expenseCategories.map((a) => <option key={a.code} value={a.name}>{a.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="col-span-2">
+                    {i === 0 && <label className="block text-xs text-gray-500 mb-1">Type</label>}
+                    <select value={item.disbursementType} onChange={(e) => updateItem(i, { disbursementType: e.target.value as 'bank' | 'liability_offset', ...(e.target.value === 'bank' ? { shareholderId: '' } : {}) })} className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm">
+                      <option value="bank">Bank Transfer</option>
+                      <option value="liability_offset">Liability Offset</option>
+                    </select>
+                  </div>
+                  <div className="col-span-2">
+                    {i === 0 && <label className="block text-xs text-gray-500 mb-1">Amount</label>}
+                    <input type="number" value={item.amount} onChange={(e) => updateItem(i, { amount: e.target.value })} min={0.01} step={0.01} placeholder="0.00" className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm text-right" />
+                  </div>
+                  <div className="col-span-1 flex justify-center" style={i === 0 ? { marginTop: 20 } : {}}>
+                    {items.length > 1 && (
+                      <button type="button" onClick={() => removeItem(i)} className="text-gray-400 hover:text-red-500 p-1"><Trash2 size={14} /></button>
+                    )}
+                  </div>
                 </div>
-                <div className="col-span-3">
-                  {i === 0 && <label className="block text-xs text-gray-500 mb-1">Description</label>}
-                  <input type="text" value={item.description} onChange={(e) => updateItem(i, { description: e.target.value })} placeholder="What for" className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
-                </div>
-                <div className="col-span-2">
-                  {i === 0 && <label className="block text-xs text-gray-500 mb-1">Category</label>}
-                  <select value={item.category} onChange={(e) => updateItem(i, { category: e.target.value })} className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm">
-                    <option value="">Select...</option>
-                    {expenseCategories.map((a) => <option key={a.code} value={a.name}>{a.name}</option>)}
-                  </select>
-                </div>
-                <div className="col-span-2">
-                  {i === 0 && <label className="block text-xs text-gray-500 mb-1">Recipient</label>}
-                  <input type="text" value={item.recipient} onChange={(e) => updateItem(i, { recipient: e.target.value })} placeholder="Internal member" className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
-                </div>
-                <div className="col-span-2">
-                  {i === 0 && <label className="block text-xs text-gray-500 mb-1">Amount</label>}
-                  <input type="number" value={item.amount} onChange={(e) => updateItem(i, { amount: e.target.value })} min={0.01} step={0.01} placeholder="0.00" className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm text-right" />
-                </div>
-                <div className="col-span-1 flex justify-center" style={i === 0 ? { marginTop: 20 } : {}}>
-                  {items.length > 1 && (
-                    <button type="button" onClick={() => removeItem(i)} className="text-gray-400 hover:text-red-500 p-1"><Trash2 size={14} /></button>
-                  )}
-                </div>
+                {item.disbursementType === 'liability_offset' && (
+                  <div className="ml-[calc(58.333%+0.5rem)] grid grid-cols-4 gap-2">
+                    <div className="col-span-2">
+                      <select value={item.shareholderId} onChange={(e) => updateItem(i, { shareholderId: e.target.value })} className="w-full border border-amber-300 bg-amber-50 rounded px-2 py-1.5 text-sm">
+                        <option value="">Select shareholder...</option>
+                        {shareholders?.filter((s: any) => s.active !== false).map((s: any) => <option key={s._id} value={s._id}>{s.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

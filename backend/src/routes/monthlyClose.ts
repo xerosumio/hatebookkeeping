@@ -848,6 +848,7 @@ router.post('/:entity/:year/:month/finalize', roleGuard('admin'), async (req: Au
             amount: cd.amount,
             category: 'Shareholder Distribution',
             recipient: shName,
+            disbursementType: 'bank' as const,
           });
         }
 
@@ -963,6 +964,7 @@ router.post('/:entity/:year/:month/create-collection-requests', roleGuard('admin
         description: `Capital collection — ${sh.name} (${d.sharePercent.toFixed(2)}%)`,
         amount: Math.abs(d.amount),
         category: 'Shareholder Collection',
+        disbursementType: 'bank' as const,
       });
     }
 

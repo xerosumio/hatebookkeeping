@@ -6,6 +6,8 @@ export interface IPaymentRequestItem {
   amount: number;
   category: string;
   recipient: string;
+  disbursementType: 'bank' | 'liability_offset';
+  shareholderId?: mongoose.Types.ObjectId;
 }
 
 export interface IActivityLogEntry {
@@ -50,6 +52,8 @@ const itemSchema = new Schema<IPaymentRequestItem>(
     amount: { type: Number, required: true },
     category: { type: String, required: true },
     recipient: { type: String, default: '' },
+    disbursementType: { type: String, enum: ['bank', 'liability_offset'], default: 'bank' },
+    shareholderId: { type: Schema.Types.ObjectId, ref: 'Shareholder' },
   },
   { _id: false },
 );
