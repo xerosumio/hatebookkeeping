@@ -91,12 +91,22 @@ export default function FundList() {
         </button>
       </div>
 
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        <div className="bg-white border border-gray-200 rounded-lg p-4 col-span-1">
+      <div className="grid grid-cols-5 gap-4 mb-6">
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
           <div className="text-sm text-gray-500">Total Balance</div>
           <div className={`text-xl font-bold font-mono ${totalBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
             {formatMoney(totalBalance)}
           </div>
+        </div>
+        <div className="bg-white border-2 border-emerald-300 rounded-lg p-4">
+          <div className="text-sm text-emerald-600 font-medium">Operating Cash</div>
+          <div className="text-xl font-bold font-mono text-emerald-700">
+            {formatMoney(bankFunds.reduce((total, bank) => {
+              const reserveSum = childrenOf(bank._id).reduce((s, c) => s + c.balance, 0);
+              return total + (bank.balance - reserveSum);
+            }, 0))}
+          </div>
+          <div className="text-xs text-emerald-500">Bank balances minus reserves</div>
         </div>
         {['reserve', 'bank', 'petty_cash'].map((t) => {
           const grouped = activeFunds.filter((f) => f.type === t);
@@ -130,15 +140,31 @@ export default function FundList() {
                   <Link to={`/funds/${bank._id}`} className="text-xs text-blue-600 hover:underline">History</Link>
                 </div>
               </div>
-              {children.length > 0 && (
-                <table className="w-full text-sm">
-                  <tbody className="divide-y divide-gray-100">
-                    {children.map((child) => (
-                      <FundSubRow key={child._id} fund={child} onEdit={openEdit} />
-                    ))}
-                  </tbody>
-                </table>
-              )}
+              {children.length > 0 && (() => {
+                const reserveTotal = children.reduce((s, c) => s + c.balance, 0);
+                const operatingCash = bank.balance - reserveTotal;
+                return (
+                  <table className="w-full text-sm">
+                    <tbody className="divide-y divide-gray-100">
+                      {children.map((child) => (
+                        <FundSubRow key={child._id} fund={child} onEdit={openEdit} />
+                      ))}
+                      <tr className="bg-emerald-50">
+                        <td className="px-4 py-2.5 pl-8">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-emerald-700">Operating Cash</span>
+                            <span className="text-xs text-emerald-500">= balance − reserves</span>
+                          </div>
+                        </td>
+                        <td className={`px-4 py-2.5 text-right font-mono font-bold ${operatingCash >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                          {formatMoney(operatingCash)}
+                        </td>
+                        <td className="px-4 py-2.5 w-32"></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                );
+              })()}
             </div>
           );
         })}
