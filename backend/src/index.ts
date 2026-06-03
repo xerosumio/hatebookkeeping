@@ -30,7 +30,11 @@ import { startScheduler } from './scheduler.js';
 
 const app = express();
 
-app.use(cors({ origin: env.corsOrigin, credentials: true }));
+const allowedOrigins = env.corsOrigin.split(',').map(o => o.trim()).filter(Boolean);
+app.use(cors({
+  origin: allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins,
+  credentials: true,
+}));
 app.use('/api/uploads', express.json({ limit: '10mb' }), uploadRoutes);
 app.use(express.json());
 app.use('/api/uploads', express.static(path.resolve(env.uploadDir)));
