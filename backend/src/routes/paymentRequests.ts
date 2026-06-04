@@ -341,13 +341,6 @@ router.patch('/:id/execute', roleGuard('admin', 'user'), async (req: AuthRequest
     } as any);
     await request.save();
 
-    const categoryMap: Record<string, string> = {
-      salary: 'salary',
-      reimbursement: 'reimbursement',
-      vendor_payment: 'other',
-      other: 'other',
-    };
-
     for (const item of request.items) {
       const payeeId = typeof item.payee === 'object' && (item.payee as any)._id
         ? (item.payee as any)._id
@@ -358,7 +351,7 @@ router.patch('/:id/execute', roleGuard('admin', 'user'), async (req: AuthRequest
       await Transaction.create({
         date: new Date(),
         type: 'expense',
-        category: categoryMap[item.category] || 'other',
+        category: item.category || 'Other Expense',
         description: item.description,
         amount: item.amount,
         entity: request.entity,

@@ -95,8 +95,16 @@ async function computeMonthlyFigures(year: number, month: number, entityId: stri
   }
 
   // Actual cash flow by bank date, all categories (for cash position)
+  // Exclude non-cash expenses (liability_offset items have bankAccount = '')
   const cashResults = await Transaction.aggregate([
-    { $match: { date: { $gte: startDate, $lt: endDate }, entity: new mongoose.Types.ObjectId(entityId) } },
+    { $match: {
+      date: { $gte: startDate, $lt: endDate },
+      entity: new mongoose.Types.ObjectId(entityId),
+      $or: [
+        { type: 'income' },
+        { type: 'expense', bankAccount: { $nin: [null, ''] } },
+      ],
+    }},
     { $group: { _id: '$type', total: { $sum: '$amount' } } },
   ]);
 
@@ -860,12 +868,11 @@ router.post('/:entity/:year/:month/finalize', roleGuard('admin'), async (req: Au
           items: prItems,
           totalAmount: prItems.reduce((sum, i) => sum + i.amount, 0),
           sourceBankAccount,
-          status: 'approved',
+          status: 'pending',
           createdBy: req.user!._id,
-          approvals: [{ user: req.user!._id, at: new Date() }],
+          approvals: [],
           activityLog: [
-            { action: 'created', user: req.user!._id, timestamp: new Date() },
-            { action: 'approved', user: req.user!._id, timestamp: new Date(), note: 'Auto-approved via monthly close finalization' },
+            { action: 'created', user: req.user!._id, timestamp: new Date(), note: 'Auto-created via monthly close finalization' },
           ],
         });
       }
