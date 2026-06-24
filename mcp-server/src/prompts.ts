@@ -60,22 +60,15 @@ Amount: ${amount} (display currency, multiply by 100 for API)`,
     }],
   }));
 
-  server.prompt('bank-reconciliation', 'Review and reconcile pending bank transactions', {
-    entity: z.string().optional().describe('Entity code to filter by'),
-  }, async ({ entity }) => ({
+  server.prompt('bank-balance', 'Check live bank balances for all entities', {}, async () => ({
     messages: [{
       role: 'user',
       content: {
         type: 'text',
-        text: `Review and reconcile pending bank transactions${entity ? ` for entity "${entity}"` : ''}:
+        text: `Check the current bank balances:
 
-1. Call trigger_airwallex_sync${entity ? ` with entity="${entity}"` : ' for each entity'} to sync latest transactions
-2. Call list_pending_bank_transactions to see unmatched transactions
-3. For each pending transaction:
-   a. Try to match it to an existing system transaction using match_pending_transaction
-   b. If no match exists, create a new transaction using create_from_pending
-   c. If it's not relevant, dismiss it using dismiss_pending with a note
-4. Show me a summary of what was matched, created, and dismissed`,
+1. Call get_airwallex_status to fetch live bank balances for both entities
+2. Show me the current HKD balance for each entity`,
       },
     }],
   }));

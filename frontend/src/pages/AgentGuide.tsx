@@ -181,17 +181,11 @@ If creating from a quotation, use \`create_invoice_from_quotation\` instead.
 
 ---
 
-## Bank Reconciliation
+## Bank Balance Check
 
 **Steps:**
-1. Ask which entity (or all)
-2. \`trigger_airwallex_sync\` to pull latest bank data
-3. \`list_pending_bank_transactions\` — show unmatched transactions
-4. For each, ask user:
-   - "Match to existing transaction?" → \`match_pending_transaction\`
-   - "Create new transaction?" → \`create_from_pending\` (ask for category and description)
-   - "Dismiss?" → \`dismiss_pending\` (ask for reason)
-5. Summarize actions taken
+1. \`get_airwallex_status\` to fetch live bank balances for both entities
+2. Compare with system fund balances if needed
 
 ---
 

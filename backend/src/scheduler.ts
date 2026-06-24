@@ -6,7 +6,6 @@ import { Notification } from './models/Notification.js';
 import { sendEmail, buildRecurringReminderEmailHtml } from './utils/email.js';
 import { env } from './config/env.js';
 import { formatMoney } from './utils/pdf/formatMoney.js';
-import { runSyncAll } from './services/airwallexSync.js';
 
 function getNextDueDateForItem(item: {
   startDate: Date;
@@ -158,9 +157,5 @@ export function startScheduler() {
   cron.schedule('0 0 * * *', runAlertCheck, { timezone: 'Asia/Hong_Kong' });
   console.log('[scheduler] Daily alert cron started (08:00 HKT → 00:00 UTC)');
 
-  cron.schedule('*/30 * * * *', runSyncAll, { timezone: 'Asia/Hong_Kong' });
-  console.log('[scheduler] Airwallex sync cron started (every 30 min)');
-
   setTimeout(runAlertCheck, 5000);
-  setTimeout(runSyncAll, 10000);
 }

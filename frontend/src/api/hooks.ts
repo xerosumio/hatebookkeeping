@@ -970,87 +970,12 @@ export function useIntercompanyTransfer() {
   });
 }
 
-// Airwallex sync
+// Airwallex balance
 export function useAirwallexStatus() {
   return useQuery({
     queryKey: ['airwallex-status'],
     queryFn: () => api.get('/airwallex/status').then((r) => r.data),
     refetchInterval: 30_000,
-  });
-}
-
-export function useAirwallexSyncLogs(limit = 20) {
-  return useQuery({
-    queryKey: ['airwallex-sync-logs', limit],
-    queryFn: () => api.get(`/airwallex/sync-logs?limit=${limit}`).then((r) => r.data),
-  });
-}
-
-export function useTriggerSync() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (entity: string) =>
-      api.post(`/airwallex/sync/${entity}`).then((r) => r.data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['airwallex-status'] });
-      qc.invalidateQueries({ queryKey: ['airwallex-sync-logs'] });
-      qc.invalidateQueries({ queryKey: ['funds'] });
-    },
-  });
-}
-
-// Pending bank transactions
-export function usePendingBankTransactions() {
-  return useQuery({
-    queryKey: ['pending-bank-txns'],
-    queryFn: () => api.get('/airwallex/pending').then((r) => r.data),
-  });
-}
-
-export function usePendingCount() {
-  return useQuery({
-    queryKey: ['pending-bank-count'],
-    queryFn: () => api.get<{ count: number }>('/airwallex/pending/count').then((r) => r.data.count),
-    refetchInterval: 60_000,
-  });
-}
-
-export function useMatchPending() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, transactionId, transactionIds }: { id: string; transactionId?: string; transactionIds?: string[] }) =>
-      api.post(`/airwallex/pending/${id}/match`, { transactionId, transactionIds }).then((r) => r.data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['pending-bank-txns'] });
-      qc.invalidateQueries({ queryKey: ['pending-bank-count'] });
-      qc.invalidateQueries({ queryKey: ['transactions'] });
-    },
-  });
-}
-
-export function useCreateFromPending() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { category: string; description: string; entity?: string } }) =>
-      api.post(`/airwallex/pending/${id}/create`, data).then((r) => r.data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['pending-bank-txns'] });
-      qc.invalidateQueries({ queryKey: ['pending-bank-count'] });
-      qc.invalidateQueries({ queryKey: ['transactions'] });
-      qc.invalidateQueries({ queryKey: ['funds'] });
-    },
-  });
-}
-
-export function useDismissPending() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, note }: { id: string; note?: string }) =>
-      api.post(`/airwallex/pending/${id}/dismiss`, { note }).then((r) => r.data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['pending-bank-txns'] });
-      qc.invalidateQueries({ queryKey: ['pending-bank-count'] });
-    },
   });
 }
 

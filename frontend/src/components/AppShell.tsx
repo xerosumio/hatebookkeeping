@@ -108,7 +108,7 @@ export default function AppShell() {
                 }
               >
                 <RefreshCw size={18} />
-                Airwallex Sync
+                Bank Balance
               </NavLink>
               <NavLink
                 to="/endpoint"

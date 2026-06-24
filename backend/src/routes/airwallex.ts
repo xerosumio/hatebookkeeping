@@ -1,21 +1,10 @@
 import { Router } from 'express';
-import { authMiddleware, AuthRequest } from '../middleware/auth.js';
-import { AppError } from '../middleware/errorHandler.js';
+import { authMiddleware } from '../middleware/auth.js';
 import {
   resolveEntity,
   getBalances,
-  getFinancialTransactions,
-  getGlobalAccounts,
-  getGlobalAccountTransactions,
   getTokenStatus,
 } from '../services/airwallex.js';
-import { runSync } from '../services/airwallexSync.js';
-import { AirwallexSyncLog } from '../models/AirwallexSyncLog.js';
-import { Fund } from '../models/Fund.js';
-import { PendingBankTransaction } from '../models/PendingBankTransaction.js';
-import { Transaction } from '../models/Transaction.js';
-import { adjustFundBalance } from '../utils/fundBalance.js';
-import { FUND_NAME } from '../config/bankAccounts.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -36,60 +25,9 @@ router.get('/balance/:entity', async (req, res, next) => {
   }
 });
 
-router.get('/transactions/:entity', async (req, res, next) => {
-  try {
-    const key = resolveEntity(req.params.entity);
-    const { from, to, currency } = req.query;
-    const txns = await getFinancialTransactions(key, {
-      from: from as string,
-      to: to as string,
-      currency: (currency as string) || 'HKD',
-    });
-    const toCents = (v: number) => Math.round(v * 100);
-    res.json(txns.map((t) => ({ ...t, amount: toCents(t.amount), fee: toCents(t.fee), net: toCents(t.net) })));
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.get('/global-accounts/:entity', async (req, res, next) => {
-  try {
-    const key = resolveEntity(req.params.entity);
-    const accounts = await getGlobalAccounts(key);
-    res.json(accounts);
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.get('/global-accounts/:entity/:accountId/transactions', async (req, res, next) => {
-  try {
-    const key = resolveEntity(req.params.entity);
-    const { from, to } = req.query;
-    const txns = await getGlobalAccountTransactions(key, req.params.accountId, {
-      from: from as string,
-      to: to as string,
-    });
-    const toCents = (v: number) => Math.round(v * 100);
-    res.json(txns.map((t) => ({ ...t, amount: toCents(t.amount), fee: toCents(t.fee) })));
-  } catch (error) {
-    next(error);
-  }
-});
-
 router.get('/status', async (_req, res, next) => {
   try {
     const tokens = getTokenStatus();
-
-    const [latestAx, latestNt] = await Promise.all([
-      AirwallexSyncLog.findOne({ entity: 'ax' }).sort({ startedAt: -1 }),
-      AirwallexSyncLog.findOne({ entity: 'nt' }).sort({ startedAt: -1 }),
-    ]);
-
-    const [fundAx, fundNt] = await Promise.all([
-      Fund.findOne({ name: FUND_NAME.ax }).select('balance'),
-      Fund.findOne({ name: FUND_NAME.nt }).select('balance'),
-    ]);
 
     let liveAx = null;
     let liveNt = null;
@@ -107,161 +45,13 @@ router.get('/status', async (_req, res, next) => {
     res.json({
       ax: {
         token: tokens.ax,
-        lastSync: latestAx,
-        systemBalance: fundAx?.balance ?? 0,
         bankBalance: liveAx,
-        fundId: fundAx?._id?.toString() ?? null,
       },
       nt: {
         token: tokens.nt,
-        lastSync: latestNt,
-        systemBalance: fundNt?.balance ?? 0,
         bankBalance: liveNt,
-        fundId: fundNt?._id?.toString() ?? null,
       },
     });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.post('/sync/:entity', async (req, res, next) => {
-  try {
-    const key = resolveEntity(req.params.entity);
-    const log = await runSync(key);
-    res.json(log);
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.get('/sync-logs', async (req, res, next) => {
-  try {
-    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
-    const logs = await AirwallexSyncLog.find()
-      .sort({ startedAt: -1 })
-      .limit(limit);
-    res.json(logs);
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.get('/pending', async (req, res, next) => {
-  try {
-    const { entity } = req.query;
-    const filter: Record<string, unknown> = { status: 'pending' };
-    if (entity) filter.entity = entity;
-    const items = await PendingBankTransaction.find(filter).sort({ date: -1 });
-    res.json(items);
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.get('/pending/count', async (_req, res, next) => {
-  try {
-    const count = await PendingBankTransaction.countDocuments({ status: 'pending' });
-    res.json({ count });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.post('/pending/:id/match', async (req: AuthRequest, res, next) => {
-  try {
-    const pending = await PendingBankTransaction.findById(req.params.id);
-    if (!pending) throw new AppError(404, 'Pending item not found');
-    if (pending.status !== 'pending') throw new AppError(400, 'Item already resolved');
-
-    const { transactionId, transactionIds } = req.body;
-    const ids: string[] = transactionIds || (transactionId ? [transactionId] : []);
-    if (!ids.length) throw new AppError(400, 'transactionId or transactionIds is required');
-
-    let firstTxnId: any = null;
-    for (const tid of ids) {
-      const txn = await Transaction.findById(tid);
-      if (!txn) throw new AppError(404, `Transaction ${tid} not found`);
-
-      const hadNoBankAccount = !txn.bankAccount;
-      txn.reconciled = true;
-      if (pending.batchId) txn.bankReference = pending.batchId;
-      if (hadNoBankAccount && pending.entity) {
-        txn.bankAccount = FUND_NAME[pending.entity] || '';
-        const balanceAdjust = txn.type === 'income' ? txn.amount : -txn.amount;
-        await adjustFundBalance(txn.bankAccount, balanceAdjust);
-      }
-      await txn.save();
-      if (!firstTxnId) firstTxnId = txn._id;
-    }
-
-    pending.status = 'matched';
-    pending.matchedTransaction = firstTxnId;
-    pending.resolvedAt = new Date();
-    pending.resolvedBy = req.user?._id;
-    if (ids.length > 1) {
-      pending.note = `Matched to ${ids.length} transactions`;
-    }
-    await pending.save();
-
-    res.json(pending);
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.post('/pending/:id/create', async (req: AuthRequest, res, next) => {
-  try {
-    const pending = await PendingBankTransaction.findById(req.params.id);
-    if (!pending) throw new AppError(404, 'Pending item not found');
-    if (pending.status !== 'pending') throw new AppError(400, 'Item already resolved');
-
-    const { category, description, entity: entityId } = req.body;
-    if (!category || !description) throw new AppError(400, 'category and description are required');
-
-    const bankAccount = FUND_NAME[pending.entity] || '';
-
-    const txn = await Transaction.create({
-      date: pending.date,
-      type: pending.type,
-      category,
-      description,
-      amount: pending.amount,
-      entity: entityId || undefined,
-      bankAccount,
-      bankReference: pending.batchId || '',
-      reconciled: true,
-      createdBy: req.user!._id,
-    });
-
-    const balanceAdjust = pending.type === 'income' ? pending.amount : -pending.amount;
-    await adjustFundBalance(bankAccount, balanceAdjust);
-
-    pending.status = 'matched';
-    pending.matchedTransaction = txn._id;
-    pending.resolvedAt = new Date();
-    pending.resolvedBy = req.user?._id;
-    await pending.save();
-
-    res.json({ pending, transaction: txn });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.post('/pending/:id/dismiss', async (req: AuthRequest, res, next) => {
-  try {
-    const pending = await PendingBankTransaction.findById(req.params.id);
-    if (!pending) throw new AppError(404, 'Pending item not found');
-    if (pending.status !== 'pending') throw new AppError(400, 'Item already resolved');
-
-    pending.status = 'dismissed';
-    pending.note = req.body.note || '';
-    pending.resolvedAt = new Date();
-    pending.resolvedBy = req.user?._id;
-    await pending.save();
-
-    res.json(pending);
   } catch (error) {
     next(error);
   }

@@ -809,44 +809,8 @@ export function registerTools(server: McpServer, api: ApiRequestFn = defaultApiR
   // Airwallex
   // ──────────────────────────────────────────
 
-  server.tool('get_airwallex_status', 'Get Airwallex sync status, token info, and balance comparison', {}, async () => {
+  server.tool('get_airwallex_status', 'Get Airwallex token info and live bank balances', {}, async () => {
     try { return ok(await api('GET', '/airwallex/status')); } catch (e) { return fail(e); }
-  });
-
-  server.tool('trigger_airwallex_sync', 'Trigger Airwallex bank sync for an entity', {
-    entity: z.string().describe('"ax" for Axilogy or "nt" for Naton'),
-  }, async ({ entity }) => {
-    try { return ok(await api('POST', `/airwallex/sync/${entity}`)); } catch (e) { return fail(e); }
-  });
-
-  server.tool('get_airwallex_sync_logs', 'Get recent Airwallex sync logs', {
-    limit: z.string().optional(),
-  }, async (args) => {
-    try { return ok(await api('GET', '/airwallex/sync-logs', undefined, args)); } catch (e) { return fail(e); }
-  });
-
-  server.tool('list_pending_bank_transactions', 'List unmatched bank transactions awaiting review', {
-    entity: OptStr,
-  }, async (args) => {
-    try { return ok(await api('GET', '/airwallex/pending', undefined, args)); } catch (e) { return fail(e); }
-  });
-
-  server.tool('match_pending_transaction', 'Link a pending bank transaction to an existing system transaction', {
-    id: ReqStr, transactionId: ReqStr,
-  }, async ({ id, transactionId }) => {
-    try { return ok(await api('POST', `/airwallex/pending/${id}/match`, { transactionId })); } catch (e) { return fail(e); }
-  });
-
-  server.tool('create_from_pending', 'Create a new system transaction from a pending bank transaction', {
-    id: ReqStr, category: ReqStr, description: ReqStr, fund: OptStr,
-  }, async ({ id, ...body }) => {
-    try { return ok(await api('POST', `/airwallex/pending/${id}/create`, body)); } catch (e) { return fail(e); }
-  });
-
-  server.tool('dismiss_pending', 'Dismiss a pending bank transaction', {
-    id: ReqStr, note: OptStr,
-  }, async ({ id, note }) => {
-    try { return ok(await api('POST', `/airwallex/pending/${id}/dismiss`, { note })); } catch (e) { return fail(e); }
   });
 
   // ──────────────────────────────────────────

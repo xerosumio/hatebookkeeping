@@ -4,7 +4,6 @@ import { useTransactions, useDeleteTransaction, useEntities, useIntercompanyTran
 import { formatMoney, titleCase, decimalToCents } from '../utils/money';
 import { Plus, Pencil, Trash2, ArrowLeftRight } from 'lucide-react';
 import TransactionForm from './TransactionForm';
-import { PendingBanner } from '../components/PendingBankTransactions';
 import type { Transaction, Entity } from '../types';
 
 export default function TransactionList() {
@@ -121,8 +120,6 @@ export default function TransactionList() {
           <TransactionForm onDone={handleDone} existing={editing} />
         </div>
       )}
-
-      <PendingBanner />
 
       <div className="flex items-center gap-4 mb-4">
         <div className="flex gap-2">

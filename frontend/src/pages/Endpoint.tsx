@@ -22,7 +22,7 @@ const TOOL_GROUPS = [
   { group: 'Reports', tools: ['get_cash_flow', 'get_income_statement', 'get_accounts_receivable', 'get_accounts_payable', 'get_balance_sheet', 'get_monthly_summary', 'get_recurring_overview'] },
   { group: 'Users', tools: ['list_users', 'update_user', 'delete_user'] },
   { group: 'Settings', tools: ['get_settings', 'update_settings'] },
-  { group: 'Airwallex', tools: ['get_airwallex_status', 'trigger_airwallex_sync', 'get_airwallex_sync_logs', 'list_pending_bank_transactions', 'match_pending_transaction', 'create_from_pending', 'dismiss_pending'] },
+  { group: 'Airwallex', tools: ['get_airwallex_status'] },
 ];
 
 const totalTools = TOOL_GROUPS.reduce((s, g) => s + g.tools.length, 0);
