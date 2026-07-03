@@ -72,7 +72,7 @@ export default function FundList() {
   }
 
   const activeFunds = funds?.filter((f) => f.active) || [];
-  const totalBalance = activeFunds.reduce((s, f) => s + f.balance, 0);
+  const totalBalance = activeFunds.filter((f) => f.type === 'bank' || f.type === 'petty_cash').reduce((s, f) => s + f.balance, 0);
   const bankFunds = activeFunds.filter((f) => f.type === 'bank');
   const standaloneFunds = activeFunds.filter((f) => f.type !== 'bank' && !getHeldInId(f));
 
