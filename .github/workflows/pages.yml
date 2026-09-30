@@ -30,7 +30,7 @@ jobs:
             echo "Set the VITE_API_URL repository variable to the Coolify origin (PUBLIC_URL)"
             exit 1
           fi
-      - run: npm run build --workspace @hbk/shared && npm run build --workspace @hbk/web
+      - run: npm run build:shared && npm run build --workspace @hbk/web
         env:
           VITE_API_URL: ${{ vars.VITE_API_URL }}
           VITE_SUITE_NDOC_URL: ${{ vars.VITE_SUITE_NDOC_URL }}
