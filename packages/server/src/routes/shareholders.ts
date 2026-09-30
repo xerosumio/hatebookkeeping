@@ -404,12 +404,14 @@ router.put('/:id/liabilities/:entryId', async (req: AuthRequest, res, next) => {
   try {
     if (req.user!.role !== 'admin') throw new AppError(403, 'Admin only');
     const data = z.object({
+      type: z.enum(['purchase', 'payment']).optional(),
       amount: z.number().int().positive().optional(),
       date: z.string().optional(),
       description: z.string().optional(),
     }).parse(req.body);
 
     const update: Record<string, unknown> = {};
+    if (data.type !== undefined) update.type = data.type;
     if (data.amount !== undefined) update.amount = data.amount;
     if (data.date !== undefined) update.date = new Date(data.date);
     if (data.description !== undefined) update.description = data.description;

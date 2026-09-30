@@ -52,13 +52,14 @@ export default function ShareholderList() {
   const [investDate, setInvestDate] = useState(new Date().toISOString().slice(0, 10));
   const [investDesc, setInvestDesc] = useState('');
 
-  const [addEntryModal, setAddEntryModal] = useState<{ id: string; name: string } | null>(null);
+  const [addEntryModal, setAddEntryModal] = useState<{ id: string; name: string; pick?: boolean } | null>(null);
   const [entryType, setEntryType] = useState<'purchase' | 'payment'>('purchase');
   const [entryAmount, setEntryAmount] = useState('');
   const [entryDate, setEntryDate] = useState(new Date().toISOString().slice(0, 10));
   const [entryDesc, setEntryDesc] = useState('');
 
   const [editEntry, setEditEntry] = useState<{ shareholderId: string; entry: ShareLiabilityEntry } | null>(null);
+  const [editType, setEditType] = useState<'purchase' | 'payment'>('purchase');
   const [editAmount, setEditAmount] = useState('');
   const [editDate, setEditDate] = useState('');
   const [editDesc, setEditDesc] = useState('');
@@ -104,7 +105,7 @@ export default function ShareholderList() {
   }
 
   async function handleAddEntry() {
-    if (!addEntryModal || !entryAmount) return;
+    if (!addEntryModal?.id || !entryAmount) return;
     const cents = Math.round(parseFloat(entryAmount) * 100);
     await createLiabilityMutation.mutateAsync({
       id: addEntryModal.id,
@@ -122,6 +123,7 @@ export default function ShareholderList() {
       shareholderId: editEntry.shareholderId,
       entryId: editEntry.entry._id,
       data: {
+        type: editType,
         amount: Math.round(parseFloat(editAmount) * 100),
         date: editDate,
         description: editDesc,
@@ -381,9 +383,28 @@ export default function ShareholderList() {
         </div>
       </div>
 
-      {shareholdersWithLiability.length > 0 && (
-        <div className="mt-8">
-          <h2 className="text-lg font-bold mb-3">Share Purchase Liabilities</h2>
+      <div className="mt-8">
+        <div className="flex justify-between items-center mb-3">
+          <h2 className="text-lg font-bold">Share Purchase Liabilities</h2>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => {
+                setAddEntryModal({ id: '', name: '', pick: true });
+                setEntryType('purchase');
+                setEntryAmount('');
+                setEntryDate(new Date().toISOString().slice(0, 10));
+                setEntryDesc('');
+              }}
+              className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"
+            >
+              Add entry
+            </button>
+          )}
+        </div>
+        {shareholdersWithLiability.length === 0 ? (
+          <p className="text-sm text-gray-500">No share purchase liabilities.</p>
+        ) : (
           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
@@ -405,18 +426,20 @@ export default function ShareholderList() {
                       <td className="px-4 py-3 text-right font-mono text-green-600">{formatMoney(sh.sharePurchasePaid)}</td>
                       <td className="px-4 py-3 text-right font-mono text-red-600 font-semibold">{formatMoney(outstanding)}</td>
                       <td className="px-4 py-3 text-right space-x-1">
-                        <button
-                          onClick={() => {
-                            setAddEntryModal({ id: sh._id, name: sh.name });
-                            setEntryType('purchase');
-                            setEntryAmount('');
-                            setEntryDate(new Date().toISOString().slice(0, 10));
-                            setEntryDesc('');
-                          }}
-                          className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded hover:bg-blue-100"
-                        >
-                          + Entry
-                        </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => {
+                              setAddEntryModal({ id: sh._id, name: sh.name });
+                              setEntryType('purchase');
+                              setEntryAmount('');
+                              setEntryDate(new Date().toISOString().slice(0, 10));
+                              setEntryDesc('');
+                            }}
+                            className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded hover:bg-blue-100"
+                          >
+                            + Entry
+                          </button>
+                        )}
                         <button
                           onClick={() => setHistoryModal({ id: sh._id, name: sh.name })}
                           className="text-xs bg-gray-50 text-gray-600 px-2 py-1 rounded hover:bg-gray-100"
@@ -430,8 +453,8 @@ export default function ShareholderList() {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {addOpen && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
@@ -592,8 +615,26 @@ export default function ShareholderList() {
       {addEntryModal && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg p-6 w-96">
-            <h3 className="text-lg font-bold mb-4">Add Liability Entry — {addEntryModal.name}</h3>
+            <h3 className="text-lg font-bold mb-4">Add Liability Entry{addEntryModal.name ? ` — ${addEntryModal.name}` : ''}</h3>
             <div className="space-y-3">
+              {addEntryModal.pick && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Shareholder</label>
+                  <select
+                    value={addEntryModal.id}
+                    onChange={(e) => {
+                      const person = shareholders?.find((s) => s._id === e.target.value);
+                      setAddEntryModal({ id: e.target.value, name: person?.name || '', pick: true });
+                    }}
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+                  >
+                    <option value="">Select a shareholder...</option>
+                    {shareholders?.map((s) => (
+                      <option key={s._id} value={s._id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
                 <select value={entryType} onChange={(e) => setEntryType(e.target.value as 'purchase' | 'payment')}
@@ -620,7 +661,7 @@ export default function ShareholderList() {
               </div>
             </div>
             <div className="flex gap-3 mt-4">
-              <button onClick={handleAddEntry} disabled={!entryAmount || createLiabilityMutation.isPending}
+              <button onClick={handleAddEntry} disabled={!addEntryModal.id || !entryAmount || createLiabilityMutation.isPending}
                 className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
                 {createLiabilityMutation.isPending ? 'Saving...' : 'Add Entry'}
               </button>
@@ -636,6 +677,14 @@ export default function ShareholderList() {
           <div className="bg-white rounded-lg shadow-lg p-6 w-96">
             <h3 className="text-lg font-bold mb-4">Edit Entry</h3>
             <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                <select value={editType} onChange={(e) => setEditType(e.target.value as 'purchase' | 'payment')}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm">
+                  <option value="purchase">Purchase (increases owed)</option>
+                  <option value="payment">Payment (reduces outstanding)</option>
+                </select>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Amount (HKD)</label>
                 <input type="number" step="0.01" value={editAmount} onChange={(e) => setEditAmount(e.target.value)}
@@ -669,8 +718,10 @@ export default function ShareholderList() {
           shareholderId={historyModal.id}
           name={historyModal.name}
           onClose={() => setHistoryModal(null)}
+          canEdit={isAdmin}
           onEdit={(shareholderId, entry) => {
             setEditEntry({ shareholderId, entry });
+            setEditType(entry.type);
             setEditAmount((entry.amount / 100).toFixed(2));
             setEditDate(entry.date.slice(0, 10));
             setEditDesc(entry.description);
@@ -683,10 +734,11 @@ export default function ShareholderList() {
 }
 
 function LiabilityHistoryModal({
-  shareholderId, name, onClose, onEdit, onDelete,
+  shareholderId, name, canEdit, onClose, onEdit, onDelete,
 }: {
   shareholderId: string;
   name: string;
+  canEdit: boolean;
   onClose: () => void;
   onEdit: (shareholderId: string, entry: ShareLiabilityEntry) => void;
   onDelete: (shareholderId: string, entryId: string) => void;
@@ -732,16 +784,18 @@ function LiabilityHistoryModal({
                     {e.type === 'purchase' ? '+' : '-'}{formatMoney(e.amount)}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => onEdit(shareholderId, e)}
-                        className="text-gray-400 hover:text-blue-600 p-0.5" title="Edit">
-                        <Pencil size={12} />
-                      </button>
-                      <button onClick={() => onDelete(shareholderId, e._id)}
-                        className="text-gray-400 hover:text-red-600 p-0.5" title="Delete">
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
+                    {canEdit && (
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => onEdit(shareholderId, e)}
+                          className="text-gray-400 hover:text-blue-600 p-0.5" title="Edit">
+                          <Pencil size={12} />
+                        </button>
+                        <button onClick={() => onDelete(shareholderId, e._id)}
+                          className="text-gray-400 hover:text-red-600 p-0.5" title="Delete">
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

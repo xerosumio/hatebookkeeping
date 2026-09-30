@@ -879,7 +879,7 @@ export function useCreateShareholderLiability() {
 export function useUpdateShareholderLiability() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ shareholderId, entryId, data }: { shareholderId: string; entryId: string; data: { amount?: number; date?: string; description?: string } }) =>
+    mutationFn: ({ shareholderId, entryId, data }: { shareholderId: string; entryId: string; data: { type?: 'purchase' | 'payment'; amount?: number; date?: string; description?: string } }) =>
       api.put(`/shareholders/${shareholderId}/liabilities/${entryId}`, data).then((r) => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['shareholders'] });
