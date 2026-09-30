@@ -561,6 +561,35 @@ export interface MonthPlanReport {
     expenses: Array<{ category: string; total: number; count: number }>;
     totals: { income: number; expense: number; net: number };
   };
+  takeOut: TakeOutReport;
+}
+
+export interface TakeOutBonusLine {
+  name: string;
+  percent: number;
+  amount: number;
+}
+
+export interface TakeOutShareLine {
+  name: string;
+  sharePercent: number;
+  amount: number;
+}
+
+export interface TakeOutReport {
+  operatingCash: number;
+  pendingOut: number;
+  available: number;
+  direction: 'pay_in' | 'take_out' | 'even';
+  bonusExceedsCash: boolean;
+  bonus: TakeOutBonusLine[];
+  bonusTotal: number;
+  afterBonus: number;
+  staffReserve: number;
+  companyReserve: number;
+  shareholderPool: number;
+  unassignedShareholderPool: number;
+  shareholders: TakeOutShareLine[];
 }
 
 export interface RecurringHistoryEntry {

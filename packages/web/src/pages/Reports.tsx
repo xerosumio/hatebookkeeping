@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useEntities, useMonthPlan } from '../api/hooks';
 import { formatMoney, titleCase } from '../utils/money';
-import type { Entity, MonthPlanInvoiceLine, MonthPlanReport, MonthPlanRequestLine } from '../types';
+import type { Entity, MonthPlanInvoiceLine, MonthPlanReport, MonthPlanRequestLine, TakeOutReport } from '../types';
 
 type RangeMode = 'month' | 'year' | 'custom';
 
@@ -173,6 +173,8 @@ export default function Reports() {
               </div>
             </div>
 
+            <TakeOut takeOut={data.takeOut} />
+
             <ProfitAndLoss pl={data.pl} />
 
             <section>
@@ -214,6 +216,77 @@ export default function Reports() {
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function TakeOut({ takeOut }: { takeOut: TakeOutReport }) {
+  const leftClass = takeOut.available > 0 ? 'text-green-700' : 'text-red-700';
+  return (
+    <section>
+      <h2 className="text-sm font-semibold text-gray-700 mb-3">Take out</h2>
+      <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <PeriodLines rows={[
+          ['Operating balance', formatMoney(takeOut.operatingCash), 'text-gray-900'],
+          ['Still to pay from the bank', formatMoney(takeOut.pendingOut), 'text-red-700'],
+          ['Left to take out', formatMoney(takeOut.available), leftClass],
+        ]} />
+        {takeOut.available < 0 ? (
+          <div className="mt-4 space-y-2 border-t border-gray-100 pt-3">
+            <p className="text-sm text-red-700">
+              Do not take money out. Short by {formatMoney(-takeOut.available)}.
+            </p>
+            {takeOut.shareholders.map((person, index) => (
+              <SplitLine
+                key={`owe-${index}`}
+                label={`${person.name} ${person.sharePercent.toFixed(2)}% needs to pay`}
+                amount={person.amount}
+              />
+            ))}
+            {takeOut.unassignedShareholderPool > 0 && (
+              <SplitLine label="Unassigned shortfall" amount={takeOut.unassignedShareholderPool} />
+            )}
+          </div>
+        ) : takeOut.available === 0 ? (
+          <p className="mt-3 text-sm text-red-700">Do not take money out.</p>
+        ) : (
+          <div className="mt-4 space-y-2 border-t border-gray-100 pt-3">
+            {takeOut.bonus.map((person, index) => (
+              <SplitLine
+                key={`bonus-${index}`}
+                label={`${person.name} bonus ${person.percent.toFixed(2)}%`}
+                amount={person.amount}
+              />
+            ))}
+            {takeOut.bonusExceedsCash && (
+              <p className="text-sm text-amber-700">
+                Bonus shares are larger than the cash left. Reserves and shareholder payouts are zero.
+              </p>
+            )}
+            <SplitLine label="Staff reserve (5%)" amount={takeOut.staffReserve} />
+            <SplitLine label="Company reserve (30% of the rest)" amount={takeOut.companyReserve} />
+            {takeOut.shareholders.map((person, index) => (
+              <SplitLine
+                key={`share-${index}`}
+                label={`${person.name} ${person.sharePercent.toFixed(2)}%`}
+                amount={person.amount}
+              />
+            ))}
+            {takeOut.unassignedShareholderPool > 0 && (
+              <SplitLine label="Unassigned shareholder pool" amount={takeOut.unassignedShareholderPool} />
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function SplitLine({ label, amount }: { label: string; amount: number }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4">
+      <span className="text-sm text-gray-600">{label}</span>
+      <span className="font-mono text-sm font-semibold text-gray-900">{formatMoney(amount)}</span>
     </div>
   );
 }

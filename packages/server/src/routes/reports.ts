@@ -4,6 +4,8 @@ import { Transaction } from '../models/Transaction.js';
 import { Invoice } from '../models/Invoice.js';
 import { PaymentRequest } from '../models/PaymentRequest.js';
 import { RecurringItem } from '../models/RecurringItem.js';
+import { Shareholder } from '../models/Shareholder.js';
+import { ShareBonusUser } from '../models/ShareBonusUser.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { requirePage } from '../access/policy.js';
 import {
@@ -31,6 +33,7 @@ import {
   queryPl,
   queryPlByCategory,
 } from '../services/periodFigures.js';
+import { splitTakeOut, unpaidBankTotal } from '../services/takeOut.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -400,7 +403,7 @@ router.get('/month-plan', async (req, res, next) => {
     const entityId = entityIdFromQuery(req);
     const entityMatch = entityObjectId(entityId);
 
-    const [invoices, requests] = await Promise.all([
+    const [invoices, requests, snapshot, shareholders, bonusUsers] = await Promise.all([
       Invoice.find({
         ...entityMatch,
         $or: [
@@ -432,6 +435,9 @@ router.get('/month-plan', async (req, res, next) => {
           },
         ],
       }).populate('items.payee', 'name'),
+      operatingCashSnapshot(entityId),
+      Shareholder.find({ active: true }).sort({ name: 1 }),
+      ShareBonusUser.find().sort({ name: 1 }),
     ]);
 
     const sourceInvoices: MonthPlanSourceInvoice[] = invoices.map((inv) => ({
@@ -457,9 +463,25 @@ router.get('/month-plan', async (req, res, next) => {
       items: row.items.map((item) => ({ category: item.category, amount: item.amount })),
     }));
 
+    const pendingOut = unpaidBankTotal(requests.map((row) => ({
+      status: row.status,
+      totalAmount: row.totalAmount,
+      items: row.items.map((item) => ({
+        amount: item.amount,
+        disbursementType: item.disbursementType,
+      })),
+    })));
+    const takeOut = splitTakeOut({
+      operatingCash: snapshot.operatingCash,
+      pendingOut,
+      bonuses: bonusUsers.map((person) => ({ name: person.name, percent: person.bonusPercent })),
+      shareholders: shareholders.map((person) => ({ name: person.name, sharePercent: person.sharePercent })),
+    });
+
     res.json({
       period: { from, to },
       ...buildMonthPlan(sourceInvoices, sourceRequests, { from, to }),
+      takeOut,
     });
   } catch (error) {
     next(error);

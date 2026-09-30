@@ -692,7 +692,7 @@ export function registerTools(server: McpServer, api: ApiRequestFn = defaultApiR
     try { return ok(await api('GET', '/reports/monthly-summary', undefined, args)); } catch (e) { return fail(e); }
   });
 
-  server.tool('get_month_plan', 'Month plan by invoice date (in) and payment-request due date (out). Requests with no due date use the day they were created. Pass startDate and endDate (YYYY-MM-DD, both ends included) for a year or custom range, or year and month for one calendar month. Older unpaid items stay in carryover. Does not use payment date.', {
+  server.tool('get_month_plan', 'Month plan by invoice date (in) and payment-request due date (out). Requests with no due date use the day they were created. Pass startDate and endDate (YYYY-MM-DD, both ends included) for a year or custom range, or year and month for one calendar month. Older unpaid items stay in carryover. Does not use payment date. takeOut is operating cash minus unpaid bank bills. A surplus splits bonus shares first, then 5% staff reserve, then 30% of the rest to the company reserve and 70% by ownership. A shortfall is split by ownership as the amount each shareholder needs to pay in.', {
     year: z.string().optional(), month: z.string().optional(),
     startDate: OptStr, endDate: OptStr, entity: OptStr,
   }, async (args) => {

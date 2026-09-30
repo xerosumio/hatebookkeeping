@@ -8,7 +8,7 @@
     "build": "tsc --noCheck && cp -r src/utils/pdf/fonts dist/utils/pdf/fonts",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "test": "tsx --test src/utils/hkDate.test.ts src/services/periodFigures.test.ts src/services/monthPlan.test.ts",
+    "test": "tsx --test src/utils/hkDate.test.ts src/services/periodFigures.test.ts src/services/monthPlan.test.ts src/services/takeOut.test.ts",
     "seed": "tsx src/seed.ts",
     "seed:demo": "tsx src/seed-demo.ts",
     "audit:data": "tsx scripts/data-audit.ts",
