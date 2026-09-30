@@ -1,0 +1,79 @@
+@import '@fontsource/ibm-plex-sans/400.css';
+@import '@fontsource/ibm-plex-sans/500.css';
+@import '@fontsource/ibm-plex-sans/600.css';
+@import '@fontsource/martian-mono/400.css';
+@import '@fontsource/martian-mono/500.css';
+@import '@fontsource/martian-mono/600.css';
+@import '@fontsource/newsreader/400.css';
+
+@theme {
+  /* Chassis — instrument-panel floor and surfaces */
+  --color-void: #f2f1ee;
+  --color-chassis: #faf9f7;
+  --color-panel: #ffffff;
+  --color-raised: #f4f3f1;
+  --color-hair: #e4e3df;
+  --color-hair-lit: #cbcac4;
+
+  /* Type ramp — every step clears 4.5:1 on white panel */
+  --color-ink: #18181a;
+  --color-ink-dim: #45464a;
+  --color-ink-faint: #5e5f64;
+  --color-ink-ghost: #767780;
+
+  /* Semantic — colour means what an action can cost */
+  --color-signal: #9a6212;
+  --color-signal-dim: #8f7442;
+  --color-signal-wash: #fdf6ea;
+
+  --color-authored: #4d7c0f;
+  --color-authored-fill: #bef264;
+  --color-authored-dim: #8aab52;
+  --color-authored-wash: #f2fadd;
+
+  --color-breach: #b42318;
+  --color-breach-wash: #fdf0ee;
+
+  --color-human: #1d4ed8;
+  --color-human-wash: #eef2fe;
+
+  --font-mono: 'Martian Mono', ui-monospace, monospace;
+  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-serif: 'Newsreader', Georgia, serif;
+
+  /* Legacy suite aliases — existing call sites keep working during rollout */
+  --color-surface: var(--color-panel);
+  --color-surface-2: var(--color-raised);
+  --color-surface-3: var(--color-chassis);
+  --color-surface-active: var(--color-hair);
+  --color-line: var(--color-hair);
+  --color-line-heavy: var(--color-hair-lit);
+  --color-sidebar: var(--color-chassis);
+  --color-ink-muted: var(--color-ink-dim);
+  --color-accent: var(--color-human);
+  --color-accent-hover: #1e40af;
+  --color-accent-soft: var(--color-human-wash);
+  --color-danger: var(--color-breach);
+  --color-star: #dfab01;
+
+  /* Tailwind gray/blue/red bridges for pages not yet migrated */
+  --color-gray-50: var(--color-raised);
+  --color-gray-100: var(--color-chassis);
+  --color-gray-200: var(--color-hair);
+  --color-gray-300: var(--color-hair-lit);
+  --color-gray-400: var(--color-ink-faint);
+  --color-gray-500: var(--color-ink-dim);
+  --color-gray-600: var(--color-ink-dim);
+  --color-gray-700: var(--color-ink);
+  --color-gray-800: var(--color-ink);
+  --color-gray-900: var(--color-ink);
+  --color-blue-50: var(--color-human-wash);
+  --color-blue-100: var(--color-human-wash);
+  --color-blue-500: var(--color-human);
+  --color-blue-600: var(--color-human);
+  --color-blue-700: var(--color-accent-hover);
+  --color-blue-900: var(--color-accent-hover);
+  --color-red-500: var(--color-breach);
+  --color-red-600: var(--color-breach);
+  --color-white: var(--color-panel);
+}

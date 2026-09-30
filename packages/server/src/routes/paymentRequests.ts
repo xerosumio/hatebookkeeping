@@ -7,15 +7,23 @@ import { User } from '../models/User.js';
 import { Settings } from '../models/Settings.js';
 import { getNextSequence } from '../models/Counter.js';
 import { authMiddleware, roleGuard, AuthRequest } from '../middleware/auth.js';
+import { requireCanApprove, requirePage } from '../access/policy.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { sendEmail, buildPaymentRequestEmailHtml, buildStatusChangeEmailHtml, getSubjectForRequest } from '../utils/email.js';
 import { env } from '../config/env.js';
+import { hkInstant, parseYmd } from '../utils/hkDate.js';
 import { formatMoney } from '../utils/pdf/formatMoney.js';
 import { getRequiredApproverIds, hasFullApproval } from '../utils/dualApproval.js';
 import { ShareLiability } from '../models/ShareLiability.js';
+import type { IPaymentRequest } from '../models/PaymentRequest.js';
+import mongoose from 'mongoose';
 
 const router = Router();
 router.use(authMiddleware);
+router.use((req, res, next) => {
+  if (req.method === 'GET') return requirePage('payment-requests', 'dashboard')(req, res, next);
+  return requirePage('payment-requests')(req, res, next);
+});
 
 const itemSchema = z.object({
   payee: z.string().min(1),
@@ -32,9 +40,90 @@ const createSchema = z.object({
   description: z.string().optional().default(''),
   items: z.array(itemSchema).min(1),
   sourceBankAccount: z.string().optional().default(''),
+  dueDate: z.string().optional(),
   attachments: z.array(z.string()).optional().default([]),
   status: z.enum(['pending', 'approved', 'rejected']).optional(),
 });
+
+function dueDateFromInput(value: string | undefined): Date | undefined {
+  if (!value) return undefined;
+  try {
+    const { year, month, day } = parseYmd(value);
+    return hkInstant(year, month, day);
+  } catch {
+    throw new AppError(400, 'dueDate must be YYYY-MM-DD');
+  }
+}
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function payeeIdOf(payee: unknown) {
+  if (payee && typeof payee === 'object' && '_id' in payee) {
+    return (payee as { _id: unknown })._id;
+  }
+  return payee;
+}
+
+async function writeExecutedLedger(request: IPaymentRequest, userId: mongoose.Types.ObjectId, ledgerDate: Date) {
+  for (const item of request.items) {
+    const isBankItem = item.disbursementType !== 'liability_offset';
+
+    await Transaction.create({
+      date: ledgerDate,
+      type: 'expense',
+      category: item.category || 'Other Expense',
+      description: item.description,
+      amount: item.amount,
+      entity: request.entity,
+      payee: payeeIdOf(item.payee),
+      paymentRequest: request._id,
+      bankAccount: isBankItem ? request.sourceBankAccount : '',
+      bankReference: isBankItem ? (request.bankReference || '') : '',
+      reconciled: isBankItem ? !!request.bankReference : true,
+      createdBy: userId,
+    });
+
+    if (isBankItem && request.sourceBankAccount) {
+      await adjustFundBalance(request.sourceBankAccount, -item.amount);
+    }
+
+    if (!isBankItem && item.shareholderId) {
+      await ShareLiability.create({
+        shareholder: item.shareholderId,
+        type: 'payment',
+        amount: item.amount,
+        date: ledgerDate,
+        description: `${item.description} (via ${request.requestNumber})`,
+        createdBy: userId,
+      });
+    }
+  }
+}
+
+/** Replace the expense transactions, fund movements, and liability offsets from an executed request. */
+async function rewriteExecutedLedger(request: IPaymentRequest, userId: mongoose.Types.ObjectId) {
+  const existing = await Transaction.find({ paymentRequest: request._id });
+  const ledgerDate = request.executedAt || existing[0]?.date || new Date();
+
+  for (const txn of existing) {
+    if (txn.type === 'expense' && txn.bankAccount) {
+      await adjustFundBalance(txn.bankAccount, txn.amount);
+    }
+  }
+  if (existing.length > 0) {
+    await Transaction.deleteMany({ paymentRequest: request._id });
+  }
+
+  const suffix = `(via ${request.requestNumber})`;
+  await ShareLiability.deleteMany({
+    type: 'payment',
+    description: { $regex: `${escapeRegex(suffix)}$` },
+  });
+
+  await writeExecutedLedger(request, userId, ledgerDate);
+}
 
 router.get('/', async (req, res, next) => {
   try {
@@ -63,6 +152,7 @@ router.post('/', roleGuard('admin', 'user'), async (req: AuthRequest, res, next)
     const requestNumber = await getNextSequence('pay');
     const request = await PaymentRequest.create({
       ...data,
+      dueDate: dueDateFromInput(data.dueDate),
       totalAmount,
       requestNumber,
       createdBy: req.user!._id,
@@ -83,9 +173,6 @@ router.patch('/:id', roleGuard('admin', 'user'), async (req: AuthRequest, res, n
     const data = createSchema.partial().parse(req.body);
     const request = await PaymentRequest.findById(req.params.id);
     if (!request) throw new AppError(404, 'Payment request not found');
-    if (request.status === 'executed') {
-      throw new AppError(400, 'Cannot edit executed requests');
-    }
 
     if (data.entity !== undefined) request.entity = data.entity ? (data.entity as any) : undefined;
     if (data.description !== undefined) request.description = data.description;
@@ -94,14 +181,18 @@ router.patch('/:id', roleGuard('admin', 'user'), async (req: AuthRequest, res, n
       request.totalAmount = data.items.reduce((sum, item) => sum + item.amount, 0);
     }
     if (data.sourceBankAccount !== undefined) request.sourceBankAccount = data.sourceBankAccount;
+    if (data.dueDate) request.dueDate = dueDateFromInput(data.dueDate);
     if (data.attachments !== undefined) request.attachments = data.attachments;
 
     request.activityLog.push({
       action: 'updated',
       user: req.user!._id,
       timestamp: new Date(),
-      note: 'Partial update via PATCH',
+      note: request.status === 'executed' ? 'Edited after execution' : 'Partial update via PATCH',
     } as any);
+    if (request.status === 'executed') {
+      await rewriteExecutedLedger(request, req.user!._id);
+    }
     await request.save();
 
     res.json(request);
@@ -133,8 +224,8 @@ router.put('/:id', roleGuard('admin', 'user'), async (req: AuthRequest, res, nex
     const data = createSchema.parse(req.body);
     const request = await PaymentRequest.findById(req.params.id);
     if (!request) throw new AppError(404, 'Payment request not found');
-    if (request.status === 'executed') {
-      throw new AppError(400, 'Cannot edit executed requests');
+    if (request.status === 'executed' && data.status && data.status !== request.status) {
+      throw new AppError(400, 'Cannot change the status of an executed request');
     }
 
     const totalAmount = data.items.reduce((sum, item) => sum + item.amount, 0);
@@ -143,6 +234,7 @@ router.put('/:id', roleGuard('admin', 'user'), async (req: AuthRequest, res, nex
     request.items = data.items as any;
     request.totalAmount = totalAmount;
     request.sourceBankAccount = data.sourceBankAccount;
+    if (data.dueDate) request.dueDate = dueDateFromInput(data.dueDate);
     request.attachments = data.attachments;
 
     if (data.status && data.status !== request.status) {
@@ -159,9 +251,13 @@ router.put('/:id', roleGuard('admin', 'user'), async (req: AuthRequest, res, nex
         action: 'updated',
         user: req.user!._id,
         timestamp: new Date(),
+        note: request.status === 'executed' ? 'Edited after execution' : undefined,
       } as any);
     }
 
+    if (request.status === 'executed') {
+      await rewriteExecutedLedger(request, req.user!._id);
+    }
     await request.save();
 
     res.json(request);
@@ -193,7 +289,7 @@ router.delete('/:id', roleGuard('admin', 'user'), async (req: AuthRequest, res, 
   }
 });
 
-router.patch('/:id/approve', roleGuard('admin'), async (req: AuthRequest, res, next) => {
+router.patch('/:id/approve', requireCanApprove(), async (req: AuthRequest, res, next) => {
   try {
     const request = await PaymentRequest.findById(req.params.id);
     if (!request) throw new AppError(404, 'Payment request not found');
@@ -232,7 +328,7 @@ router.patch('/:id/approve', roleGuard('admin'), async (req: AuthRequest, res, n
     if (request.status === 'approved') {
       const settings = await Settings.findOne();
       const companyName = settings?.companyName || 'HateBookkeeping';
-      const detailUrl = `${env.frontendUrl}/#/payment-requests/${request._id}`;
+      const detailUrl = `${env.frontendUrl}/payment-requests/${request._id}`;
       const creator = await User.findById(request.createdBy, 'email name');
       const recipientEmails = [...new Set([
         ...(creator?.email ? [creator.email] : []),
@@ -266,7 +362,7 @@ router.patch('/:id/approve', roleGuard('admin'), async (req: AuthRequest, res, n
   }
 });
 
-router.patch('/:id/reject', roleGuard('admin'), async (req: AuthRequest, res, next) => {
+router.patch('/:id/reject', requireCanApprove(), async (req: AuthRequest, res, next) => {
   try {
     const { reason } = z.object({ reason: z.string().min(1) }).parse(req.body);
     const request = await PaymentRequest.findById(req.params.id);
@@ -290,7 +386,7 @@ router.patch('/:id/reject', roleGuard('admin'), async (req: AuthRequest, res, ne
     // Send rejection notification emails
     const settings = await Settings.findOne();
     const companyName = settings?.companyName || 'HateBookkeeping';
-    const detailUrl = `${env.frontendUrl}/#/payment-requests/${request._id}`;
+    const detailUrl = `${env.frontendUrl}/payment-requests/${request._id}`;
     const creator = await User.findById(request.createdBy, 'email name');
     const recipientEmails = [...new Set([
       ...(creator?.email ? [creator.email] : []),
@@ -341,48 +437,12 @@ router.patch('/:id/execute', roleGuard('admin', 'user'), async (req: AuthRequest
     } as any);
     await request.save();
 
-    for (const item of request.items) {
-      const payeeId = typeof item.payee === 'object' && (item.payee as any)._id
-        ? (item.payee as any)._id
-        : item.payee;
-
-      const isBankItem = item.disbursementType !== 'liability_offset';
-
-      await Transaction.create({
-        date: new Date(),
-        type: 'expense',
-        category: item.category || 'Other Expense',
-        description: item.description,
-        amount: item.amount,
-        entity: request.entity,
-        payee: payeeId,
-        paymentRequest: request._id,
-        bankAccount: isBankItem ? request.sourceBankAccount : '',
-        bankReference: isBankItem ? bankReference : '',
-        reconciled: isBankItem ? !!bankReference : true,
-        createdBy: req.user!._id,
-      });
-
-      if (isBankItem && request.sourceBankAccount) {
-        await adjustFundBalance(request.sourceBankAccount, -item.amount);
-      }
-
-      if (!isBankItem && item.shareholderId) {
-        await ShareLiability.create({
-          shareholder: item.shareholderId,
-          type: 'payment',
-          amount: item.amount,
-          date: new Date(),
-          description: `${item.description} (via ${request.requestNumber})`,
-          createdBy: req.user!._id,
-        });
-      }
-    }
+    await writeExecutedLedger(request, req.user!._id, request.executedAt || new Date());
 
     // Send execution notification emails
     const settings = await Settings.findOne();
     const companyName = settings?.companyName || 'HateBookkeeping';
-    const detailUrl = `${env.frontendUrl}/#/payment-requests/${request._id}`;
+    const detailUrl = `${env.frontendUrl}/payment-requests/${request._id}`;
     const creator = await User.findById(request.createdBy, 'email name');
     const recipientEmails = [...new Set([
       ...(creator?.email ? [creator.email] : []),
@@ -421,7 +481,7 @@ router.post('/:id/notify', roleGuard('admin', 'user'), async (req: AuthRequest, 
 
     const settings = await Settings.findOne();
     const companyName = settings?.companyName || 'HateBookkeeping';
-    const detailUrl = `${env.frontendUrl}/#/payment-requests/${request._id}`;
+    const detailUrl = `${env.frontendUrl}/payment-requests/${request._id}`;
 
     const items = request.items.map((item) => {
       const payeeName = typeof item.payee === 'object' && (item.payee as any).name

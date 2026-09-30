@@ -1,13 +1,25 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { Shareholder } from '../models/Shareholder.js';
+import { ShareBonusUser } from '../models/ShareBonusUser.js';
+import { User } from '../models/User.js';
 import { EquityTransaction } from '../models/EquityTransaction.js';
 import { ShareLiability } from '../models/ShareLiability.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { requirePage } from '../access/policy.js';
 import { AppError } from '../middleware/errorHandler.js';
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requirePage('shareholders'));
+
+function shareIsZero(percent: number) {
+  return Math.abs(percent) < 0.005;
+}
+
+function requireAdmin(req: AuthRequest) {
+  if (req.user!.role !== 'admin') throw new AppError(403, 'Admin only');
+}
 
 router.get('/', async (_req, res, next) => {
   try {
@@ -82,6 +94,66 @@ router.get('/summary', async (_req, res, next) => {
   }
 });
 
+router.get('/bonus', async (_req, res, next) => {
+  try {
+    const people = await ShareBonusUser.find()
+      .populate('user', 'name email role')
+      .sort({ name: 1 });
+    res.json(people);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/bonus', async (req: AuthRequest, res, next) => {
+  try {
+    requireAdmin(req);
+    const data = z.object({
+      user: z.string().min(1),
+      bonusPercent: z.number().min(0).max(100),
+    }).parse(req.body);
+    const user = await User.findById(data.user);
+    if (!user || !user.active) throw new AppError(400, 'Choose an active user');
+    const existing = await ShareBonusUser.findOne({ user: user._id });
+    if (existing) throw new AppError(409, 'This user is already a share bonus user');
+    const person = await ShareBonusUser.create({
+      user: user._id,
+      name: user.name,
+      bonusPercent: data.bonusPercent,
+    });
+    res.status(201).json(person);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put('/bonus/:id', async (req: AuthRequest, res, next) => {
+  try {
+    requireAdmin(req);
+    const data = z.object({
+      bonusPercent: z.number().min(0).max(100),
+    }).parse(req.body);
+    const person = await ShareBonusUser.findById(req.params.id);
+    if (!person) throw new AppError(404, 'Share bonus user not found');
+    person.bonusPercent = data.bonusPercent;
+    await person.save();
+    res.json(person);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/bonus/:id', async (req: AuthRequest, res, next) => {
+  try {
+    requireAdmin(req);
+    const person = await ShareBonusUser.findByIdAndDelete(req.params.id);
+    if (!person) throw new AppError(404, 'Share bonus user not found');
+    res.json({ message: 'Share bonus user removed' });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/:id', async (req, res, next) => {
   try {
     const shareholder = await Shareholder.findById(req.params.id)
@@ -112,14 +184,53 @@ router.get('/:id/history', async (req, res, next) => {
 
 router.post('/', async (req: AuthRequest, res, next) => {
   try {
-    if (req.user!.role !== 'admin') throw new AppError(403, 'Admin only');
+    requireAdmin(req);
     const data = z.object({
       user: z.string().min(1),
-      name: z.string().min(1),
-      sharePercent: z.number().min(0).max(100),
     }).parse(req.body);
-    const shareholder = await Shareholder.create(data);
+    const user = await User.findById(data.user);
+    if (!user || !user.active) throw new AppError(400, 'Choose an active user');
+    const existing = await Shareholder.findOne({ user: user._id });
+    if (existing?.active) throw new AppError(409, 'This user is already a shareholder');
+    if (existing) {
+      if (!shareIsZero(existing.sharePercent)) {
+        existing.shareHistory.push({
+          previousPercent: existing.sharePercent,
+          newPercent: 0,
+          date: new Date(),
+          reason: 'Reactivated at 0%',
+          changedBy: req.user!._id,
+        } as any);
+      }
+      existing.active = true;
+      existing.name = user.name;
+      existing.sharePercent = 0;
+      await existing.save();
+      res.status(201).json(existing);
+      return;
+    }
+    const shareholder = await Shareholder.create({
+      user: user._id,
+      name: user.name,
+      sharePercent: 0,
+    });
     res.status(201).json(shareholder);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/:id', async (req: AuthRequest, res, next) => {
+  try {
+    requireAdmin(req);
+    const shareholder = await Shareholder.findById(req.params.id);
+    if (!shareholder) throw new AppError(404, 'Shareholder not found');
+    if (!shareIsZero(shareholder.sharePercent)) {
+      throw new AppError(400, 'Transfer this share out before removing');
+    }
+    shareholder.active = false;
+    await shareholder.save();
+    res.json({ message: 'Shareholder removed' });
   } catch (error) {
     next(error);
   }
@@ -179,7 +290,7 @@ router.post('/transfer', async (req: AuthRequest, res, next) => {
 
 router.put('/:id', async (req: AuthRequest, res, next) => {
   try {
-    if (req.user!.role !== 'admin') throw new AppError(403, 'Admin only');
+    requireAdmin(req);
     const data = z.object({
       name: z.string().min(1).optional(),
       sharePercent: z.number().min(0).max(100).optional(),
@@ -189,6 +300,13 @@ router.put('/:id', async (req: AuthRequest, res, next) => {
 
     const shareholder = await Shareholder.findById(req.params.id);
     if (!shareholder) throw new AppError(404, 'Shareholder not found');
+
+    if (data.active === false) {
+      const nextPercent = data.sharePercent ?? shareholder.sharePercent;
+      if (!shareIsZero(nextPercent)) {
+        throw new AppError(400, 'Transfer this share out before removing');
+      }
+    }
 
     if (data.sharePercent !== undefined && data.sharePercent !== shareholder.sharePercent) {
       shareholder.shareHistory.push({

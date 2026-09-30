@@ -1,13 +1,14 @@
 import axios from 'axios';
-
-const apiUrl = import.meta.env.VITE_API_URL || '';
+import { apiUrl } from './base';
+import { clearWebToken, getWebToken, shouldRedirectToLogin } from './session';
 
 const api = axios.create({
-  baseURL: `${apiUrl}/api`,
+  baseURL: apiUrl(''),
+  withCredentials: true,
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = getWebToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -17,10 +18,12 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.hash = '#/login';
+    const status = error.response?.status;
+    const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+    if (status === 401 && shouldRedirectToLogin(pathname)) {
+      clearWebToken();
+      const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.href = `${apiUrl('/auth/login')}?returnTo=${returnTo}`;
     }
     return Promise.reject(error);
   },

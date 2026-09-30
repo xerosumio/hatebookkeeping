@@ -1,0 +1,662 @@
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: 'admin' | 'user';
+  bankName?: string;
+  bankAccountNumber?: string;
+  fpsPhone?: string;
+  access?: import('./access.js').UserAccess;
+}
+
+export interface Client {
+  _id: string;
+  name: string;
+  entity?: string | Entity;
+  contactPerson: string;
+  email: string;
+  phone: string;
+  address: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LineItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  amount: number;
+  waived?: boolean;
+}
+
+export interface PaymentMilestone {
+  milestone: string;
+  percentage: number;
+  amount: number;
+  dueDescription: string;
+}
+
+export interface Entity {
+  _id: string;
+  code: string;
+  name: string;
+  address: string;
+  phone: string;
+  email: string;
+  website: string;
+  logoUrl: string;
+  bankAccounts: BankAccount[];
+  defaultBankAccountIndex: number;
+  brandColor: string;
+  companyChopUrl: string;
+  signatureUrl: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ShareAdjustmentLog {
+  previousPercent: number;
+  newPercent: number;
+  date: string;
+  reason: string;
+  changedBy: string | { _id: string; name: string };
+}
+
+export interface Shareholder {
+  _id: string;
+  user: string | { _id: string; name: string; email: string; role: string };
+  name: string;
+  sharePercent: number;
+  sharePurchaseOwed: number;
+  sharePurchasePaid: number;
+  active: boolean;
+  shareHistory?: ShareAdjustmentLog[];
+  currentEquity?: number;
+  totalInvested?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ShareBonusUser {
+  _id: string;
+  user: string | { _id: string; name: string; email: string; role: string };
+  name: string;
+  bonusPercent: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ShareLiabilityEntry {
+  _id: string;
+  shareholder: string;
+  type: 'purchase' | 'payment';
+  amount: number;
+  date: string;
+  description: string;
+  createdBy: string | { _id: string; name: string };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EquityTransaction {
+  _id: string;
+  type: 'investment' | 'distribution' | 'collection' | 'adjustment' | 'liability_offset';
+  shareholder: string | Shareholder;
+  amount: number;
+  date: string;
+  description: string;
+  monthlyClose?: string;
+  balanceAfter: number;
+  createdBy: string | { _id: string; name: string };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MonthlyCloseDistribution {
+  shareholder: string | { _id: string; name: string; sharePercent: number };
+  sharePercent: number;
+  amount: number;
+  equityTransaction?: string;
+}
+
+export interface MonthlyCloseApproval {
+  user: string | { _id: string; name: string };
+  at: string;
+}
+
+export interface MonthlyCloseActivity {
+  action: 'created' | 'submitted' | 'approved' | 'rejected' | 'finalized' | 'notified';
+  user: string | { _id: string; name: string };
+  timestamp: string;
+  note?: string;
+}
+
+export interface MonthlyClose {
+  _id?: string;
+  entity: string | Entity;
+  year: number;
+  month: number;
+  status: 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'finalized';
+  openingCash: number;
+  totalIncome: number;
+  totalExpense: number;
+  netProfit: number;
+  availableCash: number;
+  shareholderDistribution: number;
+  companyReserve: number;
+  staffReserve: number;
+  closingCash: number;
+  distributions: MonthlyCloseDistribution[];
+  isLoss: boolean;
+  approvals: MonthlyCloseApproval[];
+  approvedBy?: string | { _id: string; name: string };
+  approvedAt?: string;
+  rejectionReason?: string;
+  closedBy?: string | { _id: string; name: string };
+  closedAt?: string;
+  notifiedEmails: string[];
+  activityLog: MonthlyCloseActivity[];
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Fund {
+  _id: string;
+  name: string;
+  type: 'reserve' | 'bank' | 'petty_cash';
+  entity?: string | Entity;
+  heldIn?: string | { _id: string; name: string; type: string };
+  openingBalance: number;
+  balance: number;
+  reconstructedBalance?: number;
+  airwallexBalance?: number | null;
+  driftKind?: 'airwallex' | 'ledger';
+  drift?: number;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FundTransfer {
+  _id: string;
+  fromFund?: string | { _id: string; name: string; type: string };
+  toFund?: string | { _id: string; name: string; type: string };
+  amount: number;
+  date: string;
+  description: string;
+  reference?: string;
+  createdBy: string | { _id: string; name: string };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FundLedgerEntry {
+  _id: string;
+  date: string;
+  description: string;
+  amount: number;
+  type: 'transfer' | 'transaction';
+  direction: string;
+  reference?: string;
+  runningBalance: number;
+}
+
+export interface FundLedgerResponse {
+  openingBalance: number;
+  entries: FundLedgerEntry[];
+}
+
+export interface QuotationActivityLog {
+  action: 'created' | 'updated' | 'pending_approval' | 'approved' | 'rejected' | 'sent' | 'accepted' | 'client_rejected' | 'notified';
+  user: string | { _id: string; name: string };
+  timestamp: string;
+  note?: string;
+}
+
+export interface ApprovalEntry {
+  user: string | { _id: string; name: string };
+  at: string;
+}
+
+export interface Quotation {
+  _id: string;
+  quotationNumber: string;
+  entity: string | Entity;
+  client: string | Client;
+  status: 'draft' | 'pending_approval' | 'approved' | 'sent' | 'accepted' | 'rejected';
+  title: string;
+  lineItems: LineItem[];
+  subtotal: number;
+  discount: number;
+  discountPercent: number;
+  total: number;
+  termsAndConditions: string;
+  paymentSchedule: PaymentMilestone[];
+  companyChopUrl: string;
+  signatureUrl: string;
+  validUntil: string;
+  notes: string;
+  approvedBy?: string | User;
+  approvedAt?: string;
+  approvals?: ApprovalEntry[];
+  rejectionReason?: string;
+  notifiedEmails?: string[];
+  activityLog?: QuotationActivityLog[];
+  createdBy: string | User;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Invoice {
+  _id: string;
+  invoiceNumber: string;
+  entity: string | Entity;
+  quotation?: string | { _id: string; quotationNumber: string; title: string };
+  client: string | Client;
+  status: 'draft' | 'unpaid' | 'partial' | 'paid';
+  lineItems: LineItem[];
+  subtotal: number;
+  discount: number;
+  total: number;
+  amountPaid: number;
+  amountDue: number;
+  milestone: string;
+  invoiceDate: string;
+  paymentTerms: string;
+  dueDate: string;
+  notes: string;
+  bankAccountInfo: string;
+  companyChopUrl: string;
+  signatureUrl: string;
+  receipts?: { _id: string; receiptNumber: string; amount: number; paymentDate: string; paymentMethod: string; bankReference: string }[];
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Receipt {
+  _id: string;
+  receiptNumber: string;
+  entity?: string | Entity;
+  invoice: string | Invoice;
+  client: string | Client;
+  amount: number;
+  paymentMethod: string;
+  paymentDate: string;
+  bankReference: string;
+  bankAccount: string;
+  notes: string;
+  companyChopUrl: string;
+  signatureUrl: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Transaction {
+  _id: string;
+  date: string;
+  accountingDate?: string;
+  type: 'income' | 'expense';
+  category: string;
+  description: string;
+  amount: number;
+  entity?: string | Entity;
+  client?: string | { _id: string; name: string };
+  payee?: string | { _id: string; name: string };
+  invoice?: string | { _id: string; invoiceNumber: string; client?: string | { _id: string; name: string } };
+  receipt?: string | { _id: string; receiptNumber: string };
+  paymentRequest?: string | { _id: string; requestNumber: string; items?: Array<{ payee?: string | { _id: string; name: string }; description?: string; amount?: number; category?: string }> };
+  bankReference: string;
+  bankAccount: string;
+  reconciled: boolean;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Payee {
+  _id: string;
+  name: string;
+  entity?: string | Entity;
+  bankName: string;
+  bankAccountNumber: string;
+  bankCode: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaymentRequestItem {
+  payee: string | Payee;
+  description: string;
+  amount: number;
+  category: string;
+  recipient?: string;
+  disbursementType?: 'bank' | 'liability_offset';
+  shareholderId?: string | { _id: string; name: string };
+}
+
+export interface ActivityLogEntry {
+  action: 'created' | 'updated' | 'approved' | 'rejected' | 'executed' | 'notified';
+  user: string | { _id: string; name: string };
+  timestamp: string;
+  note?: string;
+}
+
+export interface PaymentRequest {
+  _id: string;
+  requestNumber: string;
+  entity?: string | Entity;
+  description: string;
+  items: PaymentRequestItem[];
+  totalAmount: number;
+  sourceBankAccount: string;
+  status: 'pending' | 'approved' | 'rejected' | 'executed';
+  createdBy: string | User;
+  approvedBy?: string | User;
+  approvedAt?: string;
+  approvals?: ApprovalEntry[];
+  rejectionReason?: string;
+  executedAt?: string;
+  dueDate?: string;
+  bankReference?: string;
+  sourceReimbursement?: string | { _id: string; reimbursementNumber: string; title: string; items: ReimbursementItem[]; totalAmount: number };
+  attachments: string[];
+  notifiedEmails?: string[];
+  activityLog?: ActivityLogEntry[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BankAccount {
+  name: string;
+  bankName: string;
+  accountNumber: string;
+  bankCode: string;
+  branchCode: string;
+  swiftCode: string;
+  location: string;
+}
+
+export interface ChartOfAccount {
+  code: string;
+  name: string;
+  type: 'income' | 'expense';
+  active: boolean;
+}
+
+export interface Settings {
+  _id: string;
+  defaultEntityId?: string;
+  companyName: string;
+  companyAddress: string;
+  companyPhone: string;
+  companyEmail: string;
+  companyWebsite: string;
+  logoUrl: string;
+  bankAccountInfo: string;
+  bankAccounts: BankAccount[];
+  chartOfAccounts: ChartOfAccount[];
+  companyChopUrl: string;
+  signatureUrl: string;
+  recurringAlertMethod?: 'email' | 'in_app' | 'both';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AppNotification {
+  _id: string;
+  recipient: string;
+  title: string;
+  message: string;
+  type: 'recurring_due';
+  link: string;
+  read: boolean;
+  dedupKey?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CashFlowMonth {
+  month: number;
+  income: number;
+  expense: number;
+  net: number;
+  cashIn: number;
+  cashOut: number;
+  cashNet: number;
+}
+
+export interface CashFlowReport {
+  year: number;
+  months: CashFlowMonth[];
+  totals: {
+    income: number;
+    expense: number;
+    net: number;
+    cashIn: number;
+    cashOut: number;
+    cashNet: number;
+  };
+}
+
+export interface ARInvoice {
+  _id: string;
+  invoiceNumber: string;
+  client: { _id: string; name: string } | string;
+  total: number;
+  amountPaid: number;
+  amountDue: number;
+  status: string;
+  dueDate?: string;
+  createdAt: string;
+}
+
+export interface AccountsReceivableReport {
+  invoices: ARInvoice[];
+  summary: {
+    totalDue: number;
+    count: number;
+    overdueCount: number;
+    overdueDue: number;
+  };
+}
+
+export interface IncomeStatementLine {
+  category: string;
+  total: number;
+  count: number;
+}
+
+export interface IncomeStatementReport {
+  period: { startDate: string; endDate: string };
+  income: IncomeStatementLine[];
+  expenses: IncomeStatementLine[];
+  totals: { income: number; expense: number; net: number };
+}
+
+export interface APPaymentRequest {
+  _id: string;
+  requestNumber: string;
+  description: string;
+  items: Array<{
+    payee: { _id: string; name: string } | string;
+    description: string;
+    amount: number;
+    category: string;
+  }>;
+  totalAmount: number;
+  status: 'pending' | 'approved';
+  createdBy: { _id: string; name: string } | string;
+  dueDate?: string;
+  createdAt: string;
+}
+
+export interface APCategoryBreakdown {
+  category: string;
+  total: number;
+}
+
+export interface AccountsPayableReport {
+  requests: APPaymentRequest[];
+  summary: {
+    totalAmount: number;
+    count: number;
+    pendingAmount: number;
+    pendingCount: number;
+    approvedAmount: number;
+    approvedCount: number;
+  };
+  categoryBreakdown: APCategoryBreakdown[];
+}
+
+export interface MonthPlanInvoiceLine {
+  id: string;
+  invoiceNumber: string;
+  clientName: string;
+  invoiceDate: string;
+  total: number;
+  amountPaid: number;
+  amountDue: number;
+  status: string;
+}
+
+export interface MonthPlanRequestLine {
+  id: string;
+  requestNumber: string;
+  description: string;
+  payeeNames: string[];
+  dueDate: string;
+  amount: number;
+  status: string;
+}
+
+export interface MonthPlanReport {
+  period: { from: string; to: string };
+  incoming: {
+    billed: number;
+    collected: number;
+    pending: number;
+    count: number;
+    items: MonthPlanInvoiceLine[];
+  };
+  outgoing: {
+    committed: number;
+    paid: number;
+    pending: number;
+    count: number;
+    items: MonthPlanRequestLine[];
+  };
+  carryover: {
+    receivable: { total: number; count: number; items: MonthPlanInvoiceLine[] };
+    payable: { total: number; count: number; items: MonthPlanRequestLine[] };
+  };
+  plan: { pendingIn: number; pendingOut: number; net: number };
+  pl: {
+    income: Array<{ category: string; total: number; count: number }>;
+    expenses: Array<{ category: string; total: number; count: number }>;
+    totals: { income: number; expense: number; net: number };
+  };
+}
+
+export interface RecurringHistoryEntry {
+  date: string;
+  action: 'generated_invoice' | 'generated_payment_request' | 'alert_sent';
+  referenceId?: string;
+  referenceModel?: 'Invoice' | 'PaymentRequest';
+  note?: string;
+}
+
+export interface RecurringItem {
+  _id: string;
+  name: string;
+  entity?: string | Entity;
+  type: 'income' | 'expense';
+  category: string;
+  amount: number;
+  frequency: 'monthly' | 'quarterly' | 'yearly';
+  client?: string | { _id: string; name: string };
+  payee?: string | { _id: string; name: string };
+  description: string;
+  startDate?: string;
+  endDate?: string;
+  active: boolean;
+  dueDay: number;
+  alertDaysBefore: number;
+  paymentTerms?: string;
+  bankAccountInfo?: string;
+  lastGeneratedDate?: string;
+  lastGeneratedInvoice?: string;
+  lastGeneratedPaymentRequest?: string;
+  history: RecurringHistoryEntry[];
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReimbursementItem {
+  date: string;
+  description: string;
+  amount: number;
+  category: string;
+  receiptUrl: string;
+  notes: string;
+}
+
+export interface Reimbursement {
+  _id: string;
+  reimbursementNumber: string;
+  entity?: string | Entity;
+  title: string;
+  submittedBy: string | { _id: string; name: string; email: string; bankName?: string; bankAccountNumber?: string; fpsPhone?: string };
+  items: ReimbursementItem[];
+  totalAmount: number;
+  paymentRequest?: string | PaymentRequest;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FundLine {
+  name: string;
+  type: string;
+  balance: number;
+}
+
+export interface BalanceSheetReport {
+  asOf: string;
+  assets: {
+    cash: {
+      bankPettyTotal: number;
+      earmarkedReserves: number;
+      operatingCash: number;
+      standaloneReserves: number;
+      total: number;
+      breakdown: FundLine[];
+      earmarkedBreakdown: FundLine[];
+      standaloneBreakdown: FundLine[];
+    };
+    accountsReceivable: { total: number; count: number };
+    total: number;
+  };
+  liabilities: {
+    accountsPayable: { total: number; count: number };
+    total: number;
+  };
+  netPosition: number;
+}
+
+export interface MonthlySummaryReport {
+  period: { year: number; month: number };
+  live: boolean;
+  openingCash: number;
+  operations: { income: number; expense: number; net: number };
+  cash: { cashIn: number; cashOut: number; cashFlow: number };
+  availableCash: number;
+  accountsReceivable: { total: number; count: number };
+  accountsPayable: { total: number; count: number };
+}

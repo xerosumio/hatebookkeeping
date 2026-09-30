@@ -4,83 +4,142 @@ import { Transaction } from '../models/Transaction.js';
 import { Invoice } from '../models/Invoice.js';
 import { PaymentRequest } from '../models/PaymentRequest.js';
 import { RecurringItem } from '../models/RecurringItem.js';
-import { Fund } from '../models/Fund.js';
 import { authMiddleware } from '../middleware/auth.js';
+import { requirePage } from '../access/policy.js';
+import {
+  hkAllTimeBounds,
+  hkDayBounds,
+  hkInclusiveRange,
+  hkMonthBounds,
+} from '../utils/hkDate.js';
+import {
+  MONTH_PLAN_INVOICE_STATUSES,
+  MONTH_PLAN_OPEN_INVOICE_STATUSES,
+  MONTH_PLAN_OPEN_REQUEST_STATUSES,
+  MONTH_PLAN_REQUEST_STATUSES,
+  PlanBoundsError,
+  buildMonthPlan,
+  resolvePlanBounds,
+  type MonthPlanSourceInvoice,
+  type MonthPlanSourceRequest,
+} from '../services/monthPlan.js';
+import {
+  monthlyFigures,
+  monthlyFiguresAllEntities,
+  operatingCashSnapshot,
+  queryCash,
+  queryPl,
+  queryPlByCategory,
+} from '../services/periodFigures.js';
 
 const router = Router();
 router.use(authMiddleware);
+router.use((req, res, next) => {
+  const dashboardReads = new Set(['/cash-flow', '/accounts-receivable', '/recurring-overview']);
+  if (req.method === 'GET' && dashboardReads.has(req.path)) {
+    return requirePage('reports', 'dashboard')(req, res, next);
+  }
+  return requirePage('reports')(req, res, next);
+});
 
-const NON_OPERATIONAL_CATEGORIES = ['Currency Conversion', 'Intercompany Transfer'];
-const excludeNonOperational = { category: { $nin: NON_OPERATIONAL_CATEGORIES } };
+const AR_OPEN_STATUSES = ['unpaid', 'partial'] as const;
+const AP_OPEN_STATUSES = ['pending', 'approved'] as const;
 
-// Monthly cash flow
+function entityIdFromQuery(req: { query: Record<string, unknown> }): string | undefined {
+  const entity = req.query.entity;
+  return typeof entity === 'string' && entity.length > 0 ? entity : undefined;
+}
+
+function entityObjectId(entityId?: string) {
+  return entityId ? { entity: new mongoose.Types.ObjectId(entityId) } : {};
+}
+
+function populatedName(value: unknown): string {
+  if (value && typeof value === 'object' && 'name' in value && typeof (value as { name: unknown }).name === 'string') {
+    return (value as { name: string }).name;
+  }
+  return '';
+}
+
+function periodFromQuery(req: { query: Record<string, unknown> }): { from: Date; to: Date } {
+  const start = typeof req.query.startDate === 'string' ? req.query.startDate : undefined;
+  const end = typeof req.query.endDate === 'string' ? req.query.endDate : undefined;
+  if (start && end) return hkInclusiveRange(start, end);
+  if (start) return { from: hkDayBounds(start).from, to: hkAllTimeBounds().to };
+  if (end) return { from: hkAllTimeBounds().from, to: hkDayBounds(end).to };
+  return hkAllTimeBounds();
+}
+
+async function liveArAp(entityId?: string) {
+  const entityMatch = entityObjectId(entityId);
+  const [arResult, apResult] = await Promise.all([
+    Invoice.aggregate([
+      { $match: { status: { $in: [...AR_OPEN_STATUSES] }, ...entityMatch } },
+      { $group: { _id: null, total: { $sum: '$amountDue' }, count: { $sum: 1 } } },
+    ]),
+    PaymentRequest.aggregate([
+      { $match: { status: { $in: [...AP_OPEN_STATUSES] }, ...entityMatch } },
+      { $group: { _id: null, total: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
+    ]),
+  ]);
+  return {
+    accountsReceivable: { total: arResult[0]?.total || 0, count: arResult[0]?.count || 0 },
+    accountsPayable: { total: apResult[0]?.total || 0, count: apResult[0]?.count || 0 },
+  };
+}
+
 router.get('/cash-flow', async (req, res, next) => {
   try {
     const year = parseInt(req.query.year as string) || new Date().getFullYear();
-    const month = req.query.month !== undefined ? parseInt(req.query.month as string) : undefined;
-    const entity = req.query.entity as string | undefined;
+    const entityId = entityIdFromQuery(req);
 
-    const rangeStart = new Date(year, month !== undefined ? month : 0, 1);
-    const rangeEnd = new Date(year, month !== undefined ? month + 1 : 12, 0);
-    const entityMatch = entity ? { entity: new mongoose.Types.ObjectId(entity) } : {};
+    const months = await Promise.all(
+      Array.from({ length: 12 }, async (_, i) => {
+        const month = i + 1;
+        const { from, to } = hkMonthBounds(year, month);
+        const [pl, cash] = await Promise.all([
+          queryPl({ from, to, entityId }),
+          queryCash({ from, to, entityId }),
+        ]);
+        return {
+          month,
+          income: pl.income,
+          expense: pl.expense,
+          net: pl.net,
+          cashIn: cash.cashIn,
+          cashOut: cash.cashOut,
+          cashNet: cash.cashNet,
+        };
+      }),
+    );
 
-    const result = await Transaction.aggregate([
-      { $addFields: { _effectiveDate: { $ifNull: ['$accountingDate', '$date'] } } },
-      { $match: { _effectiveDate: { $gte: rangeStart, $lte: rangeEnd }, ...excludeNonOperational, ...entityMatch } },
-      {
-        $group: {
-          _id: { type: '$type', month: { $month: '$_effectiveDate' } },
-          total: { $sum: '$amount' },
-          count: { $sum: 1 },
-        },
-      },
-    ]);
+    const totals = months.reduce(
+      (s, m) => ({
+        income: s.income + m.income,
+        expense: s.expense + m.expense,
+        net: s.net + m.net,
+        cashIn: s.cashIn + m.cashIn,
+        cashOut: s.cashOut + m.cashOut,
+        cashNet: s.cashNet + m.cashNet,
+      }),
+      { income: 0, expense: 0, net: 0, cashIn: 0, cashOut: 0, cashNet: 0 },
+    );
 
-    // Reshape into monthly data
-    const months: Record<number, { income: number; expense: number }> = {};
-    for (let m = 1; m <= 12; m++) {
-      months[m] = { income: 0, expense: 0 };
-    }
-
-    for (const r of result) {
-      const m = r._id.month;
-      if (r._id.type === 'income') months[m].income = r.total;
-      else months[m].expense = r.total;
-    }
-
-    const cashFlow = Object.entries(months).map(([m, data]) => ({
-      month: parseInt(m),
-      income: data.income,
-      expense: data.expense,
-      net: data.income - data.expense,
-    }));
-
-    // Also get totals
-    const totalIncome = cashFlow.reduce((s, m) => s + m.income, 0);
-    const totalExpense = cashFlow.reduce((s, m) => s + m.expense, 0);
-
-    res.json({
-      year,
-      months: cashFlow,
-      totals: { income: totalIncome, expense: totalExpense, net: totalIncome - totalExpense },
-    });
+    res.json({ year, months, totals });
   } catch (error) {
     next(error);
   }
 });
 
-// Accounts receivable
 router.get('/accounts-receivable', async (req, res, next) => {
   try {
-    const filter: Record<string, unknown> = { status: { $in: ['unpaid', 'partial'] } };
-
-    if (req.query.entity) filter.entity = req.query.entity;
+    const filter: Record<string, unknown> = { status: { $in: [...AR_OPEN_STATUSES] } };
+    const entityId = entityIdFromQuery(req);
+    if (entityId) filter.entity = entityId;
 
     if (req.query.startDate || req.query.endDate) {
-      const dueDateFilter: Record<string, Date> = {};
-      if (req.query.startDate) dueDateFilter.$gte = new Date(req.query.startDate as string);
-      if (req.query.endDate) dueDateFilter.$lte = new Date(req.query.endDate as string);
-      filter.dueDate = dueDateFilter;
+      const { from, to } = periodFromQuery(req);
+      filter.dueDate = { $gte: from, $lt: to };
     }
 
     const invoices = await Invoice.find(filter)
@@ -105,29 +164,23 @@ router.get('/accounts-receivable', async (req, res, next) => {
   }
 });
 
-// Recurring overview
 router.get('/recurring-overview', async (_req, res, next) => {
   try {
-    const items = await RecurringItem.find({ active: true })
-      .populate('client', 'name');
+    const items = await RecurringItem.find({ active: true }).populate('client', 'name');
+
+    const prorate = (item: { frequency: string; amount: number }) => {
+      if (item.frequency === 'monthly') return item.amount;
+      if (item.frequency === 'quarterly') return Math.round(item.amount / 3);
+      if (item.frequency === 'yearly') return Math.round(item.amount / 12);
+      return 0;
+    };
 
     const monthlyIncome = items
       .filter((i) => i.type === 'income')
-      .reduce((sum, i) => {
-        if (i.frequency === 'monthly') return sum + i.amount;
-        if (i.frequency === 'quarterly') return sum + Math.round(i.amount / 3);
-        if (i.frequency === 'yearly') return sum + Math.round(i.amount / 12);
-        return sum;
-      }, 0);
-
+      .reduce((sum, i) => sum + prorate(i), 0);
     const monthlyExpense = items
       .filter((i) => i.type === 'expense')
-      .reduce((sum, i) => {
-        if (i.frequency === 'monthly') return sum + i.amount;
-        if (i.frequency === 'quarterly') return sum + Math.round(i.amount / 3);
-        if (i.frequency === 'yearly') return sum + Math.round(i.amount / 12);
-        return sum;
-      }, 0);
+      .reduce((sum, i) => sum + prorate(i), 0);
 
     res.json({
       items,
@@ -142,54 +195,22 @@ router.get('/recurring-overview', async (_req, res, next) => {
   }
 });
 
-// Income statement
 router.get('/income-statement', async (req, res, next) => {
   try {
-    const startDate = req.query.startDate
-      ? new Date(req.query.startDate as string)
-      : new Date(new Date().getFullYear(), 0, 1);
-    const endDate = req.query.endDate
-      ? new Date(req.query.endDate as string)
-      : new Date();
-    const entity = req.query.entity as string | undefined;
-
-    const result = await Transaction.aggregate([
-      { $addFields: { _effectiveDate: { $ifNull: ['$accountingDate', '$date'] } } },
-      { $match: { _effectiveDate: { $gte: startDate, $lte: endDate }, ...excludeNonOperational, ...(entity ? { entity: new mongoose.Types.ObjectId(entity) } : {}) } },
-      {
-        $group: {
-          _id: { type: '$type', category: '$category' },
-          total: { $sum: '$amount' },
-          count: { $sum: 1 },
-        },
-      },
-      { $sort: { '_id.type': 1, total: -1 } },
-    ]);
-
-    const income: { category: string; total: number; count: number }[] = [];
-    const expenses: { category: string; total: number; count: number }[] = [];
-
-    for (const r of result) {
-      const entry = { category: r._id.category, total: r.total, count: r.count };
-      if (r._id.type === 'income') income.push(entry);
-      else expenses.push(entry);
-    }
-
-    const totalIncome = income.reduce((s, i) => s + i.total, 0);
-    const totalExpense = expenses.reduce((s, i) => s + i.total, 0);
-
+    const { from, to } = periodFromQuery(req);
+    const entityId = entityIdFromQuery(req);
+    const data = await queryPlByCategory({ from, to, entityId });
     res.json({
-      period: { startDate, endDate },
-      income,
-      expenses,
-      totals: { income: totalIncome, expense: totalExpense, net: totalIncome - totalExpense },
+      period: { startDate: from, endDate: to },
+      income: data.income,
+      expenses: data.expenses,
+      totals: data.totals,
     });
   } catch (error) {
     next(error);
   }
 });
 
-// Income statement drill-down: transactions for a specific type+category
 router.get('/income-statement/transactions', async (req, res, next) => {
   try {
     const { type, category } = req.query;
@@ -198,22 +219,19 @@ router.get('/income-statement/transactions', async (req, res, next) => {
       return;
     }
 
-    const startDate = req.query.startDate
-      ? new Date(req.query.startDate as string)
-      : new Date(new Date().getFullYear(), 0, 1);
-    const endDate = req.query.endDate
-      ? new Date(req.query.endDate as string)
-      : new Date();
-    const entity = req.query.entity as string | undefined;
+    const { from, to } = periodFromQuery(req);
+    const entityId = entityIdFromQuery(req);
 
     const transactions = await Transaction.aggregate([
       { $addFields: { _effectiveDate: { $ifNull: ['$accountingDate', '$date'] } } },
-      { $match: {
-        type: type as string,
-        category: category as string,
-        _effectiveDate: { $gte: startDate, $lte: endDate },
-        ...(entity ? { entity: new mongoose.Types.ObjectId(entity) } : {}),
-      }},
+      {
+        $match: {
+          type: type as string,
+          category: category as string,
+          _effectiveDate: { $gte: from, $lt: to },
+          ...entityObjectId(entityId),
+        },
+      },
       { $sort: { _effectiveDate: -1 } },
     ]);
     await Transaction.populate(transactions, [
@@ -227,18 +245,20 @@ router.get('/income-statement/transactions', async (req, res, next) => {
   }
 });
 
-// Accounts payable (pending + approved payment requests = committed but unpaid outflows)
 router.get('/accounts-payable', async (req, res, next) => {
   try {
-    const filter: Record<string, unknown> = { status: { $in: ['pending', 'approved'] } };
-
-    if (req.query.entity) filter.entity = req.query.entity;
+    const filter: Record<string, unknown> = { status: { $in: [...AP_OPEN_STATUSES] } };
+    const entityId = entityIdFromQuery(req);
+    if (entityId) filter.entity = entityId;
 
     if (req.query.startDate || req.query.endDate) {
-      const dateFilter: Record<string, Date> = {};
-      if (req.query.startDate) dateFilter.$gte = new Date(req.query.startDate as string);
-      if (req.query.endDate) dateFilter.$lte = new Date(req.query.endDate as string);
-      filter.createdAt = dateFilter;
+      const { from, to } = periodFromQuery(req);
+      filter.$expr = {
+        $let: {
+          vars: { due: { $ifNull: ['$dueDate', '$createdAt'] } },
+          in: { $and: [{ $gte: ['$$due', from] }, { $lt: ['$$due', to] }] },
+        },
+      };
     }
 
     const requests = await PaymentRequest.find(filter)
@@ -253,8 +273,8 @@ router.get('/accounts-payable', async (req, res, next) => {
     const approvedAmount = approvedRequests.reduce((s, r) => s + r.totalAmount, 0);
 
     const categoryMap: Record<string, number> = {};
-    for (const req of requests) {
-      for (const item of req.items) {
+    for (const row of requests) {
+      for (const item of row.items) {
         const cat = item.category || 'Uncategorized';
         categoryMap[cat] = (categoryMap[cat] || 0) + item.amount;
       }
@@ -280,197 +300,184 @@ router.get('/accounts-payable', async (req, res, next) => {
   }
 });
 
-// Balance sheet — snapshot of financial position
 router.get('/balance-sheet', async (req, res, next) => {
   try {
-    const entity = req.query.entity as string | undefined;
-
-    const fundFilter: Record<string, unknown> = { active: true };
-    if (entity) fundFilter.entity = new mongoose.Types.ObjectId(entity);
-    const funds = await Fund.find(fundFilter).populate('entity', 'code name').sort({ type: 1, name: 1 });
-
-    // Exclude reserve funds held inside a bank account — their balances are
-    // already included in the parent bank fund's total.
-    const topLevelFunds = funds.filter((f) => !f.heldIn);
-    const cashBreakdown = topLevelFunds.map((f) => ({ name: f.name, type: f.type, balance: f.balance }));
-    const totalCash = topLevelFunds.reduce((s, f) => s + f.balance, 0);
-
-    const arFilter: Record<string, unknown> = { status: { $in: ['unpaid', 'partial', 'sent'] } };
-    if (entity) arFilter.entity = new mongoose.Types.ObjectId(entity);
-    const arResult = await Invoice.aggregate([
-      { $match: arFilter },
-      { $group: { _id: null, total: { $sum: '$amountDue' }, count: { $sum: 1 } } },
+    const entityId = entityIdFromQuery(req);
+    const [cash, arAp] = await Promise.all([
+      operatingCashSnapshot(entityId),
+      liveArAp(entityId),
     ]);
-    const accountsReceivable = arResult[0]?.total || 0;
-    const arCount = arResult[0]?.count || 0;
 
-    const apFilter: Record<string, unknown> = { status: { $in: ['pending', 'approved'] } };
-    if (entity) apFilter.entity = new mongoose.Types.ObjectId(entity);
-    const apResult = await PaymentRequest.aggregate([
-      { $match: apFilter },
-      { $group: { _id: null, total: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
-    ]);
-    const accountsPayable = apResult[0]?.total || 0;
-    const apCount = apResult[0]?.count || 0;
-
-    const totalAssets = totalCash + accountsReceivable;
-    const totalLiabilities = accountsPayable;
-    const netPosition = totalAssets - totalLiabilities;
+    const cashAssets = cash.operatingCash + cash.standaloneReserves;
+    const totalAssets = cashAssets + arAp.accountsReceivable.total;
+    const totalLiabilities = arAp.accountsPayable.total;
 
     res.json({
+      asOf: new Date().toISOString(),
       assets: {
-        cash: { total: totalCash, breakdown: cashBreakdown },
-        accountsReceivable: { total: accountsReceivable, count: arCount },
+        cash: {
+          bankPettyTotal: cash.bankPettyTotal,
+          earmarkedReserves: cash.earmarkedReserves,
+          operatingCash: cash.operatingCash,
+          standaloneReserves: cash.standaloneReserves,
+          total: cashAssets,
+          breakdown: cash.cashBreakdown,
+          earmarkedBreakdown: cash.earmarkedBreakdown,
+          standaloneBreakdown: cash.standaloneBreakdown,
+        },
+        accountsReceivable: arAp.accountsReceivable,
         total: totalAssets,
       },
       liabilities: {
-        accountsPayable: { total: accountsPayable, count: apCount },
+        accountsPayable: arAp.accountsPayable,
         total: totalLiabilities,
       },
-      netPosition,
+      netPosition: totalAssets - totalLiabilities,
     });
   } catch (error) {
     next(error);
   }
 });
 
-// Monthly summary — opening/closing positions and operations
 router.get('/monthly-summary', async (req, res, next) => {
   try {
-    const year = parseInt(req.query.year as string) || new Date().getFullYear();
-    const month = parseInt(req.query.month as string) || (new Date().getMonth() + 1);
-    const entity = req.query.entity as string | undefined;
+    const now = new Date();
+    const year = parseInt(req.query.year as string) || now.getFullYear();
+    const month = parseInt(req.query.month as string) || (now.getMonth() + 1);
+    const entityId = entityIdFromQuery(req);
 
-    const monthStart = new Date(year, month - 1, 1);
-    const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
-
-    const entityMatch = entity ? { entity: new mongoose.Types.ObjectId(entity) } : {};
-
-    const fundFilter: Record<string, unknown> = { active: true };
-    if (entity) fundFilter.entity = new mongoose.Types.ObjectId(entity);
-    const funds = await Fund.find(fundFilter);
-    const totalOpeningBalance = funds.reduce((s, f) => s + f.openingBalance, 0);
-
-    const preMonthTxns = await Transaction.aggregate([
-      { $addFields: { _effectiveDate: { $ifNull: ['$accountingDate', '$date'] } } },
-      { $match: { _effectiveDate: { $lt: monthStart }, ...excludeNonOperational, ...entityMatch } },
-      { $group: { _id: '$type', total: { $sum: '$amount' } } },
+    const [figures, arAp] = await Promise.all([
+      entityId ? monthlyFigures(year, month, entityId) : monthlyFiguresAllEntities(year, month),
+      liveArAp(entityId),
     ]);
-    let preIncome = 0, preExpense = 0;
-    for (const r of preMonthTxns) {
-      if (r._id === 'income') preIncome = r.total;
-      else preExpense = r.total;
-    }
-    const openingCash = totalOpeningBalance + preIncome - preExpense;
-
-    const monthTxns = await Transaction.aggregate([
-      { $addFields: { _effectiveDate: { $ifNull: ['$accountingDate', '$date'] } } },
-      { $match: { _effectiveDate: { $gte: monthStart, $lte: monthEnd }, ...excludeNonOperational, ...entityMatch } },
-      { $group: { _id: '$type', total: { $sum: '$amount' }, count: { $sum: 1 } } },
-    ]);
-    let monthIncome = 0, monthExpense = 0;
-    for (const r of monthTxns) {
-      if (r._id === 'income') monthIncome = r.total;
-      else monthExpense = r.total;
-    }
-    const closingCash = openingCash + monthIncome - monthExpense;
-
-    const arFilter: Record<string, unknown> = { status: { $in: ['unpaid', 'partial', 'sent'] } };
-    if (entity) arFilter.entity = new mongoose.Types.ObjectId(entity);
-
-    const openingArResult = await Invoice.aggregate([
-      { $match: { ...arFilter, createdAt: { $lt: monthStart } } },
-      { $group: { _id: null, total: { $sum: '$amountDue' } } },
-    ]);
-    const openingAR = openingArResult[0]?.total || 0;
-
-    const closingArResult = await Invoice.aggregate([
-      { $match: { ...arFilter, createdAt: { $lte: monthEnd } } },
-      { $group: { _id: null, total: { $sum: '$amountDue' } } },
-    ]);
-    const closingAR = closingArResult[0]?.total || 0;
-
-    const apFilter: Record<string, unknown> = { status: { $in: ['pending', 'approved'] } };
-    if (entity) apFilter.entity = new mongoose.Types.ObjectId(entity);
-
-    const openingApResult = await PaymentRequest.aggregate([
-      { $match: { ...apFilter, createdAt: { $lt: monthStart } } },
-      { $group: { _id: null, total: { $sum: '$totalAmount' } } },
-    ]);
-    const openingAP = openingApResult[0]?.total || 0;
-
-    const closingApResult = await PaymentRequest.aggregate([
-      { $match: { ...apFilter, createdAt: { $lte: monthEnd } } },
-      { $group: { _id: null, total: { $sum: '$totalAmount' } } },
-    ]);
-    const closingAP = closingApResult[0]?.total || 0;
-
-    const openingAssets = openingCash + openingAR;
-    const closingAssets = closingCash + closingAR;
-    const openingNet = openingAssets - openingAP;
-    const closingNet = closingAssets - closingAP;
 
     res.json({
       period: { year, month },
-      opening: {
-        cash: openingCash,
-        accountsReceivable: openingAR,
-        totalAssets: openingAssets,
-        accountsPayable: openingAP,
-        netPosition: openingNet,
-      },
+      live: true,
+      openingCash: figures.openingCash,
       operations: {
-        income: monthIncome,
-        expense: monthExpense,
-        net: monthIncome - monthExpense,
+        income: figures.totalIncome,
+        expense: figures.totalExpense,
+        net: figures.netProfit,
       },
-      closing: {
-        cash: closingCash,
-        accountsReceivable: closingAR,
-        totalAssets: closingAssets,
-        accountsPayable: closingAP,
-        netPosition: closingNet,
+      cash: {
+        cashIn: figures.cashIn,
+        cashOut: figures.cashOut,
+        cashFlow: figures.cashFlow,
       },
-      change: {
-        cash: closingCash - openingCash,
-        accountsReceivable: closingAR - openingAR,
-        totalAssets: closingAssets - openingAssets,
-        accountsPayable: closingAP - openingAP,
-        netPosition: closingNet - openingNet,
-      },
+      availableCash: figures.availableCash,
+      accountsReceivable: arAp.accountsReceivable,
+      accountsPayable: arAp.accountsPayable,
     });
   } catch (error) {
     next(error);
   }
 });
 
-// Breakeven analysis — combines recurring obligations, actuals, AR and AP into a single gap figure
+router.get('/month-plan', async (req, res, next) => {
+  try {
+    const yearRaw = parseInt(req.query.year as string, 10);
+    const monthRaw = parseInt(req.query.month as string, 10);
+    const startDate = typeof req.query.startDate === 'string' ? req.query.startDate : undefined;
+    const endDate = typeof req.query.endDate === 'string' ? req.query.endDate : undefined;
+    let from: Date;
+    let to: Date;
+    try {
+      ({ from, to } = resolvePlanBounds({
+        year: Number.isFinite(yearRaw) ? yearRaw : undefined,
+        month: Number.isFinite(monthRaw) ? monthRaw : undefined,
+        startDate,
+        endDate,
+      }));
+    } catch (error) {
+      if (error instanceof PlanBoundsError) {
+        res.status(400).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
+
+    const entityId = entityIdFromQuery(req);
+    const entityMatch = entityObjectId(entityId);
+
+    const [invoices, requests] = await Promise.all([
+      Invoice.find({
+        ...entityMatch,
+        $or: [
+          {
+            status: { $in: [...MONTH_PLAN_INVOICE_STATUSES] },
+            invoiceDate: { $gte: from, $lt: to },
+          },
+          {
+            status: { $in: [...MONTH_PLAN_OPEN_INVOICE_STATUSES] },
+            invoiceDate: { $lt: from },
+          },
+        ],
+      }).populate('client', 'name'),
+      PaymentRequest.find({
+        ...entityMatch,
+        $or: [
+          {
+            status: { $in: [...MONTH_PLAN_REQUEST_STATUSES] },
+            $expr: {
+              $let: {
+                vars: { due: { $ifNull: ['$dueDate', '$createdAt'] } },
+                in: { $and: [{ $gte: ['$$due', from] }, { $lt: ['$$due', to] }] },
+              },
+            },
+          },
+          {
+            status: { $in: [...MONTH_PLAN_OPEN_REQUEST_STATUSES] },
+            $expr: { $lt: [{ $ifNull: ['$dueDate', '$createdAt'] }, from] },
+          },
+        ],
+      }).populate('items.payee', 'name'),
+    ]);
+
+    const sourceInvoices: MonthPlanSourceInvoice[] = invoices.map((inv) => ({
+      id: inv._id.toString(),
+      invoiceNumber: inv.invoiceNumber,
+      clientName: populatedName(inv.client),
+      invoiceDate: inv.invoiceDate,
+      total: inv.total,
+      amountPaid: inv.amountPaid,
+      amountDue: inv.amountDue,
+      status: inv.status,
+    }));
+
+    const sourceRequests: MonthPlanSourceRequest[] = requests.map((row) => ({
+      id: row._id.toString(),
+      requestNumber: row.requestNumber,
+      description: row.description || row.items[0]?.description || '',
+      payeeNames: [...new Set(row.items.map((item) => populatedName(item.payee)).filter(Boolean))],
+      createdAt: row.createdAt,
+      dueDate: row.dueDate,
+      totalAmount: row.totalAmount,
+      status: row.status,
+      items: row.items.map((item) => ({ category: item.category, amount: item.amount })),
+    }));
+
+    res.json({
+      period: { from, to },
+      ...buildMonthPlan(sourceInvoices, sourceRequests, { from, to }),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/breakeven-analysis', async (req, res, next) => {
   try {
     const now = new Date();
     const year = parseInt(req.query.year as string) || now.getFullYear();
     const month = parseInt(req.query.month as string) || (now.getMonth() + 1);
-    const entity = req.query.entity as string | undefined;
+    const entityId = entityIdFromQuery(req);
+    const { from, to } = hkMonthBounds(year, month);
 
-    const monthStart = new Date(year, month - 1, 1);
-    const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
-    const entityMatch = entity ? { entity: new mongoose.Types.ObjectId(entity) } : {};
-
-    const [recurringItems, monthTxns, arResult, apResult] = await Promise.all([
-      RecurringItem.find({ active: true, ...(entity ? { entity } : {}) }),
-      Transaction.aggregate([
-        { $addFields: { _effectiveDate: { $ifNull: ['$accountingDate', '$date'] } } },
-        { $match: { _effectiveDate: { $gte: monthStart, $lte: monthEnd }, ...excludeNonOperational, ...entityMatch } },
-        { $group: { _id: '$type', total: { $sum: '$amount' }, count: { $sum: 1 } } },
-      ]),
-      Invoice.aggregate([
-        { $match: { status: { $in: ['unpaid', 'partial'] }, ...(entity ? { entity: new mongoose.Types.ObjectId(entity) } : {}) } },
-        { $group: { _id: null, total: { $sum: '$amountDue' }, count: { $sum: 1 } } },
-      ]),
-      PaymentRequest.aggregate([
-        { $match: { status: { $in: ['pending', 'approved'] }, ...(entity ? { entity: new mongoose.Types.ObjectId(entity) } : {}) } },
-        { $group: { _id: null, total: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
-      ]),
+    const [recurringItems, pl, arAp] = await Promise.all([
+      RecurringItem.find({ active: true, ...(entityId ? { entity: entityId } : {}) }),
+      queryPl({ from, to, entityId }),
+      liveArAp(entityId),
     ]);
 
     const prorate = (item: { frequency: string; amount: number }) => {
@@ -487,19 +494,10 @@ router.get('/breakeven-analysis', async (req, res, next) => {
       .filter((i) => i.type === 'expense')
       .reduce((sum, i) => sum + prorate(i), 0);
 
-    let actualIncome = 0, actualExpense = 0;
-    for (const r of monthTxns) {
-      if (r._id === 'income') actualIncome = r.total;
-      else actualExpense = r.total;
-    }
-
-    const arCollectible = arResult[0]?.total || 0;
-    const arCount = arResult[0]?.count || 0;
-    const apDue = apResult[0]?.total || 0;
-    const apCount = apResult[0]?.count || 0;
-
+    const arCollectible = arAp.accountsReceivable.total;
+    const apDue = arAp.accountsPayable.total;
     const gapToBreakeven = Math.max(0, monthlyRecurringExpense + apDue - monthlyRecurringIncome - arCollectible);
-    const remainingToBreakeven = Math.max(0, gapToBreakeven - (actualIncome - actualExpense));
+    const remainingToBreakeven = Math.max(0, gapToBreakeven - pl.net);
 
     res.json({
       period: { year, month },
@@ -509,15 +507,15 @@ router.get('/breakeven-analysis', async (req, res, next) => {
         monthlyRecurringNet: monthlyRecurringIncome - monthlyRecurringExpense,
       },
       currentMonthActuals: {
-        income: actualIncome,
-        expense: actualExpense,
-        net: actualIncome - actualExpense,
+        income: pl.income,
+        expense: pl.expense,
+        net: pl.net,
       },
       obligations: {
         arCollectible,
-        arCount,
+        arCount: arAp.accountsReceivable.count,
         apDue,
-        apCount,
+        apCount: arAp.accountsPayable.count,
       },
       breakeven: {
         gapToBreakeven,
@@ -529,14 +527,12 @@ router.get('/breakeven-analysis', async (req, res, next) => {
   }
 });
 
-// Client health — AR aging per client with recurring income flags
 router.get('/client-health', async (req, res, next) => {
   try {
-    const entity = req.query.entity as string | undefined;
+    const entityId = entityIdFromQuery(req);
     const now = new Date();
-
-    const invoiceFilter: Record<string, unknown> = { status: { $in: ['unpaid', 'partial'] } };
-    if (entity) invoiceFilter.entity = new mongoose.Types.ObjectId(entity);
+    const invoiceFilter: Record<string, unknown> = { status: { $in: [...AR_OPEN_STATUSES] } };
+    if (entityId) invoiceFilter.entity = new mongoose.Types.ObjectId(entityId);
 
     const [arByClient, recurringByClient] = await Promise.all([
       Invoice.aggregate([
@@ -561,7 +557,7 @@ router.get('/client-health', async (req, res, next) => {
         { $unwind: { path: '$client', preserveNullAndEmptyArrays: true } },
         { $sort: { totalOwed: -1 } },
       ]),
-      RecurringItem.find({ active: true, type: 'income', ...(entity ? { entity } : {}) })
+      RecurringItem.find({ active: true, type: 'income', ...(entityId ? { entity: entityId } : {}) })
         .select('client amount frequency')
         .lean(),
     ]);
@@ -580,7 +576,9 @@ router.get('/client-health', async (req, res, next) => {
     const clients = arByClient.map((row) => {
       const clientId = row._id ? String(row._id) : null;
       const referenceDate = row.oldestDueDate || row.oldestCreatedAt;
-      const oldestOverdueDays = referenceDate ? Math.max(0, Math.floor((now.getTime() - new Date(referenceDate).getTime()) / 86400000)) : 0;
+      const oldestOverdueDays = referenceDate
+        ? Math.max(0, Math.floor((now.getTime() - new Date(referenceDate).getTime()) / 86400000))
+        : 0;
       const recurringMonthlyValue = clientId ? (recurringMap.get(clientId) || 0) : 0;
 
       return {

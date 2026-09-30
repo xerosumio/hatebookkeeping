@@ -1,7 +1,7 @@
 import express from 'express';
-import cors from 'cors';
 import path from 'path';
-import { env } from './config/env.js';
+import { env, getConfig } from './config/env.js';
+import { corsForWebOrigin } from './api/origin.js';
 import { connectDB } from './config/db.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import authRoutes from './routes/auth.js';
@@ -20,21 +20,18 @@ import settingsRoutes from './routes/settings.js';
 import uploadRoutes from './routes/uploads.js';
 import entityRoutes from './routes/entities.js';
 import shareholderRoutes from './routes/shareholders.js';
-import monthlyCloseRoutes from './routes/monthlyClose.js';
 import fundsRouter from './routes/funds.js';
 import airwallexRoutes from './routes/airwallex.js';
 import notificationRoutes from './routes/notifications.js';
 import intercompanyTransferRoutes from './routes/intercompanyTransfers.js';
-import mcpRoutes, { buildOAuthMetadata } from './routes/mcp.js';
+import mcpRoutes from './routes/mcp.js';
 import { startScheduler } from './scheduler.js';
 
+const cfg = getConfig();
 const app = express();
 
-const allowedOrigins = env.corsOrigin.split(',').map(o => o.trim()).filter(Boolean);
-app.use(cors({
-  origin: allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins,
-  credentials: true,
-}));
+app.set('trust proxy', 1);
+app.use(corsForWebOrigin(cfg));
 app.use('/api/uploads', express.json({ limit: '10mb' }), uploadRoutes);
 app.use(express.json());
 app.use('/api/uploads', express.static(path.resolve(env.uploadDir)));
@@ -54,7 +51,6 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/entities', entityRoutes);
 app.use('/api/shareholders', shareholderRoutes);
-app.use('/api/monthly-close', monthlyCloseRoutes);
 app.use('/api/funds', fundsRouter);
 app.use('/api/airwallex', airwallexRoutes);
 app.use('/api/notifications', notificationRoutes);
@@ -63,11 +59,6 @@ app.use('/api/mcp', mcpRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
-});
-
-app.get('/.well-known/oauth-authorization-server', (req, res) => {
-  const base = `${req.protocol}://${req.get('host')}`;
-  res.json(buildOAuthMetadata(base));
 });
 
 app.use(errorHandler);

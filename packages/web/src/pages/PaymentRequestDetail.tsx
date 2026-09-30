@@ -55,9 +55,9 @@ export default function PaymentRequestDetail() {
 
   const creator = typeof pr.createdBy === 'object' ? (pr.createdBy as User) : null;
   const isOwnRequest = creator && user && (creator as any)._id === user.id;
-  const canApprove = user?.role === 'admin';
+  const canApprove = !!user?.access?.approve;
   const canExecute = user?.role === 'admin' || user?.role === 'user';
-  const canEdit = pr.status !== 'executed' && (user?.role === 'admin' || user?.role === 'user');
+  const canEdit = user?.role === 'admin' || user?.role === 'user';
   const canDelete = pr.status === 'pending' && (user?.role === 'admin' || isOwnRequest);
   const canNotify = pr.status === 'pending';
 
@@ -154,6 +154,14 @@ export default function PaymentRequestDetail() {
                 <p className="font-medium">{(pr.entity as Entity).code} — {(pr.entity as Entity).name}</p>
               </div>
             )}
+            <div>
+              <p className="text-xs text-gray-500">Due date</p>
+              <p className="font-medium">
+                {pr.dueDate
+                  ? new Date(pr.dueDate).toLocaleDateString('en-HK', { timeZone: 'Asia/Hong_Kong' })
+                  : 'Not set'}
+              </p>
+            </div>
             <div>
               <p className="text-xs text-gray-500">Created By</p>
               <p className="font-medium">{creator?.name || '—'}</p>
@@ -307,7 +315,7 @@ export default function PaymentRequestDetail() {
         {pr.status === 'pending' && (pr.approvals?.length ?? 0) > 0 && (
           <div className="bg-white rounded-lg border border-gray-200 p-5">
             <h3 className="text-sm font-medium text-gray-700 mb-2">Approval Progress</h3>
-            <p className="text-sm text-gray-500 mb-2">Requires approval from both William and Andy.</p>
+            <p className="text-sm text-gray-500 mb-2">This stays pending until every required approver has approved. If none are set, one approval is enough.</p>
             <div className="flex flex-wrap gap-2">
               {(pr.approvals || []).map((a: ApprovalEntry, i: number) => {
                 const name = typeof a.user === 'object' ? a.user.name : 'Unknown';
@@ -325,7 +333,7 @@ export default function PaymentRequestDetail() {
         {pr.status === 'pending' && canApprove && (
           <div className="bg-white rounded-lg border border-gray-200 p-5 space-y-3">
             <h3 className="text-sm font-medium text-gray-700">Review</h3>
-            <p className="text-xs text-gray-500">Dual approval required -- both William and Andy must approve.</p>
+            <p className="text-xs text-gray-500">This stays pending until every required approver has approved. If none are set, one approval is enough.</p>
             {(() => {
               const currentUserApproved = (pr.approvals || []).some(
                 (a: ApprovalEntry) => {

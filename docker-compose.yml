@@ -1,0 +1,42 @@
+# Only the application runs here. MongoDB and Authentik are external services
+# referenced through .env.
+#
+# For this compose file to serve the SPA, set WEB_ORIGIN to the same value as
+# PUBLIC_URL. A GitHub Pages + Coolify split is documented in docs/DEPLOY.md.
+#
+#   cp .env.example .env      # then fill it in — see docs/SETUP.md
+#   docker compose up --build
+
+services:
+  hbk:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: hatebookkeeping:latest
+    restart: unless-stopped
+    ports:
+      - '${PORT:-3000}:3000'
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    volumes:
+      - uploads:/app/uploads
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+volumes:
+  uploads:

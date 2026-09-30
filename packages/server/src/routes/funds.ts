@@ -4,7 +4,45 @@ import { Fund } from '../models/Fund.js';
 import { FundTransfer } from '../models/FundTransfer.js';
 import { Transaction } from '../models/Transaction.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { assertAdjustFund, requirePage } from '../access/policy.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { reconstructFundBalances } from '../utils/fundBalance.js';
+import { FUND_NAME, type EntityKey } from '../config/bankAccounts.js';
+import { getBalances } from '../services/airwallex.js';
+import { hkInstant, parseYmd } from '../utils/hkDate.js';
+
+const AIRWALLEX_FUND: Record<string, EntityKey> = {
+  [FUND_NAME.ax]: 'ax',
+  [FUND_NAME.nt]: 'nt',
+};
+
+/** Live HKD total from Airwallex, in cents. Null when that account cannot be read. */
+async function liveAirwallexBalances(): Promise<Map<string, number | null>> {
+  const entries = await Promise.all(
+    Object.entries(AIRWALLEX_FUND).map(async ([name, entity]) => {
+      try {
+        const balances = await getBalances(entity);
+        const hkd = balances.find((row) => row.currency === 'HKD');
+        return [name, hkd ? Math.round(hkd.total_amount * 100) : null] as const;
+      } catch {
+        return [name, null] as const;
+      }
+    }),
+  );
+  return new Map(entries);
+}
+
+async function liveAirwallexBalance(fundName: string): Promise<number | null> {
+  const entity = AIRWALLEX_FUND[fundName];
+  if (!entity) return null;
+  try {
+    const balances = await getBalances(entity);
+    const hkd = balances.find((row) => row.currency === 'HKD');
+    return hkd ? Math.round(hkd.total_amount * 100) : null;
+  } catch {
+    return null;
+  }
+}
 
 async function computeNetTransactions(fundName: string): Promise<number> {
   const results = await Transaction.aggregate([
@@ -22,11 +60,35 @@ async function computeNetTransactions(fundName: string): Promise<number> {
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requirePage('funds'));
 
 router.get('/', async (_req, res, next) => {
   try {
     const funds = await Fund.find().populate('entity', 'code name').populate('heldIn', 'name type').sort({ type: 1, name: 1 });
-    res.json(funds);
+    const [reconstructed, airwallex] = await Promise.all([
+      reconstructFundBalances(funds),
+      liveAirwallexBalances(),
+    ]);
+    res.json(funds.map((fund) => {
+      const obj = fund.toObject();
+      const reconstructedBalance = reconstructed.get(String(fund._id)) ?? fund.openingBalance;
+      if (fund.name in AIRWALLEX_FUND) {
+        const live = airwallex.get(fund.name) ?? null;
+        return {
+          ...obj,
+          reconstructedBalance,
+          airwallexBalance: live,
+          driftKind: 'airwallex' as const,
+          ...(live == null ? {} : { drift: (fund.balance || 0) - live }),
+        };
+      }
+      return {
+        ...obj,
+        reconstructedBalance,
+        driftKind: 'ledger' as const,
+        drift: (fund.balance || 0) - reconstructedBalance,
+      };
+    }));
   } catch (error) {
     next(error);
   }
@@ -151,6 +213,61 @@ router.post('/transfer', async (req: AuthRequest, res, next) => {
     ]);
 
     res.status(201).json(populated);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/:id/adjust', async (req: AuthRequest, res, next) => {
+  try {
+    await assertAdjustFund(req);
+    const data = z.object({
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      note: z.string().optional(),
+    }).parse(req.body);
+
+    const fund = await Fund.findById(req.params.id);
+    if (!fund) throw new AppError(404, 'Fund not found');
+    if (!(fund.name in AIRWALLEX_FUND)) {
+      throw new AppError(400, 'Only an Airwallex bank fund can be adjusted to the live balance');
+    }
+
+    const live = await liveAirwallexBalance(fund.name);
+    if (live == null) throw new AppError(502, 'Airwallex balance is unavailable');
+
+    const reconstructed = await reconstructFundBalances([fund]);
+    const historyEnd = reconstructed.get(String(fund._id)) ?? fund.openingBalance;
+    const delta = live - historyEnd;
+
+    let date: Date;
+    try {
+      const parts = parseYmd(data.date);
+      date = hkInstant(parts.year, parts.month, parts.day);
+    } catch {
+      throw new AppError(400, 'date must be YYYY-MM-DD');
+    }
+
+    if (delta !== 0) {
+      await FundTransfer.create({
+        fromFund: delta < 0 ? fund._id : undefined,
+        toFund: delta > 0 ? fund._id : undefined,
+        amount: Math.abs(delta),
+        date,
+        description: data.note?.trim() || 'Balance adjustment to match Airwallex',
+        reference: 'airwallex-adjustment',
+        createdBy: req.user!._id,
+      });
+    }
+
+    fund.balance = live;
+    await fund.save();
+
+    res.json({
+      balance: fund.balance,
+      historyEnd,
+      airwallexBalance: live,
+      transferAmount: delta,
+    });
   } catch (error) {
     next(error);
   }

@@ -1,22 +1,15 @@
 import { User } from '../models/User.js';
+import { resolvePolicy } from '../access/policy.js';
 
-// Names of the two required approvers — both must approve for full approval.
-const REQUIRED_APPROVER_NAMES = ['William', 'Andy'];
-
-/**
- * Returns the User IDs of the two required approvers.
- * Matches by first-name prefix (case-insensitive) so "William Pang" still matches "William".
- */
+/** Active users who must all approve. Empty means one allowed approval is enough. */
 export async function getRequiredApproverIds(): Promise<string[]> {
-  const regexes = REQUIRED_APPROVER_NAMES.map(
-    (n) => new RegExp(`^${n}`, 'i'),
-  );
+  const policy = await resolvePolicy();
+  if (policy.approverIds.length === 0) return [];
   const users = await User.find({
-    role: 'admin',
+    _id: { $in: policy.approverIds },
     active: true,
-    $or: regexes.map((r) => ({ name: r })),
   }).select('_id');
-  return users.map((u) => u._id.toString());
+  return users.map((user) => user._id.toString());
 }
 
 /**

@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useFunds, useUpdateFund, useFundTransfer, useEntities } from '../api/hooks';
+import { Stat, Chip } from '@naton/ui';
+import { useFunds, useUpdateFund, useFundTransfer, useAdjustFund, useEntities } from '../api/hooks';
+import { useAuth } from '../contexts/AuthContext';
 import { formatMoney } from '../utils/money';
 import { Pencil } from 'lucide-react';
+import { Button } from '../components/ui/Button';
 import type { Fund, Entity } from '../types';
 
 const typeLabels: Record<string, string> = {
@@ -11,11 +14,20 @@ const typeLabels: Record<string, string> = {
   petty_cash: 'Petty Cash',
 };
 
-const typeColors: Record<string, string> = {
-  reserve: 'bg-purple-50 text-purple-700',
-  bank: 'bg-blue-50 text-blue-700',
-  petty_cash: 'bg-amber-50 text-amber-700',
+const typeTones: Record<string, 'human' | 'signal' | 'authored'> = {
+  reserve: 'authored',
+  bank: 'human',
+  petty_cash: 'signal',
 };
+
+function hkToday() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Hong_Kong',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
 
 function getHeldInId(fund: Fund): string | undefined {
   if (!fund.heldIn) return undefined;
@@ -23,15 +35,22 @@ function getHeldInId(fund: Fund): string | undefined {
 }
 
 export default function FundList() {
+  const { user } = useAuth();
   const { data: funds, isLoading } = useFunds();
   const { data: entities } = useEntities();
   const updateMutation = useUpdateFund();
   const transferMutation = useFundTransfer();
+  const adjustMutation = useAdjustFund();
+  const canAdjustToBank = user?.role === 'admin' || !!user?.access?.adjustFund;
 
   const [showTransfer, setShowTransfer] = useState(false);
   const [transferForm, setTransferForm] = useState({ fromFund: '', toFund: '', amount: '', description: '', date: new Date().toISOString().split('T')[0] });
   const [editingFund, setEditingFund] = useState<Fund | null>(null);
   const [editForm, setEditForm] = useState({ name: '', type: 'reserve' as string, entity: '', heldIn: '', balance: '' });
+  const [adjustingFund, setAdjustingFund] = useState<Fund | null>(null);
+  const [adjustDate, setAdjustDate] = useState(hkToday());
+  const [adjustNote, setAdjustNote] = useState('Balance adjustment to match Airwallex');
+  const [adjustError, setAdjustError] = useState('');
 
   async function handleTransfer() {
     if (!transferForm.amount || !transferForm.description || (!transferForm.fromFund && !transferForm.toFund)) return;
@@ -75,48 +94,88 @@ export default function FundList() {
   const totalBalance = activeFunds.filter((f) => f.type === 'bank' || f.type === 'petty_cash').reduce((s, f) => s + f.balance, 0);
   const bankFunds = activeFunds.filter((f) => f.type === 'bank');
   const standaloneFunds = activeFunds.filter((f) => f.type !== 'bank' && !getHeldInId(f));
+  const earmarkedTotal = activeFunds
+    .filter((f) => f.type === 'reserve' && getHeldInId(f))
+    .reduce((s, f) => s + f.balance, 0);
+  const operatingCash = totalBalance - earmarkedTotal;
+  const airwallexDrifted = activeFunds.filter((f) => f.driftKind === 'airwallex' && (f.drift || 0) !== 0);
+  const ledgerDrifted = activeFunds.filter((f) => f.driftKind !== 'airwallex' && (f.drift || 0) !== 0);
+
+  function openAdjust(fund: Fund) {
+    setAdjustingFund(fund);
+    setAdjustDate(hkToday());
+    setAdjustNote('Balance adjustment to match Airwallex');
+    setAdjustError('');
+  }
+
+  async function handleAdjust() {
+    if (!adjustingFund) return;
+    setAdjustError('');
+    try {
+      await adjustMutation.mutateAsync({
+        id: adjustingFund._id,
+        date: adjustDate,
+        note: adjustNote,
+      });
+      setAdjustingFund(null);
+    } catch (err: unknown) {
+      const body = (err as { response?: { data?: { message?: string; error?: string } } })?.response?.data;
+      setAdjustError(body?.message || body?.error || 'Adjustment failed');
+    }
+  }
+
+  function canAdjust(fund: Fund) {
+    if (fund.driftKind !== 'airwallex' || typeof fund.airwallexBalance !== 'number') return false;
+    const historyEnd = fund.reconstructedBalance ?? fund.balance;
+    return fund.balance !== fund.airwallexBalance || historyEnd !== fund.airwallexBalance;
+  }
 
   function childrenOf(bankId: string) {
     return activeFunds.filter((f) => getHeldInId(f) === bankId);
   }
 
-  if (isLoading) return <p className="text-gray-500">Loading...</p>;
+  if (isLoading) return <p className="font-mono text-[10px] text-ink-ghost">Loading…</p>;
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Funds</h1>
-        <button onClick={() => setShowTransfer(true)} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700">
-          Transfer
-        </button>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="font-serif text-2xl font-normal text-ink">Funds</h1>
+        <Button onClick={() => setShowTransfer(true)}>Transfer</Button>
       </div>
 
-      <div className="grid grid-cols-5 gap-4 mb-6">
-        <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <div className="text-sm text-gray-500">Total Balance</div>
-          <div className={`text-xl font-bold font-mono ${totalBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {formatMoney(totalBalance)}
-          </div>
+      {airwallexDrifted.length > 0 && (
+        <div className="mb-4 rounded-sm border border-signal-dim/60 bg-signal-wash px-4 py-3 font-mono text-[10px] text-signal">
+          {airwallexDrifted.map((f) => f.name).join(', ')} {airwallexDrifted.length === 1 ? 'does' : 'do'} not match the live Airwallex bank balance.
         </div>
-        <div className="bg-white border-2 border-emerald-300 rounded-lg p-4">
-          <div className="text-sm text-emerald-600 font-medium">Operating Cash</div>
-          <div className="text-xl font-bold font-mono text-emerald-700">
-            {formatMoney(bankFunds.reduce((total, bank) => {
-              const reserveSum = childrenOf(bank._id).reduce((s, c) => s + c.balance, 0);
-              return total + (bank.balance - reserveSum);
-            }, 0))}
-          </div>
-          <div className="text-xs text-emerald-500">Bank balances minus reserves</div>
+      )}
+      {ledgerDrifted.length > 0 && (
+        <div className="mb-4 rounded-sm border border-signal-dim/60 bg-signal-wash px-4 py-3 font-mono text-[10px] text-signal">
+          {ledgerDrifted.length} fund{ledgerDrifted.length === 1 ? '' : 's'} have a stored balance that does not match opening + transactions + transfers.
         </div>
+      )}
+
+      <div className="mb-6 grid grid-cols-5 gap-4">
+        <Stat
+          n={formatMoney(totalBalance)}
+          label="Total balance"
+          ink={totalBalance >= 0 ? 'var(--color-authored)' : 'var(--color-breach)'}
+        />
+        <Stat
+          n={formatMoney(operatingCash)}
+          label="Operating cash"
+          ink="var(--color-authored)"
+          sub="Bank + petty − earmarked reserves"
+        />
         {['reserve', 'bank', 'petty_cash'].map((t) => {
           const grouped = activeFunds.filter((f) => f.type === t);
           const sum = grouped.reduce((s, f) => s + f.balance, 0);
           return (
-            <div key={t} className="bg-white border border-gray-200 rounded-lg p-4">
-              <div className="text-sm text-gray-500">{typeLabels[t]}</div>
-              <div className="text-lg font-bold font-mono">{formatMoney(sum)}</div>
-              <div className="text-xs text-gray-400">{grouped.length} account{grouped.length !== 1 ? 's' : ''}</div>
-            </div>
+            <Stat
+              key={t}
+              n={formatMoney(sum)}
+              label={typeLabels[t] ?? t}
+              sub={`${grouped.length} account${grouped.length !== 1 ? 's' : ''}`}
+            />
           );
         })}
       </div>
@@ -127,17 +186,23 @@ export default function FundList() {
           const entObj = bank.entity && typeof bank.entity === 'object' ? bank.entity as Entity : null;
 
           return (
-            <div key={bank._id} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-              <div className="bg-blue-50 border-b border-blue-200 px-4 py-3 flex justify-between items-center">
+            <div key={bank._id} className="overflow-hidden rounded-md border border-hair bg-panel lift">
+              <div className="flex items-center justify-between border-b border-hair bg-human-wash px-4 py-3">
                 <div className="flex items-center gap-3">
-                  <span className="font-semibold text-blue-800">{bank.name}</span>
-                  <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-600">Bank Account</span>
-                  {entObj && <span className="text-xs text-blue-500">{entObj.code}</span>}
+                  <span className="font-mono text-[11px] font-medium text-human">{bank.name}</span>
+                  <Chip tone="human">Bank Account</Chip>
+                  {entObj && <span className="font-mono text-[9px] text-ink-ghost">{entObj.code}</span>}
+                  {(bank.drift || 0) !== 0 && (
+                    <Chip tone="signal">drift {formatMoney(bank.drift || 0)}</Chip>
+                  )}
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className="font-mono font-bold text-blue-800">{formatMoney(bank.balance)}</span>
-                  <button onClick={() => openEdit(bank)} className="text-xs text-gray-500 hover:text-blue-600"><Pencil size={12} className="inline" /></button>
-                  <Link to={`/funds/${bank._id}`} className="text-xs text-blue-600 hover:underline">History</Link>
+                  <span className="font-mono text-[11px] font-medium tabular-nums text-human">{formatMoney(bank.balance)}</span>
+                  <button onClick={() => openEdit(bank)} className="text-ink-ghost hover:text-human"><Pencil size={12} className="inline" /></button>
+                  {canAdjustToBank && canAdjust(bank) && (
+                    <button type="button" onClick={() => openAdjust(bank)} className="font-mono text-[9px] text-signal hover:underline">Adjust</button>
+                  )}
+                  <Link to={`/funds/${bank._id}`} className="font-mono text-[9px] text-human hover:underline">History</Link>
                 </div>
               </div>
               {children.length > 0 && (() => {
@@ -234,6 +299,57 @@ export default function FundList() {
         </div>
       )}
 
+      {adjustingFund && typeof adjustingFund.airwallexBalance === 'number' && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-[28rem]">
+            <h3 className="text-lg font-bold mb-1">Adjust {adjustingFund.name}</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Posts one transfer so the history and the saved balance both equal the live Airwallex balance.
+            </p>
+            <div className="space-y-2 text-sm mb-4">
+              <div className="flex justify-between gap-4">
+                <span className="text-gray-500">History ends at</span>
+                <span className="font-mono">{formatMoney(adjustingFund.reconstructedBalance ?? adjustingFund.balance)}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-gray-500">Saved balance</span>
+                <span className="font-mono">{formatMoney(adjustingFund.balance)}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-gray-500">Airwallex balance</span>
+                <span className="font-mono">{formatMoney(adjustingFund.airwallexBalance)}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-gray-500">Transfer</span>
+                <span className="font-mono">
+                  {formatMoney(adjustingFund.airwallexBalance - (adjustingFund.reconstructedBalance ?? adjustingFund.balance))}
+                </span>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <input type="date" value={adjustDate} onChange={(e) => setAdjustDate(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Note</label>
+                <input type="text" value={adjustNote} onChange={(e) => setAdjustNote(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
+              </div>
+            </div>
+            {adjustError && <p className="text-sm text-red-600 mt-3">{adjustError}</p>}
+            <div className="flex gap-3 mt-4">
+              <button onClick={handleAdjust} disabled={!adjustDate || adjustMutation.isPending}
+                className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                {adjustMutation.isPending ? 'Adjusting...' : 'Adjust'}
+              </button>
+              <button onClick={() => setAdjustingFund(null)} className="border border-gray-300 px-4 py-2 rounded text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {editingFund && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg p-6 w-96">
@@ -295,8 +411,13 @@ function FundSubRow({ fund, onEdit }: { fund: Fund; onEdit: (f: Fund) => void })
       <td className="px-4 py-2.5 pl-8">
         <div className="flex items-center gap-2">
           <span className="font-medium">{fund.name}</span>
-          <span className={`text-xs px-1.5 py-0.5 rounded ${typeColors[fund.type]}`}>{typeLabels[fund.type]}</span>
+          <Chip tone={typeTones[fund.type] ?? 'neutral'}>{typeLabels[fund.type]}</Chip>
           {entObj && <span className="text-xs text-gray-400">{entObj.code}</span>}
+          {(fund.drift || 0) !== 0 && (
+            <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
+              drift {formatMoney(fund.drift || 0)}
+            </span>
+          )}
         </div>
       </td>
       <td className={`px-4 py-2.5 text-right font-mono font-medium ${fund.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>

@@ -7,6 +7,7 @@ import { Payee } from '../models/Payee.js';
 import { getNextSequence } from '../models/Counter.js';
 import { getSettings } from '../models/Settings.js';
 import { authMiddleware, roleGuard, AuthRequest } from '../middleware/auth.js';
+import { accessFor, requirePage } from '../access/policy.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { sendEmail, buildPaymentRequestEmailHtml, getSubjectForRequest } from '../utils/email.js';
 import { env } from '../config/env.js';
@@ -15,6 +16,7 @@ import { Entity } from '../models/Entity.js';
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requirePage('reimbursements'));
 
 const itemSchema = z.object({
   date: z.string(),
@@ -62,7 +64,8 @@ async function findOrCreatePayeeForUser(targetUser: { _id: any; name: string; ba
 router.get('/', async (req: AuthRequest, res, next) => {
   try {
     const filter: Record<string, unknown> = {};
-    if (req.user!.role !== 'admin') {
+    const access = await accessFor(req.user!);
+    if (!access.seeAllReimbursements) {
       filter.submittedBy = req.user!._id;
     }
     const reimbursements = await Reimbursement.find(filter)
@@ -170,7 +173,7 @@ router.post('/', roleGuard('admin', 'user'), async (req: AuthRequest, res, next)
     if (adminEmails.length > 0) {
       const settings = await getSettings();
       const companyName = settings.companyName || 'HateBookkeeping';
-      const detailUrl = `${env.frontendUrl}/#/payment-requests/${paymentRequest._id}`;
+      const detailUrl = `${env.frontendUrl}/payment-requests/${paymentRequest._id}`;
       const prWithPayee = await PaymentRequest.findById(paymentRequest._id).populate('items.payee', 'name');
       const emailItems = (prWithPayee?.items || paymentRequest.items).map((item: any) => ({
         payeeName: typeof item.payee === 'object' && item.payee?.name ? item.payee.name : 'Unknown',

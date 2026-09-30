@@ -1,129 +1,111 @@
 import { Router } from 'express';
 import crypto from 'crypto';
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { User } from '../models/User.js';
-import { env } from '../config/env.js';
+import { getConfig } from '../config/env.js';
 import { authMiddleware, roleGuard, AuthRequest } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
+import * as oidc from '../auth/oidc.js';
+import {
+  beginWebLogin,
+  consumeLoginTicket,
+  issueLoginTicket,
+  takePendingWebLogin,
+} from '../services/webLoginService.js';
+import { issueWebToken } from '../services/webToken.js';
+import { upsertFromOidc } from '../services/userService.js';
+import { resolveReturnTo } from '../api/origin.js';
+import { accessFor } from '../access/policy.js';
 
 const router = Router();
 
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
-});
-
-const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-  name: z.string().min(1),
-  role: z.enum(['admin', 'user']),
-});
-
-const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1),
-  newPassword: z.string().min(8),
-});
-
-router.post('/login', async (req, res, next) => {
-  try {
-    const { email, password } = loginSchema.parse(req.body);
-    const user = await User.findOne({ email, active: true });
-
-    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
-      throw new AppError(401, 'Invalid email or password');
-    }
-
-    const token = jwt.sign({ userId: user._id }, env.jwtSecret, { expiresIn: '24h' });
-
-    res.json({
-      token,
-      user: {
-        id: user._id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        mustChangePassword: user.mustChangePassword,
-        bankName: user.bankName,
-        bankAccountNumber: user.bankAccountNumber,
-        fpsPhone: user.fpsPhone,
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.post(
-  '/register',
-  authMiddleware,
-  roleGuard('admin'),
-  async (req: AuthRequest, res, next) => {
-    try {
-      const data = registerSchema.parse(req.body);
-      const existing = await User.findOne({ email: data.email });
-
-      if (existing) {
-        throw new AppError(409, 'Email already registered');
-      }
-
-      const passwordHash = await bcrypt.hash(data.password, 12);
-      const user = await User.create({
-        email: data.email,
-        passwordHash,
-        name: data.name,
-        role: data.role,
-        mustChangePassword: true,
-      });
-
-      res.status(201).json({
-        id: user._id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-      });
-    } catch (error) {
-      next(error);
-    }
-  },
-);
-
-router.get('/me', authMiddleware, (req: AuthRequest, res) => {
-  const user = req.user!;
-  res.json({
+function publicUser(user: { _id: unknown; email: string; name: string; role: string; bankName?: string; bankAccountNumber?: string; fpsPhone?: string }) {
+  return {
     id: user._id,
     email: user.email,
     name: user.name,
     role: user.role,
-    mustChangePassword: user.mustChangePassword,
     bankName: user.bankName,
     bankAccountNumber: user.bankAccountNumber,
     fpsPhone: user.fpsPhone,
-  });
-});
+  };
+}
 
-router.put('/change-password', authMiddleware, async (req: AuthRequest, res, next) => {
+/** Begin a web sign-in. Redirects the browser to Authentik. */
+router.get('/login', async (req, res, next) => {
   try {
-    const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
-    const user = req.user!;
+    const cfg = getConfig();
+    const redirectUri = new URL('/api/auth/callback', cfg.PUBLIC_URL).toString();
+    const request = await oidc.beginAuthorization(redirectUri);
 
-    if (!(await bcrypt.compare(currentPassword, user.passwordHash))) {
-      throw new AppError(400, 'Current password is incorrect');
-    }
+    await beginWebLogin({
+      state: request.state,
+      nonce: request.nonce,
+      codeVerifier: request.codeVerifier,
+      ...(typeof req.query.returnTo === 'string' ? { returnTo: req.query.returnTo } : {}),
+    });
 
-    user.passwordHash = await bcrypt.hash(newPassword, 12);
-    user.mustChangePassword = false;
-    await user.save();
-
-    res.json({ message: 'Password changed successfully' });
+    res.redirect(request.url);
   } catch (error) {
     next(error);
   }
 });
 
-// API token management
+/** Authentik return leg on the API origin. Issues a one-time ticket and bounces to the SPA. */
+router.get('/callback', async (req, res, next) => {
+  try {
+    const cfg = getConfig();
+    const state = typeof req.query.state === 'string' ? req.query.state : '';
+    if (!state) {
+      throw new AppError(400, 'There is no sign-in in progress. Start again from /api/auth/login.');
+    }
+
+    const pending = await takePendingWebLogin(state);
+    const profile = await oidc.completeAuthorization({
+      currentUrl: new URL(req.originalUrl, cfg.PUBLIC_URL),
+      expectedState: pending.state,
+      expectedNonce: pending.nonce,
+      codeVerifier: pending.codeVerifier,
+    });
+
+    const user = await upsertFromOidc(profile);
+    const userId = user._id.toString();
+    const returnTo = resolveReturnTo(pending.returnTo, cfg.webOrigin);
+    const ticket = await issueLoginTicket({ userId, returnTo });
+
+    const dest = new URL('/auth/callback', cfg.webOrigin);
+    dest.searchParams.set('ticket', ticket);
+    res.redirect(dest.toString());
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** Exchange the one-time login ticket for a web session token. */
+router.post('/complete', async (req, res, next) => {
+  try {
+    const raw = typeof req.body?.ticket === 'string' ? req.body.ticket : '';
+    const redeemed = await consumeLoginTicket(raw);
+    const token = await issueWebToken(redeemed.userId);
+    res.json({ token, returnTo: redeemed.returnTo });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/logout', (_req, res) => {
+  res.status(204).end();
+});
+
+router.get('/me', authMiddleware, async (req: AuthRequest, res, next) => {
+  try {
+    const access = await accessFor(req.user!);
+    res.json({ ...publicUser(req.user!), access });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/tokens', authMiddleware, (req: AuthRequest, res) => {
   const tokens = (req.user!.apiTokens || []).map((t) => ({
     _id: t._id,
@@ -161,4 +143,5 @@ router.delete('/tokens/:tokenId', authMiddleware, async (req: AuthRequest, res, 
   }
 });
 
+export { roleGuard };
 export default router;

@@ -8,6 +8,7 @@ import { Transaction } from '../models/Transaction.js';
 import { adjustFundBalance } from '../utils/fundBalance.js';
 import { getNextSequence } from '../models/Counter.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { requirePage } from '../access/policy.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { ReceiptPDF } from '../utils/pdf/ReceiptPDF.js';
 import { getSettings } from '../models/Settings.js';
@@ -15,6 +16,7 @@ import { resolveImageFields } from '../utils/resolveImageForPdf.js';
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requirePage('receipts'));
 
 const receiptSchema = z.object({
   invoice: z.string().min(1),

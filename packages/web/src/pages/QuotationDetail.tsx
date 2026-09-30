@@ -84,8 +84,6 @@ export default function QuotationDetail() {
   if (!q) return <p className="text-gray-500">Quotation not found.</p>;
 
   const client = typeof q.client === 'object' ? (q.client as Client) : null;
-  const isAdmin = user?.role === 'admin';
-
   async function changeStatus(status: string) {
     await updateStatus.mutateAsync({ id: id!, status });
   }
@@ -399,7 +397,7 @@ export default function QuotationDetail() {
           {q.status === 'pending_approval' && (q.approvals?.length ?? 0) > 0 && (
             <div className="bg-white rounded-lg border border-gray-200 p-5">
               <h3 className="text-sm font-medium text-gray-700 mb-2">Approval Progress</h3>
-              <p className="text-sm text-gray-500 mb-2">Requires approval from both William and Andy.</p>
+              <p className="text-sm text-gray-500 mb-2">This stays pending until every required approver has approved. If none are set, one approval is enough.</p>
               <div className="flex flex-wrap gap-2">
                 {(q.approvals || []).map((a: ApprovalEntry, i: number) => {
                   const name = typeof a.user === 'object' ? a.user.name : 'Unknown';
@@ -414,10 +412,10 @@ export default function QuotationDetail() {
           )}
 
           {/* Approval Review */}
-          {q.status === 'pending_approval' && isAdmin && (
+          {q.status === 'pending_approval' && user?.access?.approve && (
             <div className="bg-white rounded-lg border border-gray-200 p-5 space-y-3">
               <h3 className="text-sm font-medium text-gray-700">Review Quotation</h3>
-              <p className="text-xs text-gray-500">Dual approval required -- both William and Andy must approve.</p>
+              <p className="text-xs text-gray-500">This stays pending until every required approver has approved. If none are set, one approval is enough.</p>
               {(() => {
                 const currentUserApproved = (q.approvals || []).some(
                   (a: ApprovalEntry) => {

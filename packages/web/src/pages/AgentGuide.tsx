@@ -26,7 +26,6 @@ When the user arrives with a finance task, determine the **intent** first:
 | "Expense" / "pay vendor" / "payment request" | Expense Approval |
 | "Recurring" / "subscription" / "monthly fee" | Recurring Billing |
 | "Reimbursement" / "I paid out of pocket" | Reimbursement |
-| "Monthly close" / "close the books" | Monthly Close |
 | "Reconcile" / "bank transactions" | Bank Reconciliation |
 | "How much" / "report" / "balance" / "P&L" | Reports |
 | "Record a payment" / "client paid" | Record Receipt |
@@ -125,7 +124,7 @@ If creating from a quotation, use \`create_invoice_from_quotation\` instead.
 2. \`get_settings\` to validate categories
 3. Confirm items and total with user
 4. \`create_payment_request\`
-5. Ask: "Approve this request?" (requires admin) → \`approve_payment_request\`
+5. Ask: "Approve this request?" (only if this user is allowed to approve) → \`approve_payment_request\`
 6. Ask: "Execute payment?" → \`execute_payment_request\`
 
 ---
@@ -162,22 +161,6 @@ If creating from a quotation, use \`create_invoice_from_quotation\` instead.
 **Steps:**
 1. Confirm items with user
 2. \`create_reimbursement\`
-
----
-
-## Monthly Close
-
-**Required info — ask if missing:**
-- Entity (code)
-- Year and month
-
-**Steps:**
-1. \`preview_monthly_close\` — show income, expenses, net P/L
-2. Ask user to review the numbers
-3. \`submit_monthly_close\`
-4. After approval: \`finalize_monthly_close\` with distribution notes
-5. If profit: \`get_distribution_options\` to show distribution choices
-6. If loss: discuss \`create_collection_requests\`
 
 ---
 
@@ -396,7 +379,6 @@ const TOC_ITEMS = [
   { id: 'expense-approval', label: 'Expense Approval' },
   { id: 'recurring-billing', label: 'Recurring Billing' },
   { id: 'reimbursement', label: 'Reimbursement' },
-  { id: 'monthly-close', label: 'Monthly Close' },
   { id: 'bank-reconciliation', label: 'Bank Reconciliation' },
   { id: 'reports', label: 'Reports' },
   { id: 'quick-reference', label: 'Quick Reference' },

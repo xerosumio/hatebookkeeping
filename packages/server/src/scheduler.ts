@@ -78,8 +78,8 @@ async function runAlertCheck() {
       const isIncome = item.type === 'income';
       const refId = isIncome ? item.lastGeneratedInvoice : item.lastGeneratedPaymentRequest;
       const detailUrl = refId
-        ? `${env.frontendUrl}/#/${isIncome ? 'invoices' : 'payment-requests'}/${refId}`
-        : `${env.frontendUrl}/#/recurring`;
+        ? `${env.frontendUrl}/${isIncome ? 'invoices' : 'payment-requests'}/${refId}`
+        : `${env.frontendUrl}/recurring`;
 
       const dueDateStr = nextDue.toLocaleDateString('en-HK', { year: 'numeric', month: 'short', day: 'numeric' });
 

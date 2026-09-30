@@ -10,6 +10,7 @@ import { Entity } from '../models/Entity.js';
 import { adjustFundBalance } from '../utils/fundBalance.js';
 import { getNextSequence } from '../models/Counter.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { requirePage } from '../access/policy.js';
 import { FUND_NAME, type EntityKey } from '../config/bankAccounts.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { InvoicePDF } from '../utils/pdf/InvoicePDF.js';
@@ -18,6 +19,7 @@ import { resolveImageFields } from '../utils/resolveImageForPdf.js';
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requirePage('invoices'));
 
 const lineItemSchema = z.object({
   description: z.string().min(1),

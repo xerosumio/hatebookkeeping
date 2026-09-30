@@ -1,8 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
 import { User, IUser } from '../models/User.js';
-import { env } from '../config/env.js';
 import { AppError } from './errorHandler.js';
+import { looksLikeWebToken, verifyWebToken } from '../services/webToken.js';
 
 export interface AuthRequest extends Request {
   user?: IUser;
@@ -22,17 +21,19 @@ export async function authMiddleware(
     const token = header.slice(7);
 
     let user;
-    if (token.startsWith('hbk_')) {
+    if (token.startsWith('hbk_') && !looksLikeWebToken(token)) {
       user = await User.findOne({ 'apiTokens.token': token, active: true });
       if (!user) throw new AppError(401, 'Invalid API token');
       await User.updateOne(
         { _id: user._id, 'apiTokens.token': token },
         { $set: { 'apiTokens.$.lastUsedAt': new Date() } },
       );
-    } else {
-      const payload = jwt.verify(token, env.jwtSecret) as { userId: string };
-      user = await User.findById(payload.userId);
+    } else if (looksLikeWebToken(token)) {
+      const claims = await verifyWebToken(token);
+      user = await User.findById(claims.userId);
       if (!user || !user.active) throw new AppError(401, 'Invalid token');
+    } else {
+      throw new AppError(401, 'Invalid token');
     }
 
     req.user = user;

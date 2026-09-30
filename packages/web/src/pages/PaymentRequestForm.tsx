@@ -22,6 +22,16 @@ interface ItemRow {
 
 const emptyItem = (): ItemRow => ({ payee: '', description: '', amount: '', category: '', recipient: '', disbursementType: 'bank', shareholderId: '' });
 
+function hkDateInput(value?: string) {
+  if (!value) return '';
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Hong_Kong',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(value));
+}
+
 export default function PaymentRequestForm() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -41,6 +51,7 @@ export default function PaymentRequestForm() {
   const [status, setStatus] = useState('');
   const [description, setDescription] = useState('');
   const [sourceBankAccount, setSourceBankAccount] = useState('');
+  const [dueDate, setDueDate] = useState(() => hkDateInput(new Date().toISOString()));
   const [items, setItems] = useState<ItemRow[]>([emptyItem()]);
   const [attachments, setAttachments] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -65,6 +76,7 @@ export default function PaymentRequestForm() {
       setEntity(existingEntityId);
       setStatus(existing.status || '');
       setDescription(existing.description || '');
+      setDueDate(existing.dueDate ? hkDateInput(existing.dueDate) : '');
       setSourceBankAccount(existing.sourceBankAccount || '');
       setAttachments(existing.attachments || []);
       setItems(
@@ -140,10 +152,15 @@ export default function PaymentRequestForm() {
       setError('Add at least one transfer item');
       return;
     }
+    if (!dueDate) {
+      setError('Choose a due date');
+      return;
+    }
 
     const payload = {
       entity: entity || undefined,
       description,
+      dueDate,
       sourceBankAccount,
       items: validItems.map((item) => ({
         payee: item.payee,
@@ -155,7 +172,7 @@ export default function PaymentRequestForm() {
         ...(item.disbursementType === 'liability_offset' && item.shareholderId ? { shareholderId: item.shareholderId } : {}),
       })),
       attachments,
-      ...(isEdit && status ? { status } : {}),
+      ...(isEdit && status && status !== 'executed' ? { status } : {}),
     };
 
     try {
@@ -182,7 +199,7 @@ export default function PaymentRequestForm() {
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && <div className="bg-red-50 text-red-600 text-sm p-3 rounded">{error}</div>}
 
-        {isEdit && (
+        {isEdit && status !== 'executed' && (
           <div className="max-w-xs">
             <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
             <select
@@ -196,8 +213,13 @@ export default function PaymentRequestForm() {
             </select>
           </div>
         )}
+        {isEdit && status === 'executed' && (
+          <p className="text-sm text-gray-500">
+            This expense is already executed. Saving updates the ledger entries created from it. The payment date stays the original execution date.
+          </p>
+        )}
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-4 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Entity</label>
             <select
@@ -210,6 +232,16 @@ export default function PaymentRequestForm() {
                 <option key={ent._id} value={ent._id}>{ent.code} — {ent.name}</option>
               ))}
             </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Due date</label>
+            <input
+              type="date"
+              required
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>

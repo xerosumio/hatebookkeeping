@@ -84,7 +84,6 @@ APPROVAL WORKFLOWS
 ------------------
 Quotations: draft → pending_approval → approved → sent → accepted
 Payment requests: pending → approved → executed
-Monthly close: draft → submitted → approved → finalized
 
 Each approval step may require admin privileges and dual approval.
 

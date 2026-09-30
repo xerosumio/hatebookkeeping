@@ -31,6 +31,13 @@ export interface ISettings extends Document {
   signatureUrl: string;
   defaultEntityId: mongoose.Types.ObjectId;
   recurringAlertMethod: 'email' | 'in_app' | 'both';
+  /** False until an admin saves the regular-user policy. */
+  userAccessConfigured: boolean;
+  userPages: string[];
+  userSeeAllReimbursements: boolean;
+  userCanApprove: boolean;
+  userCanAdjustFund: boolean;
+  approverIds: mongoose.Types.ObjectId[];
 }
 
 const settingsSchema = new Schema<ISettings>(
@@ -71,6 +78,12 @@ const settingsSchema = new Schema<ISettings>(
       enum: ['email', 'in_app', 'both'],
       default: 'both',
     },
+    userAccessConfigured: { type: Boolean, default: false },
+    userPages: { type: [String], default: undefined },
+    userSeeAllReimbursements: { type: Boolean, default: false },
+    userCanApprove: { type: Boolean, default: false },
+    userCanAdjustFund: { type: Boolean, default: false },
+    approverIds: [{ type: Schema.Types.ObjectId, ref: 'User' }],
   },
   { timestamps: true },
 );

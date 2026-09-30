@@ -1,14 +1,14 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import SignatureCanvas from 'react-signature-canvas';
-import { useUsers, useCreateUser, useUpdateUser, useDeactivateUser, uploadFile } from '../api/hooks';
+import { USER_PAGE_IDS, USER_PAGE_LABELS, type UserPageId } from '@hbk/shared';
+import { useUsers, useUpdateUser, useDeactivateUser, useUserAccess, useUpdateUserAccess, uploadFile } from '../api/hooks';
 import { useAuth } from '../contexts/AuthContext';
-import { UserPlus, Pencil, X, Check, Ban, KeyRound } from 'lucide-react';
+import { Pencil, X, Check, Ban } from 'lucide-react';
 
 interface EditFormState {
   name: string;
   email: string;
   role: string;
-  password: string;
   bankName: string;
   bankAccountNumber: string;
   fpsPhone: string;
@@ -18,14 +18,10 @@ interface EditFormState {
 export default function UserList() {
   const { user: currentUser } = useAuth();
   const { data: users, isLoading } = useUsers();
-  const createUser = useCreateUser();
   const updateUser = useUpdateUser();
   const deactivateUser = useDeactivateUser();
-
-  const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'user', bankName: '', bankAccountNumber: '', fpsPhone: '' });
   const [editId, setEditId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<EditFormState>({ name: '', email: '', role: '', password: '', bankName: '', bankAccountNumber: '', fpsPhone: '', signatureUrl: '' });
+  const [editForm, setEditForm] = useState<EditFormState>({ name: '', email: '', role: '', bankName: '', bankAccountNumber: '', fpsPhone: '', signatureUrl: '' });
   const [editError, setEditError] = useState('');
   const [sigUploading, setSigUploading] = useState(false);
   const sigCanvas = useRef<SignatureCanvas>(null);
@@ -46,16 +42,9 @@ export default function UserList() {
     }
   }
 
-  async function handleAdd(e: React.FormEvent) {
-    e.preventDefault();
-    await createUser.mutateAsync(form);
-    setForm({ name: '', email: '', password: '', role: 'user', bankName: '', bankAccountNumber: '', fpsPhone: '' });
-    setShowAdd(false);
-  }
-
   function startEdit(u: { _id: string; name: string; email: string; role: string; bankName?: string; bankAccountNumber?: string; fpsPhone?: string; signatureUrl?: string }) {
     setEditId(u._id);
-    setEditForm({ name: u.name, email: u.email, role: u.role, password: '', bankName: u.bankName || '', bankAccountNumber: u.bankAccountNumber || '', fpsPhone: u.fpsPhone || '', signatureUrl: u.signatureUrl || '' });
+    setEditForm({ name: u.name, email: u.email, role: u.role, bankName: u.bankName || '', bankAccountNumber: u.bankAccountNumber || '', fpsPhone: u.fpsPhone || '', signatureUrl: u.signatureUrl || '' });
     setEditError('');
   }
 
@@ -64,13 +53,6 @@ export default function UserList() {
     setEditError('');
     try {
       const payload: Record<string, string> = { name: editForm.name, email: editForm.email, role: editForm.role, bankName: editForm.bankName, bankAccountNumber: editForm.bankAccountNumber, fpsPhone: editForm.fpsPhone, signatureUrl: editForm.signatureUrl };
-      if (editForm.password.trim()) {
-        if (editForm.password.length < 8) {
-          setEditError('Password must be at least 8 characters');
-          return;
-        }
-        payload.password = editForm.password;
-      }
       await updateUser.mutateAsync({ id: editId, data: payload });
       setEditId(null);
     } catch (err: any) {
@@ -90,92 +72,12 @@ export default function UserList() {
 
   return (
     <div className="max-w-4xl">
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6">
         <h1 className="text-2xl font-bold">Users</h1>
-        <button
-          onClick={() => setShowAdd(!showAdd)}
-          className="flex items-center gap-1 bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700"
-        >
-          <UserPlus size={16} /> Add User
-        </button>
+        <p className="text-sm text-gray-500 mt-1">Users appear on first Authentik sign-in (matched by email).</p>
       </div>
 
-      {showAdd && (
-        <form onSubmit={handleAdd} className="bg-white rounded-lg border border-gray-200 p-5 mb-6 space-y-3">
-          <h3 className="text-sm font-medium text-gray-700">New User</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <input
-              type="text"
-              placeholder="Full name"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              required
-              className="border border-gray-300 rounded px-3 py-2 text-sm"
-            />
-            <input
-              type="email"
-              placeholder="Email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              required
-              className="border border-gray-300 rounded px-3 py-2 text-sm"
-            />
-            <input
-              type="password"
-              placeholder="Password (min 8 chars)"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              required
-              minLength={8}
-              className="border border-gray-300 rounded px-3 py-2 text-sm"
-            />
-            <select
-              value={form.role}
-              onChange={(e) => setForm({ ...form, role: e.target.value })}
-              className="border border-gray-300 rounded px-3 py-2 text-sm"
-            >
-              <option value="user">User</option>
-              <option value="admin">Admin</option>
-            </select>
-            <input
-              type="text"
-              placeholder="Bank name (optional)"
-              value={form.bankName}
-              onChange={(e) => setForm({ ...form, bankName: e.target.value })}
-              className="border border-gray-300 rounded px-3 py-2 text-sm"
-            />
-            <input
-              type="text"
-              placeholder="Bank account number (optional)"
-              value={form.bankAccountNumber}
-              onChange={(e) => setForm({ ...form, bankAccountNumber: e.target.value })}
-              className="border border-gray-300 rounded px-3 py-2 text-sm"
-            />
-            <input
-              type="text"
-              placeholder="FPS phone number (optional)"
-              value={form.fpsPhone}
-              onChange={(e) => setForm({ ...form, fpsPhone: e.target.value })}
-              className="border border-gray-300 rounded px-3 py-2 text-sm"
-            />
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={createUser.isPending}
-              className="bg-blue-600 text-white px-4 py-1.5 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
-            >
-              {createUser.isPending ? 'Creating...' : 'Create User'}
-            </button>
-            <button type="button" onClick={() => setShowAdd(false)} className="text-sm text-gray-500 hover:underline">
-              Cancel
-            </button>
-          </div>
-          {createUser.isError && (
-            <p className="text-sm text-red-600">{(createUser.error as any)?.response?.data?.message || 'Failed to create user'}</p>
-          )}
-        </form>
-      )}
+      <AccessPolicy users={users || []} />
 
       {isLoading ? (
         <p className="text-gray-500">Loading...</p>
@@ -225,18 +127,6 @@ export default function UserList() {
                           <option value="user">User</option>
                           <option value="admin">Admin</option>
                         </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1 flex items-center gap-1">
-                          <KeyRound size={12} /> New Password
-                        </label>
-                        <input
-                          type="password"
-                          value={editForm.password}
-                          onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
-                          placeholder="Leave blank to keep current"
-                          className="border border-gray-300 rounded px-3 py-2 text-sm w-full"
-                        />
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">Bank Name</label>
@@ -405,6 +295,135 @@ export default function UserList() {
       <p className="text-xs text-gray-400 mt-4">
         The email configured for each user is used for sending approval notifications from the platform.
       </p>
+    </div>
+  );
+}
+
+function AccessPolicy({ users }: { users: { _id: string; name: string; email: string; active: boolean; role: string }[] }) {
+  const { data, isLoading } = useUserAccess();
+  const save = useUpdateUserAccess();
+  const [pages, setPages] = useState<UserPageId[]>([]);
+  const [seeAllReimbursements, setSeeAllReimbursements] = useState(false);
+  const [approve, setApprove] = useState(false);
+  const [adjustFund, setAdjustFund] = useState(false);
+  const [approverIds, setApproverIds] = useState<string[]>([]);
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!data) return;
+    setPages(data.pages);
+    setSeeAllReimbursements(data.seeAllReimbursements);
+    setApprove(data.approve);
+    setAdjustFund(data.adjustFund);
+    setApproverIds(data.approverIds);
+  }, [data]);
+
+  function togglePage(id: UserPageId) {
+    setSaved(false);
+    setPages((current) => current.includes(id) ? current.filter((page) => page !== id) : [...current, id]);
+  }
+
+  function toggleApprover(id: string) {
+    setSaved(false);
+    setApproverIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  }
+
+  async function onSave() {
+    setError('');
+    setSaved(false);
+    try {
+      await save.mutateAsync({ pages, seeAllReimbursements, approve, adjustFund, approverIds });
+      setSaved(true);
+    } catch (err: any) {
+      setError(err?.response?.data?.error || 'Could not save access');
+    }
+  }
+
+  const activeUsers = users.filter((user) => user.active);
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6 space-y-5">
+      <div>
+        <h2 className="text-sm font-semibold text-gray-800">Regular user access</h2>
+        <p className="text-xs text-gray-500 mt-1">
+          One set of pages and functions for everyone who is not an admin. Admins keep full access.
+          Users, Settings, Bank Balance, Endpoint, and Agent Guide stay admin-only.
+        </p>
+      </div>
+
+      {isLoading || !data ? (
+        <p className="text-sm text-gray-500">Loading access…</p>
+      ) : (
+        <>
+          <div>
+            <h3 className="text-xs font-semibold text-gray-600 mb-2">Pages</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {USER_PAGE_IDS.map((id) => (
+                <label key={id} className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={pages.includes(id)}
+                    onChange={() => togglePage(id)}
+                  />
+                  {USER_PAGE_LABELS[id]}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-xs font-semibold text-gray-600 mb-2">Functions</h3>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={seeAllReimbursements} onChange={(e) => { setSaved(false); setSeeAllReimbursements(e.target.checked); }} />
+                See every reimbursement
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={approve} onChange={(e) => { setSaved(false); setApprove(e.target.checked); }} />
+                Approve an expense or quotation
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={adjustFund} onChange={(e) => { setSaved(false); setAdjustFund(e.target.checked); }} />
+                Adjust an Airwallex fund to the live bank balance
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-xs font-semibold text-gray-600 mb-1">Required approvers</h3>
+            <p className="text-xs text-gray-500 mb-2">
+              Everyone selected must approve before an expense or quotation is approved. A selected person can approve even when the approve switch above is off. If nobody is selected, one approval from someone allowed to approve is enough.
+            </p>
+            <div className="space-y-2">
+              {activeUsers.map((person) => (
+                <label key={person._id} className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={approverIds.includes(person._id)}
+                    onChange={() => toggleApprover(person._id)}
+                  />
+                  {person.name}
+                  <span className="text-xs text-gray-400">{person.role === 'admin' ? 'Admin' : 'User'}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={save.isPending}
+              className="bg-gray-900 text-white text-sm px-3 py-1.5 rounded disabled:opacity-50"
+            >
+              {save.isPending ? 'Saving…' : 'Save access'}
+            </button>
+            {saved && <span className="text-xs text-green-600">Saved</span>}
+            {error && <span className="text-xs text-red-600">{error}</span>}
+          </div>
+        </>
+      )}
     </div>
   );
 }

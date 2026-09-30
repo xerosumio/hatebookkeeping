@@ -1,0 +1,28 @@
+{
+  "name": "@naton/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "main": "./dist/index.js",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -b --watch --preserveWatchOutput",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "react": "^19.2.4",
+    "typescript": "~5.9.3"
+  }
+}

@@ -3,10 +3,12 @@ import { z } from 'zod';
 import { Transaction } from '../models/Transaction.js';
 import { adjustFundBalance } from '../utils/fundBalance.js';
 import { authMiddleware, roleGuard, AuthRequest } from '../middleware/auth.js';
+import { requirePage } from '../access/policy.js';
 import { AppError } from '../middleware/errorHandler.js';
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requirePage('transactions'));
 
 const transactionSchema = z.object({
   date: z.string(),

@@ -3,14 +3,39 @@ import { useNavigate } from 'react-router-dom';
 import {
   useShareholders, useInvestShareholder, useShareTransfer,
   useShareholderLiabilities, useCreateShareholderLiability, useUpdateShareholderLiability, useDeleteShareholderLiability,
+  useCreateShareholder, useRemoveShareholder, useUsers,
+  useShareBonusUsers, useAddShareBonusUser, useUpdateShareBonusUser, useRemoveShareBonusUser,
 } from '../api/hooks';
+import { useAuth } from '../contexts/AuthContext';
 import { formatMoney, titleCase } from '../utils/money';
 import { Pencil, Trash2 } from 'lucide-react';
 import type { ShareLiabilityEntry } from '../types';
 
+function linkedUserId(user: string | { _id: string }) {
+  return typeof user === 'object' ? user._id : user;
+}
+
+function shareIsZero(percent: number) {
+  return Math.abs(percent) < 0.005;
+}
+
+function apiError(err: unknown, fallback: string) {
+  const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+  return message || fallback;
+}
+
 export default function ShareholderList() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const { data: shareholders, isLoading } = useShareholders();
+  const { data: people } = useUsers();
+  const createShareholder = useCreateShareholder();
+  const removeShareholder = useRemoveShareholder();
+  const { data: bonusUsers } = useShareBonusUsers();
+  const addBonusUser = useAddShareBonusUser();
+  const updateBonusUser = useUpdateShareBonusUser();
+  const removeBonusUser = useRemoveShareBonusUser();
   const investMutation = useInvestShareholder();
   const transferMutation = useShareTransfer();
   const createLiabilityMutation = useCreateShareholderLiability();
@@ -39,6 +64,15 @@ export default function ShareholderList() {
   const [editDesc, setEditDesc] = useState('');
 
   const [historyModal, setHistoryModal] = useState<{ id: string; name: string } | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addUserId, setAddUserId] = useState('');
+  const [addError, setAddError] = useState('');
+  const [bonusOpen, setBonusOpen] = useState(false);
+  const [bonusUserId, setBonusUserId] = useState('');
+  const [bonusPercent, setBonusPercent] = useState('');
+  const [bonusError, setBonusError] = useState('');
+  const [editingBonusId, setEditingBonusId] = useState<string | null>(null);
+  const [editingBonusPercent, setEditingBonusPercent] = useState('');
 
   const totalInvested = shareholders?.reduce((sum, s) => sum + (s.totalInvested || 0), 0) || 0;
   const valuePerPercent = totalInvested / 100;
@@ -101,7 +135,62 @@ export default function ShareholderList() {
     await deleteLiabilityMutation.mutateAsync({ shareholderId, entryId });
   }
 
+  async function handleAddShareholder() {
+    if (!addUserId) return;
+    setAddError('');
+    try {
+      await createShareholder.mutateAsync({ user: addUserId });
+      setAddOpen(false);
+      setAddUserId('');
+    } catch (err) {
+      setAddError(apiError(err, 'Could not add shareholder'));
+    }
+  }
+
+  async function handleRemoveShareholder(id: string, name: string) {
+    if (!confirm(`Remove ${name}? Their equity history stays on file.`)) return;
+    try {
+      await removeShareholder.mutateAsync(id);
+    } catch (err) {
+      alert(apiError(err, 'Could not remove shareholder'));
+    }
+  }
+
+  async function handleAddBonus() {
+    if (!bonusUserId || bonusPercent === '') return;
+    setBonusError('');
+    try {
+      await addBonusUser.mutateAsync({ user: bonusUserId, bonusPercent: parseFloat(bonusPercent) });
+      setBonusOpen(false);
+      setBonusUserId('');
+      setBonusPercent('');
+    } catch (err) {
+      setBonusError(apiError(err, 'Could not add share bonus user'));
+    }
+  }
+
+  async function handleSaveBonus(id: string) {
+    const percent = parseFloat(editingBonusPercent);
+    if (Number.isNaN(percent)) return;
+    try {
+      await updateBonusUser.mutateAsync({ id, bonusPercent: percent });
+      setEditingBonusId(null);
+    } catch (err) {
+      alert(apiError(err, 'Could not update bonus percent'));
+    }
+  }
+
+  async function handleRemoveBonus(id: string, name: string) {
+    if (!confirm(`Remove ${name} from share bonus users?`)) return;
+    await removeBonusUser.mutateAsync(id);
+  }
+
   const shareholdersWithLiability = shareholders?.filter((s) => s.sharePurchaseOwed > 0 || s.sharePurchasePaid > 0) || [];
+  const shareholderUserIds = new Set((shareholders || []).map((s) => linkedUserId(s.user)));
+  const bonusUserIds = new Set((bonusUsers || []).map((s) => linkedUserId(s.user)));
+  const usersToAdd = (people || []).filter((person) => person.active && !shareholderUserIds.has(person._id));
+  const usersForBonus = (people || []).filter((person) => person.active && !bonusUserIds.has(person._id));
+  const bonusTotal = (bonusUsers || []).reduce((sum, person) => sum + person.bonusPercent, 0);
 
   if (isLoading) return <p className="text-gray-500">Loading...</p>;
 
@@ -109,6 +198,14 @@ export default function ShareholderList() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Shareholders</h1>
+        {isAdmin && (
+          <button
+            onClick={() => { setAddOpen(true); setAddUserId(''); setAddError(''); }}
+            className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"
+          >
+            Add shareholder
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-4 mb-6">
@@ -168,11 +265,120 @@ export default function ShareholderList() {
                   >
                     + Invest
                   </button>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      disabled={!shareIsZero(sh.sharePercent) || removeShareholder.isPending}
+                      title={shareIsZero(sh.sharePercent) ? 'Remove shareholder' : 'Transfer this share out before removing'}
+                      onClick={() => handleRemoveShareholder(sh._id, sh.name)}
+                      className="text-xs bg-red-50 text-red-700 px-2 py-1 rounded hover:bg-red-100 ml-1 disabled:opacity-40"
+                    >
+                      Remove
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-8">
+        <div className="flex justify-between items-center mb-3">
+          <div>
+            <h2 className="text-lg font-bold">Share bonus users</h2>
+            <p className="text-xs text-gray-500 mt-1">
+              A separate list from ownership. Total bonus {bonusTotal.toFixed(2)}%. This does not change share percentages or post a payment.
+            </p>
+          </div>
+          {isAdmin && (
+            <button
+              onClick={() => { setBonusOpen(true); setBonusUserId(''); setBonusPercent(''); setBonusError(''); }}
+              className="bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-medium hover:bg-blue-700"
+            >
+              Add bonus user
+            </button>
+          )}
+        </div>
+        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Name</th>
+                <th className="text-right px-4 py-3 font-medium text-gray-600">Bonus %</th>
+                {isAdmin && <th className="text-right px-4 py-3 font-medium text-gray-600">Actions</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {(bonusUsers || []).length === 0 ? (
+                <tr>
+                  <td colSpan={isAdmin ? 3 : 2} className="px-4 py-6 text-gray-500">No share bonus users.</td>
+                </tr>
+              ) : bonusUsers?.map((person) => (
+                <tr key={person._id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <div className="font-medium">{person.name}</div>
+                    {typeof person.user === 'object' && (
+                      <div className="text-xs text-gray-400">{person.user.email}</div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right font-mono">
+                    {editingBonusId === person._id ? (
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max="100"
+                        value={editingBonusPercent}
+                        onChange={(e) => setEditingBonusPercent(e.target.value)}
+                        className="w-24 border border-gray-300 rounded px-2 py-1 text-sm text-right"
+                      />
+                    ) : (
+                      `${person.bonusPercent.toFixed(2)}%`
+                    )}
+                  </td>
+                  {isAdmin && (
+                    <td className="px-4 py-3 text-right space-x-1">
+                      {editingBonusId === person._id ? (
+                        <>
+                          <button
+                            onClick={() => handleSaveBonus(person._id)}
+                            disabled={updateBonusUser.isPending}
+                            className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded hover:bg-blue-100"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setEditingBonusId(null)}
+                            className="text-xs bg-gray-50 text-gray-600 px-2 py-1 rounded hover:bg-gray-100"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setEditingBonusId(person._id);
+                            setEditingBonusPercent(String(person.bonusPercent));
+                          }}
+                          className="text-xs bg-gray-50 text-gray-700 px-2 py-1 rounded hover:bg-gray-100"
+                        >
+                          Edit %
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleRemoveBonus(person._id, person.name)}
+                        className="text-xs bg-red-50 text-red-700 px-2 py-1 rounded hover:bg-red-100"
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {shareholdersWithLiability.length > 0 && (
@@ -223,6 +429,67 @@ export default function ShareholderList() {
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {addOpen && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-96">
+            <h3 className="text-lg font-bold mb-1">Add shareholder</h3>
+            <p className="text-xs text-gray-500 mb-4">They start at 0%. Move ownership with Transfer %.</p>
+            <label className="block text-sm font-medium text-gray-700 mb-1">User</label>
+            <select value={addUserId} onChange={(e) => setAddUserId(e.target.value)}
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm">
+              <option value="">Select a user...</option>
+              {usersToAdd.map((person) => (
+                <option key={person._id} value={person._id}>{person.name}</option>
+              ))}
+            </select>
+            {addError && <p className="text-xs text-red-600 mt-2">{addError}</p>}
+            <div className="flex gap-3 mt-4">
+              <button onClick={handleAddShareholder} disabled={!addUserId || createShareholder.isPending}
+                className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                {createShareholder.isPending ? 'Adding...' : 'Add'}
+              </button>
+              <button onClick={() => setAddOpen(false)}
+                className="border border-gray-300 px-4 py-2 rounded text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bonusOpen && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-96">
+            <h3 className="text-lg font-bold mb-4">Add share bonus user</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">User</label>
+                <select value={bonusUserId} onChange={(e) => setBonusUserId(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm">
+                  <option value="">Select a user...</option>
+                  {usersForBonus.map((person) => (
+                    <option key={person._id} value={person._id}>{person.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Bonus %</label>
+                <input type="number" step="0.01" min="0" max="100" value={bonusPercent}
+                  onChange={(e) => setBonusPercent(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm" placeholder="e.g. 5" />
+              </div>
+            </div>
+            {bonusError && <p className="text-xs text-red-600 mt-2">{bonusError}</p>}
+            <div className="flex gap-3 mt-4">
+              <button onClick={handleAddBonus} disabled={!bonusUserId || bonusPercent === '' || addBonusUser.isPending}
+                className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                {addBonusUser.isPending ? 'Adding...' : 'Add'}
+              </button>
+              <button onClick={() => setBonusOpen(false)}
+                className="border border-gray-300 px-4 py-2 rounded text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+            </div>
           </div>
         </div>
       )}

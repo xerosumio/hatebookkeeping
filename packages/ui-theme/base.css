@@ -1,0 +1,74 @@
+:root {
+  --shadow-sm:
+    rgba(15, 15, 15, 0.04) 0px 0px 0px 1px, rgba(15, 15, 15, 0.03) 0px 3px 6px;
+  --shadow:
+    rgba(15, 15, 15, 0.04) 0px 0px 0px 1px, rgba(15, 15, 15, 0.03) 0px 3px 6px,
+    rgba(15, 15, 15, 0.06) 0px 9px 24px;
+  --ease-out-nd: cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --shadow-sm:
+      rgba(0, 0, 0, 0.3) 0px 0px 0px 1px, rgba(0, 0, 0, 0.4) 0px 3px 6px;
+    --shadow:
+      rgba(0, 0, 0, 0.3) 0px 0px 0px 1px, rgba(0, 0, 0, 0.4) 0px 3px 6px,
+      rgba(0, 0, 0, 0.5) 0px 9px 24px;
+  }
+}
+
+:root[data-theme='dark'] {
+  --shadow-sm:
+    rgba(0, 0, 0, 0.3) 0px 0px 0px 1px, rgba(0, 0, 0, 0.4) 0px 3px 6px;
+  --shadow:
+    rgba(0, 0, 0, 0.3) 0px 0px 0px 1px, rgba(0, 0, 0, 0.4) 0px 3px 6px,
+    rgba(0, 0, 0, 0.5) 0px 9px 24px;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-hair);
+    scrollbar-color: var(--color-hair-lit) transparent;
+    scrollbar-width: thin;
+  }
+
+  ::selection {
+    background: var(--color-signal);
+    color: #fff;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-hair-lit);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-ink-ghost);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-human);
+    outline-offset: 2px;
+  }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

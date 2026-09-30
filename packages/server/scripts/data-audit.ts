@@ -4,14 +4,14 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-config({ path: path.resolve(scriptDir, '../.env') });
+config({ path: path.resolve(scriptDir, '../../../.env') });
 
-import { Transaction } from './models/Transaction.js';
-import { Invoice } from './models/Invoice.js';
-import { Receipt } from './models/Receipt.js';
-import { Fund } from './models/Fund.js';
-import { Quotation } from './models/Quotation.js';
-import { getBalances } from './services/airwallex.js';
+import { Transaction } from '../src/models/Transaction.js';
+import { Invoice } from '../src/models/Invoice.js';
+import { Receipt } from '../src/models/Receipt.js';
+import { Fund } from '../src/models/Fund.js';
+import { Quotation } from '../src/models/Quotation.js';
+import { getBalances } from '../src/services/airwallex.js';
 
 let issues = 0;
 

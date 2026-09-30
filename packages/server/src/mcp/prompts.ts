@@ -3,30 +3,6 @@ import { z } from 'zod';
 
 export function registerPrompts(server: McpServer) {
 
-  server.prompt('monthly-close', 'Walk through the monthly close process for an entity', {
-    entity: z.string().describe('Entity code (e.g. "ax" or "nt")'),
-    year: z.string().describe('Year (e.g. "2026")'),
-    month: z.string().describe('Month number (e.g. "5")'),
-  }, async ({ entity, year, month }) => ({
-    messages: [{
-      role: 'user',
-      content: {
-        type: 'text',
-        text: `Please execute the monthly close workflow for entity "${entity}", ${year}-${month}:
-
-1. Call preview_monthly_close to compute the preview
-2. Review the numbers — show me income, expenses, and net profit/loss
-3. Call submit_monthly_close to submit for approval
-4. If this is a profit month, call get_distribution_options to see how profit can be distributed
-5. Walk me through each step before proceeding
-
-Entity: ${entity}
-Year: ${year}
-Month: ${month}`,
-      },
-    }],
-  }));
-
   server.prompt('new-client-onboarding', 'Set up a new client with recurring billing', {
     clientName: z.string().describe('Client name'),
     entity: z.string().describe('Entity code'),
@@ -117,7 +93,7 @@ Amount: ${amount} (display currency, multiply by 100 for API)`,
    - entity: (from step 1)
    - items: [{payee: (ID), description: "${description}", amount: ${amount} * 100, category: "${category}"}]
 4. Show me the created request for review
-5. Ask if I want to approve it (requires admin)
+5. Ask if I want to approve it (only if this user is allowed to approve)
 
 Amount: ${amount} (display currency, multiply by 100 for API)`,
       },

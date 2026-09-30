@@ -150,11 +150,11 @@ export function registerTools(server: McpServer, api: ApiRequestFn = defaultApiR
     try { return ok(await api('PATCH', `/quotations/${id}/status`, { status })); } catch (e) { return fail(e); }
   });
 
-  server.tool('approve_quotation', 'Approve a pending quotation (admin)', { id: ReqStr }, async ({ id }) => {
+  server.tool('approve_quotation', 'Approve a pending quotation when this user is allowed to approve', { id: ReqStr }, async ({ id }) => {
     try { return ok(await api('PATCH', `/quotations/${id}/approve`)); } catch (e) { return fail(e); }
   });
 
-  server.tool('reject_quotation', 'Reject a pending quotation (admin)', {
+  server.tool('reject_quotation', 'Reject a pending quotation when this user is allowed to approve', {
     id: ReqStr, reason: OptStr,
   }, async ({ id, reason }) => {
     try { return ok(await api('PATCH', `/quotations/${id}/reject`, reason ? { reason } : undefined)); } catch (e) { return fail(e); }
@@ -365,7 +365,8 @@ export function registerTools(server: McpServer, api: ApiRequestFn = defaultApiR
   server.tool('create_payment_request', 'Create a new expense approval request', {
     entity: OptStr, description: OptStr,
     items: z.string().describe('JSON array of {payee, description, amount (cents int), category, recipient?, disbursementType? ("bank"|"liability_offset"), shareholderId?}'),
-    sourceBankAccount: OptStr, attachments: z.string().optional().describe('JSON array of attachment URLs'),
+    sourceBankAccount: OptStr, dueDate: OptStr.describe('YYYY-MM-DD. Month plan uses this date.'),
+    attachments: z.string().optional().describe('JSON array of attachment URLs'),
   }, async ({ items, attachments, ...rest }) => {
     try {
       const body: Record<string, unknown> = { ...rest, items: JSON.parse(items) };
@@ -374,10 +375,11 @@ export function registerTools(server: McpServer, api: ApiRequestFn = defaultApiR
     } catch (e) { return fail(e); }
   });
 
-  server.tool('update_payment_request', 'Update a payment request (partial update)', {
+  server.tool('update_payment_request', 'Update a payment request, including an executed one. Editing an executed request rewrites its expense transactions, fund balance, and liability offsets, and keeps the original execution date.', {
     id: ReqStr, description: OptStr,
     items: z.string().optional().describe('JSON array of {payee, description, amount (cents int), category, recipient?, disbursementType? ("bank"|"liability_offset"), shareholderId?}'),
-    sourceBankAccount: OptStr, attachments: z.string().optional().describe('JSON array of attachment URLs'),
+    sourceBankAccount: OptStr, dueDate: OptStr.describe('YYYY-MM-DD. Month plan uses this date.'),
+    attachments: z.string().optional().describe('JSON array of attachment URLs'),
   }, async ({ id, items, attachments, ...rest }) => {
     try {
       const body: Record<string, unknown> = { ...rest };
@@ -391,11 +393,11 @@ export function registerTools(server: McpServer, api: ApiRequestFn = defaultApiR
     try { return ok(await api('DELETE', `/payment-requests/${id}`)); } catch (e) { return fail(e); }
   });
 
-  server.tool('approve_payment_request', 'Approve a payment request (admin)', { id: ReqStr }, async ({ id }) => {
+  server.tool('approve_payment_request', 'Approve a payment request when this user is allowed to approve', { id: ReqStr }, async ({ id }) => {
     try { return ok(await api('PATCH', `/payment-requests/${id}/approve`)); } catch (e) { return fail(e); }
   });
 
-  server.tool('reject_payment_request', 'Reject a payment request (admin)', {
+  server.tool('reject_payment_request', 'Reject a payment request when this user is allowed to approve', {
     id: ReqStr, reason: ReqStr.describe('Reason for rejection (required)'),
   }, async ({ id, reason }) => {
     try { return ok(await api('PATCH', `/payment-requests/${id}/reject`, { reason })); } catch (e) { return fail(e); }
@@ -524,11 +526,39 @@ export function registerTools(server: McpServer, api: ApiRequestFn = defaultApiR
     try { return ok(await api('GET', `/shareholders/${id}/history`)); } catch (e) { return fail(e); }
   });
 
-  server.tool('create_shareholder', 'Create a new shareholder (admin)', {
-    name: ReqStr, user: ReqStr.describe('User ID to link this shareholder to'),
-    sharePercent: z.number().min(0).max(100),
+  server.tool('create_shareholder', 'Add an active user as a shareholder at 0%. Move ownership with transfer_shares (admin)', {
+    user: ReqStr.describe('User ID to link this shareholder to'),
   }, async (args) => {
     try { return ok(await api('POST', '/shareholders', args)); } catch (e) { return fail(e); }
+  });
+
+  server.tool('remove_shareholder', 'Remove a shareholder after their share is 0% (admin)', {
+    id: ReqStr,
+  }, async ({ id }) => {
+    try { return ok(await api('DELETE', `/shareholders/${id}`)); } catch (e) { return fail(e); }
+  });
+
+  server.tool('list_share_bonus_users', 'List share bonus users and their bonus percents', {}, async () => {
+    try { return ok(await api('GET', '/shareholders/bonus')); } catch (e) { return fail(e); }
+  });
+
+  server.tool('add_share_bonus_user', 'Add a share bonus user with a bonus percent (admin)', {
+    user: ReqStr.describe('User ID'),
+    bonusPercent: z.number().min(0).max(100),
+  }, async (args) => {
+    try { return ok(await api('POST', '/shareholders/bonus', args)); } catch (e) { return fail(e); }
+  });
+
+  server.tool('update_share_bonus_user', 'Change a share bonus user percent (admin)', {
+    id: ReqStr, bonusPercent: z.number().min(0).max(100),
+  }, async ({ id, bonusPercent }) => {
+    try { return ok(await api('PUT', `/shareholders/bonus/${id}`, { bonusPercent })); } catch (e) { return fail(e); }
+  });
+
+  server.tool('remove_share_bonus_user', 'Remove a share bonus user (admin)', {
+    id: ReqStr,
+  }, async ({ id }) => {
+    try { return ok(await api('DELETE', `/shareholders/bonus/${id}`)); } catch (e) { return fail(e); }
   });
 
   server.tool('update_shareholder', 'Update shareholder info (admin)', {
@@ -579,84 +609,6 @@ export function registerTools(server: McpServer, api: ApiRequestFn = defaultApiR
   });
 
   // ──────────────────────────────────────────
-  // Monthly Close
-  // ──────────────────────────────────────────
-
-  server.tool('list_monthly_closes', 'List monthly close records', { entity: OptStr }, async (args) => {
-    try { return ok(await api('GET', '/monthly-close', undefined, args)); } catch (e) { return fail(e); }
-  });
-
-  server.tool('get_monthly_close', 'Get or preview a monthly close', {
-    entity: ReqStr, year: z.number(), month: z.number(),
-  }, async ({ entity, year, month }) => {
-    try { return ok(await api('GET', `/monthly-close/${entity}/${year}/${month}`)); } catch (e) { return fail(e); }
-  });
-
-  server.tool('get_monthly_close_summary', 'Get monthly close group summary across entities', {
-    year: z.number(), month: z.number().optional(),
-  }, async ({ year, month }) => {
-    try {
-      const path = month != null ? `/monthly-close/summary/${year}/${month}` : `/monthly-close/summary/${year}`;
-      return ok(await api('GET', path));
-    } catch (e) { return fail(e); }
-  });
-
-  server.tool('preview_monthly_close', 'Recompute monthly close preview', {
-    entity: ReqStr, year: z.number(), month: z.number(),
-  }, async ({ entity, year, month }) => {
-    try { return ok(await api('POST', `/monthly-close/${entity}/${year}/${month}/preview`)); } catch (e) { return fail(e); }
-  });
-
-  server.tool('submit_monthly_close', 'Submit monthly close for approval (admin)', {
-    entity: ReqStr, year: z.number(), month: z.number(), notes: OptStr,
-  }, async ({ entity, year, month, notes }) => {
-    try { return ok(await api('POST', `/monthly-close/${entity}/${year}/${month}/submit`, { notes })); } catch (e) { return fail(e); }
-  });
-
-  server.tool('approve_monthly_close', 'Approve a pending monthly close (admin)', {
-    entity: ReqStr, year: z.number(), month: z.number(),
-  }, async ({ entity, year, month }) => {
-    try { return ok(await api('PATCH', `/monthly-close/${entity}/${year}/${month}/approve`)); } catch (e) { return fail(e); }
-  });
-
-  server.tool('reject_monthly_close', 'Reject a pending monthly close (admin)', {
-    entity: ReqStr, year: z.number(), month: z.number(),
-    reason: ReqStr.describe('Reason for rejection'),
-  }, async ({ entity, year, month, reason }) => {
-    try { return ok(await api('PATCH', `/monthly-close/${entity}/${year}/${month}/reject`, { reason })); } catch (e) { return fail(e); }
-  });
-
-  server.tool('notify_monthly_close', 'Send monthly close notification emails', {
-    entity: ReqStr, year: z.number(), month: z.number(),
-    emails: z.array(z.string()).describe('Array of email addresses'),
-  }, async ({ entity, year, month, emails }) => {
-    try { return ok(await api('POST', `/monthly-close/${entity}/${year}/${month}/notify`, { emails })); } catch (e) { return fail(e); }
-  });
-
-  server.tool('get_distribution_options', 'Get profit distribution options for monthly close', {
-    entity: ReqStr, year: z.number(), month: z.number(),
-  }, async ({ entity, year, month }) => {
-    try { return ok(await api('GET', `/monthly-close/${entity}/${year}/${month}/distribution-options`)); } catch (e) { return fail(e); }
-  });
-
-  server.tool('finalize_monthly_close', 'Finalize an approved monthly close (admin)', {
-    entity: ReqStr, year: z.number(), month: z.number(), notes: OptStr,
-    distributionMethods: z.string().optional().describe('JSON array of {shareholder (ID), method ("cash" or "offset_liability")}'),
-  }, async ({ entity, year, month, notes, distributionMethods }) => {
-    try {
-      const body: Record<string, unknown> = { notes };
-      if (distributionMethods) body.distributionMethods = JSON.parse(distributionMethods);
-      return ok(await api('POST', `/monthly-close/${entity}/${year}/${month}/finalize`, body));
-    } catch (e) { return fail(e); }
-  });
-
-  server.tool('create_collection_requests', 'Create collection requests after a loss month', {
-    entity: ReqStr, year: z.number(), month: z.number(),
-  }, async ({ entity, year, month }) => {
-    try { return ok(await api('POST', `/monthly-close/${entity}/${year}/${month}/create-collection-requests`)); } catch (e) { return fail(e); }
-  });
-
-  // ──────────────────────────────────────────
   // Funds
   // ──────────────────────────────────────────
 
@@ -698,13 +650,13 @@ export function registerTools(server: McpServer, api: ApiRequestFn = defaultApiR
   // Reports
   // ──────────────────────────────────────────
 
-  server.tool('get_cash_flow', 'Get monthly cash flow report', {
-    year: z.string().optional(), month: z.string().optional(), entity: OptStr,
+  server.tool('get_cash_flow', 'Year of monthly P&L (accounting date) plus actual cash in/out (bank date). Currency conversion excluded from P&L. Non-cash expenses (empty bankAccount) excluded from cash.', {
+    year: z.string().optional(), entity: OptStr,
   }, async (args) => {
     try { return ok(await api('GET', '/reports/cash-flow', undefined, args)); } catch (e) { return fail(e); }
   });
 
-  server.tool('get_income_statement', 'Get income statement by category', {
+  server.tool('get_income_statement', 'P&L by category using accounting date (Hong Kong calendar days). Excludes Currency Conversion only.', {
     startDate: OptStr, endDate: OptStr, entity: OptStr,
   }, async (args) => {
     try { return ok(await api('GET', '/reports/income-statement', undefined, args)); } catch (e) { return fail(e); }
@@ -730,14 +682,21 @@ export function registerTools(server: McpServer, api: ApiRequestFn = defaultApiR
     try { return ok(await api('GET', '/reports/accounts-payable', undefined, args)); } catch (e) { return fail(e); }
   });
 
-  server.tool('get_balance_sheet', 'Get balance sheet snapshot', { entity: OptStr }, async (args) => {
+  server.tool('get_balance_sheet', 'Live snapshot: operating cash (bank+petty minus earmarked reserves), AR, AP.', { entity: OptStr }, async (args) => {
     try { return ok(await api('GET', '/reports/balance-sheet', undefined, args)); } catch (e) { return fail(e); }
   });
 
-  server.tool('get_monthly_summary', 'Get monthly summary with opening/closing positions', {
+  server.tool('get_monthly_summary', 'Live month figures: opening operating cash, P&L, cash flow, available cash.', {
     year: z.string(), month: z.string(), entity: OptStr,
   }, async (args) => {
     try { return ok(await api('GET', '/reports/monthly-summary', undefined, args)); } catch (e) { return fail(e); }
+  });
+
+  server.tool('get_month_plan', 'Month plan by invoice date (in) and payment-request due date (out). Requests with no due date use the day they were created. Pass startDate and endDate (YYYY-MM-DD, both ends included) for a year or custom range, or year and month for one calendar month. Older unpaid items stay in carryover. Does not use payment date.', {
+    year: z.string().optional(), month: z.string().optional(),
+    startDate: OptStr, endDate: OptStr, entity: OptStr,
+  }, async (args) => {
+    try { return ok(await api('GET', '/reports/month-plan', undefined, args)); } catch (e) { return fail(e); }
   });
 
   server.tool('get_recurring_overview', 'Get recurring items overview and monthly estimates', {}, async () => {

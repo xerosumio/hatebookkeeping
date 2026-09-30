@@ -36,6 +36,7 @@ export interface IPaymentRequest extends Document {
   approvals: IApprovalEntry[];
   rejectionReason?: string;
   executedAt?: Date;
+  dueDate?: Date;
   bankReference?: string;
   sourceReimbursement?: mongoose.Types.ObjectId;
   attachments: string[];
@@ -94,6 +95,7 @@ const paymentRequestSchema = new Schema<IPaymentRequest>(
     }],
     rejectionReason: { type: String },
     executedAt: { type: Date },
+    dueDate: { type: Date },
     bankReference: { type: String },
     sourceReimbursement: { type: Schema.Types.ObjectId, ref: 'Reimbursement' },
     attachments: [{ type: String }],
@@ -104,5 +106,6 @@ const paymentRequestSchema = new Schema<IPaymentRequest>(
 );
 
 paymentRequestSchema.index({ status: 1 });
+paymentRequestSchema.index({ dueDate: 1 });
 
 export const PaymentRequest = mongoose.model<IPaymentRequest>('PaymentRequest', paymentRequestSchema);

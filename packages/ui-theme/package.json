@@ -1,0 +1,17 @@
+{
+  "name": "@naton/ui-theme",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.css",
+    "./theme": "./theme.css",
+    "./utilities": "./utilities.css"
+  },
+  "files": ["*.css"],
+  "dependencies": {
+    "@fontsource/ibm-plex-sans": "^5.2.8",
+    "@fontsource/martian-mono": "^5.2.8",
+    "@fontsource/newsreader": "^5.2.8"
+  }
+}

@@ -2,16 +2,29 @@
   "name": "hatebookkeeping",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
+  "description": "Finance OS for Axilogy and Naton",
+  "engines": {
+    "node": ">=22"
+  },
   "workspaces": [
-    "frontend",
-    "backend"
+    "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev -w backend\" \"npm run dev -w frontend\"",
-    "build:frontend": "npm run build -w frontend",
-    "build:backend": "npm run build -w backend"
+    "build": "npm run build --workspace @hbk/shared && npm run build --workspace @naton/ui && npm run build --workspace @hbk/server && npm run build --workspace @hbk/web",
+    "build:shared": "npm run build --workspace @hbk/shared && npm run build --workspace @naton/ui",
+    "dev": "npm run build:shared && concurrently -n shared,ui,server,web -c blue,cyan,green,magenta \"npm:dev:shared\" \"npm:dev:ui\" \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:shared": "npm run dev --workspace @hbk/shared",
+    "dev:ui": "npm run dev --workspace @naton/ui",
+    "dev:server": "npm run dev --workspace @hbk/server",
+    "dev:web": "npm run dev --workspace @hbk/web",
+    "typecheck": "npm run build:shared && tsc --noEmit -p packages/web",
+    "seed": "npm run seed --workspace @hbk/server",
+    "audit:data": "npm run audit:data --workspace @hbk/server"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "@types/node": "^22.15.3",
+    "concurrently": "^10.0.4",
+    "typescript": "~5.9.3"
   }
 }

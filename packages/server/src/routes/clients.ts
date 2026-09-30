@@ -2,10 +2,12 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { Client } from '../models/Client.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { requirePage } from '../access/policy.js';
 import { AppError } from '../middleware/errorHandler.js';
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requirePage('clients'));
 
 const clientSchema = z.object({
   name: z.string().min(1),

@@ -1,5 +1,4 @@
 import mongoose from 'mongoose';
-import bcrypt from 'bcrypt';
 import { User } from './models/User.js';
 import { Client } from './models/Client.js';
 import { Quotation } from './models/Quotation.js';
@@ -109,30 +108,28 @@ async function seed() {
   });
   console.log('Created global settings (AWATO Group)');
 
-  // ── Users (5 shareholders) ──
-  const hash = await bcrypt.hash('demo123', 12);
-
+  // ── Users (5 shareholders) — they sign in via Authentik with the same email ──
   const william = await User.create({
-    email: 'william@awato.group', passwordHash: hash, name: 'William',
-    role: 'admin', active: true, mustChangePassword: true,
+    email: 'william@awato.group', name: 'William',
+    role: 'admin', active: true,
   });
   const andy = await User.create({
-    email: 'andy@awato.group', passwordHash: hash, name: 'Andy',
-    role: 'admin', active: true, mustChangePassword: true,
+    email: 'andy@awato.group', name: 'Andy',
+    role: 'admin', active: true,
   });
   const thomas = await User.create({
-    email: 'thomas@awato.group', passwordHash: hash, name: 'Thomas',
-    role: 'admin', active: true, mustChangePassword: true,
+    email: 'thomas@awato.group', name: 'Thomas',
+    role: 'admin', active: true,
   });
   const kelly = await User.create({
-    email: 'kelly@awato.group', passwordHash: hash, name: 'Kelly',
-    role: 'user', active: true, mustChangePassword: true,
+    email: 'kelly@awato.group', name: 'Kelly',
+    role: 'user', active: true,
   });
   const tristan = await User.create({
-    email: 'tristan@awato.group', passwordHash: hash, name: 'Tristan',
-    role: 'user', active: true, mustChangePassword: true,
+    email: 'tristan@awato.group', name: 'Tristan',
+    role: 'user', active: true,
   });
-  console.log('Created 5 users (all passwords: demo123)');
+  console.log('Created 5 users (sign in with Authentik using the same emails)');
 
   // ── Shareholders ──
   const shareholderData = [

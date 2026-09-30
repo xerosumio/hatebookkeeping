@@ -1,9 +1,11 @@
 import { Router } from 'express';
-import bcrypt from 'bcrypt';
 import { z } from 'zod';
 import { User } from '../models/User.js';
 import { authMiddleware, roleGuard, AuthRequest } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { USER_PAGE_IDS } from '@hbk/shared';
+import { resolvePolicy } from '../access/policy.js';
+import { getSettings } from '../models/Settings.js';
 
 const router = Router();
 
@@ -14,14 +16,50 @@ const updateUserSchema = z.object({
   email: z.string().email().optional(),
   role: z.enum(['admin', 'user']).optional(),
   active: z.boolean().optional(),
-  password: z.string().min(8).optional(),
   bankName: z.string().optional(),
   bankAccountNumber: z.string().optional(),
   fpsPhone: z.string().optional(),
   signatureUrl: z.string().optional(),
 });
 
-// Any authenticated user can list users (needed for recipient picker)
+const accessSchema = z.object({
+  pages: z.array(z.enum(USER_PAGE_IDS as unknown as [string, ...string[]])),
+  seeAllReimbursements: z.boolean(),
+  approve: z.boolean(),
+  adjustFund: z.boolean(),
+  approverIds: z.array(z.string()),
+});
+
+router.get('/access', roleGuard('admin'), async (_req, res, next) => {
+  try {
+    res.json(await resolvePolicy());
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put('/access', roleGuard('admin'), async (req, res, next) => {
+  try {
+    const data = accessSchema.parse(req.body);
+    const approverIds = [...new Set(data.approverIds)];
+    const approvers = await User.find({ _id: { $in: approverIds }, active: true }).select('_id');
+    if (approvers.length !== approverIds.length) {
+      throw new AppError(400, 'Each approver must be an active user');
+    }
+    const settings = await getSettings();
+    settings.userAccessConfigured = true;
+    settings.userPages = data.pages;
+    settings.userSeeAllReimbursements = data.seeAllReimbursements;
+    settings.userCanApprove = data.approve;
+    settings.userCanAdjustFund = data.adjustFund;
+    settings.approverIds = approvers.map((user) => user._id);
+    await settings.save();
+    res.json(await resolvePolicy());
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/', async (_req, res, next) => {
   try {
     const users = await User.find({}, '-passwordHash').sort({ createdAt: -1 });
@@ -31,7 +69,6 @@ router.get('/', async (_req, res, next) => {
   }
 });
 
-// Only admins can modify users
 router.put('/:id', roleGuard('admin'), async (req: AuthRequest, res, next) => {
   try {
     const data = updateUserSchema.parse(req.body);
@@ -50,13 +87,10 @@ router.put('/:id', roleGuard('admin'), async (req: AuthRequest, res, next) => {
     if (data.bankAccountNumber !== undefined) user.bankAccountNumber = data.bankAccountNumber;
     if (data.fpsPhone !== undefined) user.fpsPhone = data.fpsPhone;
     if (data.signatureUrl !== undefined) user.signatureUrl = data.signatureUrl;
-    if (data.password) {
-      user.passwordHash = await bcrypt.hash(data.password, 12);
-    }
 
     await user.save();
     const result = user.toObject();
-    delete (result as any).passwordHash;
+    delete (result as { passwordHash?: string }).passwordHash;
     res.json(result);
   } catch (error) {
     next(error);

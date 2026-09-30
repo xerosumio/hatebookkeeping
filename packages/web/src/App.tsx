@@ -1,9 +1,9 @@
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import AppShell from './components/AppShell';
+import AppLayout from './components/AppLayout';
 import Login from './pages/Login';
-import ChangePassword from './pages/ChangePassword';
+import AuthCallbackPage from './pages/AuthCallback';
 import Dashboard from './pages/Dashboard';
 import ClientList from './pages/ClientList';
 import ClientForm from './pages/ClientForm';
@@ -27,9 +27,6 @@ import ReimbursementDetail from './pages/ReimbursementDetail';
 import RecurringList from './pages/RecurringList';
 import ShareholderList from './pages/ShareholderList';
 import ShareholderDetail from './pages/ShareholderDetail';
-import MonthlyCloseList from './pages/MonthlyCloseList';
-import MonthlyCloseDetail from './pages/MonthlyCloseDetail';
-import MonthlyCloseSummary from './pages/MonthlyCloseSummary';
 import Reports from './pages/Reports';
 import UserList from './pages/UserList';
 import FundList from './pages/FundList';
@@ -46,7 +43,14 @@ const queryClient = new QueryClient({
 });
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading, token } = useAuth();
+  if (token && isLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="h-3 w-40 animate-pulse rounded" style={{ background: 'var(--color-surface-3)' }} />
+      </div>
+    );
+  }
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
@@ -55,14 +59,14 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <HashRouter>
+        <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
-            <Route path="/change-password" element={<ChangePassword />} />
+            <Route path="/auth/callback" element={<AuthCallbackPage />} />
             <Route
               element={
                 <RequireAuth>
-                  <AppShell />
+                  <AppLayout />
                 </RequireAuth>
               }
             >
@@ -94,9 +98,6 @@ export default function App() {
               <Route path="recurring" element={<RecurringList />} />
               <Route path="shareholders" element={<ShareholderList />} />
               <Route path="shareholders/:id" element={<ShareholderDetail />} />
-              <Route path="monthly-close" element={<MonthlyCloseList />} />
-              <Route path="monthly-close/summary/:year" element={<MonthlyCloseSummary />} />
-              <Route path="monthly-close/:entity/:year/:month" element={<MonthlyCloseDetail />} />
               <Route path="funds" element={<FundList />} />
               <Route path="funds/:id" element={<FundDetail />} />
               <Route path="reports" element={<Reports />} />
@@ -107,7 +108,7 @@ export default function App() {
               <Route path="agent-guide" element={<AgentGuide />} />
             </Route>
           </Routes>
-        </HashRouter>
+        </BrowserRouter>
       </AuthProvider>
     </QueryClientProvider>
   );

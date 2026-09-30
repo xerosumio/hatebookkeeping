@@ -7,14 +7,17 @@ import { User } from '../models/User.js';
 import { getNextSequence } from '../models/Counter.js';
 import { getSettings } from '../models/Settings.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { requirePage } from '../access/policy.js';
 import { Entity } from '../models/Entity.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { sendEmail, buildRecurringReminderEmailHtml, buildPaymentRequestEmailHtml, getSubjectForRequest } from '../utils/email.js';
 import { env } from '../config/env.js';
 import { formatMoney } from '../utils/pdf/formatMoney.js';
+import { hkInstant, hkTodayYmd, parseYmd } from '../utils/hkDate.js';
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requirePage('recurring'));
 
 const recurringSchema = z.object({
   name: z.string().min(1),
@@ -45,6 +48,12 @@ function formatBankAccountDetails(ba: { name?: string; bankName?: string; accoun
   if (ba.bankName) lines.push(`Bank name: ${ba.bankName}`);
   if (ba.location) lines.push(`Location: ${ba.location}`);
   return lines.join('\n');
+}
+
+function recurringExpenseDueDate(dueDay: number): Date {
+  const { year, month } = parseYmd(hkTodayYmd());
+  const day = Math.min(28, Math.max(1, dueDay || 1));
+  return hkInstant(year, month, day);
 }
 
 function computeDueDate(paymentTerms: string): Date {
@@ -278,7 +287,7 @@ router.post('/generate', async (req: AuthRequest, res, next) => {
         const { invoice, invoiceNumber, clientName } = await generateInvoiceForItem(item, req.user!._id);
 
         if (adminEmails.length > 0) {
-          const detailUrl = `${env.frontendUrl}/#/invoices/${invoice._id}`;
+          const detailUrl = `${env.frontendUrl}/invoices/${invoice._id}`;
           const html = buildRecurringReminderEmailHtml({
             companyName,
             itemName: item.name,
@@ -319,6 +328,7 @@ router.post('/generate', async (req: AuthRequest, res, next) => {
           }],
           totalAmount: item.amount,
           sourceBankAccount: '',
+          dueDate: recurringExpenseDueDate(item.dueDay),
           status: 'pending',
           createdBy: req.user!._id,
           activityLog: [{
@@ -341,7 +351,7 @@ router.post('/generate', async (req: AuthRequest, res, next) => {
         await item.save();
 
         if (adminEmails.length > 0) {
-          const detailUrl = `${env.frontendUrl}/#/payment-requests/${paymentRequest._id}`;
+          const detailUrl = `${env.frontendUrl}/payment-requests/${paymentRequest._id}`;
           const html = buildRecurringReminderEmailHtml({
             companyName,
             itemName: item.name,
@@ -397,7 +407,7 @@ router.post('/:id/generate-invoice', async (req: AuthRequest, res, next) => {
     const adminEmails = admins.map((a) => a.email).filter(Boolean);
 
     if (adminEmails.length > 0) {
-      const detailUrl = `${env.frontendUrl}/#/invoices/${invoice._id}`;
+      const detailUrl = `${env.frontendUrl}/invoices/${invoice._id}`;
       const html = buildRecurringReminderEmailHtml({
         companyName,
         itemName: item.name,
@@ -451,6 +461,7 @@ router.post('/:id/generate-payment-request', async (req: AuthRequest, res, next)
       }],
       totalAmount: item.amount,
       sourceBankAccount: '',
+      dueDate: recurringExpenseDueDate(item.dueDay),
       status: 'pending',
       createdBy: req.user!._id,
       activityLog: [{
@@ -478,7 +489,7 @@ router.post('/:id/generate-payment-request', async (req: AuthRequest, res, next)
     const adminEmails = admins.map((a) => a.email).filter(Boolean);
 
     if (adminEmails.length > 0) {
-      const detailUrl = `${env.frontendUrl}/#/payment-requests/${paymentRequest._id}`;
+      const detailUrl = `${env.frontendUrl}/payment-requests/${paymentRequest._id}`;
       const html = buildRecurringReminderEmailHtml({
         companyName,
         itemName: item.name,

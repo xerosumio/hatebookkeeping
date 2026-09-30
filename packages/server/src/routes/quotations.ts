@@ -7,6 +7,7 @@ import { Entity } from '../models/Entity.js';
 import { User } from '../models/User.js';
 import { getNextSequence } from '../models/Counter.js';
 import { authMiddleware, roleGuard, AuthRequest } from '../middleware/auth.js';
+import { requireCanApprove, requirePage } from '../access/policy.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { QuotationPDF } from '../utils/pdf/QuotationPDF.js';
 import { getSettings, Settings } from '../models/Settings.js';
@@ -17,6 +18,7 @@ import { getRequiredApproverIds, hasFullApproval } from '../utils/dualApproval.j
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requirePage('quotations'));
 
 const lineItemSchema = z.object({
   description: z.string().min(1),
@@ -187,7 +189,7 @@ router.patch('/:id/status', async (req, res, next) => {
   }
 });
 
-router.patch('/:id/approve', roleGuard('admin'), async (req: AuthRequest, res, next) => {
+router.patch('/:id/approve', requireCanApprove(), async (req: AuthRequest, res, next) => {
   try {
     const quotation = await Quotation.findById(req.params.id);
     if (!quotation) throw new AppError(404, 'Quotation not found');
@@ -226,7 +228,7 @@ router.patch('/:id/approve', roleGuard('admin'), async (req: AuthRequest, res, n
     if (quotation.status === 'approved') {
       const settings = await Settings.findOne();
       const companyName = settings?.companyName || 'HateBookkeeping';
-      const detailUrl = `${env.frontendUrl}/#/quotations/${quotation._id}`;
+      const detailUrl = `${env.frontendUrl}/quotations/${quotation._id}`;
       const creator = await User.findById(quotation.createdBy, 'email name');
       const recipientEmails = [...new Set([
         ...(creator?.email ? [creator.email] : []),
@@ -261,7 +263,7 @@ router.patch('/:id/approve', roleGuard('admin'), async (req: AuthRequest, res, n
   }
 });
 
-router.patch('/:id/reject', roleGuard('admin'), async (req: AuthRequest, res, next) => {
+router.patch('/:id/reject', requireCanApprove(), async (req: AuthRequest, res, next) => {
   try {
     const { reason } = z.object({ reason: z.string().optional().default('') }).parse(req.body);
     const quotation = await Quotation.findById(req.params.id);
@@ -283,7 +285,7 @@ router.patch('/:id/reject', roleGuard('admin'), async (req: AuthRequest, res, ne
 
     const settings = await Settings.findOne();
     const companyName = settings?.companyName || 'HateBookkeeping';
-    const detailUrl = `${env.frontendUrl}/#/quotations/${quotation._id}`;
+    const detailUrl = `${env.frontendUrl}/quotations/${quotation._id}`;
     const creator = await User.findById(quotation.createdBy, 'email name');
     const recipientEmails = [...new Set([
       ...(creator?.email ? [creator.email] : []),
@@ -322,7 +324,7 @@ router.post('/:id/notify', roleGuard('admin', 'user'), async (req: AuthRequest, 
 
     const settings = await Settings.findOne();
     const companyName = settings?.companyName || 'HateBookkeeping';
-    const detailUrl = `${env.frontendUrl}/#/quotations/${quotation._id}`;
+    const detailUrl = `${env.frontendUrl}/quotations/${quotation._id}`;
 
     const html = buildStatusChangeEmailHtml({
       companyName,

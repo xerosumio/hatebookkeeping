@@ -2,10 +2,12 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { Payee } from '../models/Payee.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { requirePage } from '../access/policy.js';
 import { AppError } from '../middleware/errorHandler.js';
 
 const router = Router();
 router.use(authMiddleware);
+router.use(requirePage('payees'));
 
 const payeeSchema = z.object({
   name: z.string().min(1),

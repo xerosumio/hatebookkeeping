@@ -1,0 +1,57 @@
+name: Deploy web to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Require VITE_API_URL
+        run: |
+          if [ -z "${{ vars.VITE_API_URL }}" ]; then
+            echo "Set the VITE_API_URL repository variable to the Coolify origin (PUBLIC_URL)"
+            exit 1
+          fi
+      - run: npm run build --workspace @hbk/shared && npm run build --workspace @hbk/web
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          VITE_SUITE_NDOC_URL: ${{ vars.VITE_SUITE_NDOC_URL }}
+          VITE_SUITE_NDRIVE_URL: ${{ vars.VITE_SUITE_NDRIVE_URL }}
+          VITE_SUITE_KANBAN_URL: ${{ vars.VITE_SUITE_KANBAN_URL }}
+          VITE_SUITE_ORBIT_URL: ${{ vars.VITE_SUITE_ORBIT_URL }}
+          VITE_SUITE_HBK_URL: ${{ vars.VITE_SUITE_HBK_URL }}
+          VITE_SUITE_LOOM_URL: ${{ vars.VITE_SUITE_LOOM_URL }}
+          VITE_SUITE_MEMORY_URL: ${{ vars.VITE_SUITE_MEMORY_URL }}
+          VITE_SUITE_NOPS_URL: ${{ vars.VITE_SUITE_NOPS_URL }}
+          VITE_SUITE_FASTMAIL_URL: ${{ vars.VITE_SUITE_FASTMAIL_URL }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: packages/web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

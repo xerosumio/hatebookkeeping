@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { Stat, Head, Chip } from '@naton/ui';
 import { useCashFlow, useAccountsReceivable, useRecurringOverview, usePaymentRequests } from '../api/hooks';
 import { useAuth } from '../contexts/AuthContext';
 import { formatMoney, centsToDecimal, titleCase } from '../utils/money';
@@ -8,9 +9,9 @@ import type { Client } from '../types';
 
 const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-const statusColors: Record<string, string> = {
-  pending: 'bg-amber-100 text-amber-700',
-  approved: 'bg-blue-100 text-blue-700',
+const statusColors: Record<string, 'signal' | 'human'> = {
+  pending: 'signal',
+  approved: 'human',
 };
 
 export default function Dashboard() {
@@ -30,7 +31,7 @@ export default function Dashboard() {
     Expense: centsToDecimal(m.expense),
   })) || [];
 
-  const canApprove = user?.role === 'admin';
+  const canApprove = !!user?.access?.approve;
   const canExecute = user?.role === 'admin' || user?.role === 'user';
 
   const actionableItems = [
@@ -46,14 +47,14 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="font-serif text-2xl font-normal text-ink">Dashboard</h1>
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-500">Year</label>
+          <label className="font-mono text-[9px] tracked text-ink-ghost">Year</label>
           <select
             value={year}
             onChange={(e) => setYear(Number(e.target.value))}
-            className="border border-gray-300 rounded px-3 py-1.5 text-sm"
+            className="rounded-sm border border-hair bg-panel px-3 py-1.5 font-mono text-[10px] text-ink-dim"
           >
             {yearOptions.map((y) => (
               <option key={y} value={y}>{y}</option>
@@ -62,39 +63,34 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-4 gap-4 mb-8">
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="text-sm text-gray-500 mb-1">Net Income ({year})</div>
-          <div className={`text-xl font-bold font-mono ${(cashFlow?.totals?.net ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {cashFlow ? formatMoney(cashFlow.totals.net) : '—'}
-          </div>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="text-sm text-gray-500 mb-1">Accounts Receivable</div>
-          <div className="text-xl font-bold font-mono text-amber-600">
-            {ar ? formatMoney(ar.summary.totalDue) : '—'}
-          </div>
-          <div className="text-xs text-gray-400">{ar?.summary.count || 0} invoices outstanding</div>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="text-sm text-gray-500 mb-1">Monthly Recurring Net</div>
-          <div className={`text-xl font-bold font-mono ${(recurring?.summary?.monthlyNet ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {recurring ? formatMoney(recurring.summary.monthlyNet) : '—'}
-          </div>
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="text-sm text-gray-500 mb-1">Pending Actions</div>
-          <div className="text-xl font-bold">{totalPendingCount}</div>
-          {totalPendingCount > 0 && (
-            <Link to="/payment-requests" className="text-xs text-blue-600 hover:underline">View all</Link>
-          )}
-        </div>
+      <div className="mb-8 grid grid-cols-4 gap-4">
+        <Stat
+          n={cashFlow ? formatMoney(cashFlow.totals.net) : '—'}
+          label="Net income"
+          ink={(cashFlow?.totals?.net ?? 0) >= 0 ? 'var(--color-authored)' : 'var(--color-breach)'}
+          sub={cashFlow ? `Cash net ${formatMoney(cashFlow.totals.cashNet ?? 0)}` : undefined}
+        />
+        <Stat
+          n={ar ? formatMoney(ar.summary.totalDue) : '—'}
+          label="Accounts receivable"
+          ink="var(--color-signal)"
+          sub={`${ar?.summary.count || 0} invoices outstanding`}
+        />
+        <Stat
+          n={recurring ? formatMoney(recurring.summary.monthlyNet) : '—'}
+          label="Monthly recurring net"
+          ink={(recurring?.summary?.monthlyNet ?? 0) >= 0 ? 'var(--color-authored)' : 'var(--color-breach)'}
+        />
+        <Stat
+          n={totalPendingCount}
+          label="Pending actions"
+          sub={totalPendingCount > 0 ? 'View payment requests' : undefined}
+        />
       </div>
 
-      {/* Cash Flow Chart */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4 mb-8">
-        <h2 className="text-lg font-semibold mb-4">Cash Flow — {year}</h2>
+      <div className="mb-8 rounded-md border border-hair bg-panel p-4 lift">
+        <Head right={String(year)}>Income & expense</Head>
+        <p className="mb-4 font-mono text-[9px] text-ink-ghost">P&amp;L by accounting date. Currency conversion excluded.</p>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={chartData}>
             <XAxis dataKey="name" tick={{ fontSize: 12 }} />
@@ -107,45 +103,42 @@ export default function Dashboard() {
         </ResponsiveContainer>
       </div>
 
-      {/* Actionable Payment Requests */}
       {actionableItems.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-8">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold">Payment Requests Requiring Action</h2>
-            <Link to="/payment-requests" className="text-xs text-blue-600 hover:underline">View all</Link>
+        <div className="mb-8 rounded-md border border-hair bg-panel p-4 lift">
+          <div className="mb-3 flex items-center justify-between">
+            <Head>Payment requests requiring action</Head>
+            <Link to="/payment-requests" className="font-mono text-[9px] text-human hover:underline">View all</Link>
           </div>
-          <table className="w-full text-sm">
-            <thead className="border-b border-gray-200">
+          <table className="w-full font-mono text-[10px]">
+            <thead className="border-b border-hair">
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Number</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Description</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">Total</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Action</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Date</th>
+                <th className="px-4 py-3 text-left font-medium tracked text-ink-ghost">Number</th>
+                <th className="px-4 py-3 text-left font-medium tracked text-ink-ghost">Description</th>
+                <th className="px-4 py-3 text-right font-medium tracked text-ink-ghost">Total</th>
+                <th className="px-4 py-3 text-left font-medium tracked text-ink-ghost">Status</th>
+                <th className="px-4 py-3 text-left font-medium tracked text-ink-ghost">Action</th>
+                <th className="px-4 py-3 text-left font-medium tracked text-ink-ghost">Date</th>
               </tr>
             </thead>
             <tbody>
               {actionableItems.map((r) => (
-                <tr key={r._id} className="border-b border-gray-100">
+                <tr key={r._id} className="border-b border-hair/60">
                   <td className="px-4 py-3">
-                    <Link to={`/payment-requests/${r._id}`} className="text-blue-600 hover:underline font-medium">
+                    <Link to={`/payment-requests/${r._id}`} className="font-medium text-human hover:underline">
                       {r.requestNumber}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-gray-600 max-w-xs truncate">{r.description || '—'}</td>
-                  <td className="px-4 py-3 text-right font-mono tabular-nums">{formatMoney(r.totalAmount)}</td>
+                  <td className="max-w-xs truncate px-4 py-3 text-ink-dim">{r.description || '—'}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">{formatMoney(r.totalAmount)}</td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColors[r.status] || 'bg-gray-100 text-gray-600'}`}>
-                      {titleCase(r.status)}
-                    </span>
+                    <Chip tone={statusColors[r.status] ?? 'neutral'}>{titleCase(r.status)}</Chip>
                   </td>
                   <td className="px-4 py-3">
-                    <Link to={`/payment-requests/${r._id}`} className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded hover:bg-blue-100">
-                      {r.actionType}
+                    <Link to={`/payment-requests/${r._id}`}>
+                      <Chip tone="human">{r.actionType}</Chip>
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-gray-400 text-xs">{new Date(r.createdAt).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-[9px] text-ink-ghost">{new Date(r.createdAt).toLocaleDateString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -153,35 +146,32 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Outstanding Invoices */}
       {ar && ar.invoices.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h2 className="text-lg font-semibold mb-3">Outstanding Invoices</h2>
-          <table className="w-full text-sm">
-            <thead className="border-b border-gray-200">
+        <div className="rounded-md border border-hair bg-panel p-4 lift">
+          <Head>Outstanding invoices</Head>
+          <table className="mt-3 w-full font-mono text-[10px]">
+            <thead className="border-b border-hair">
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Invoice</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Client</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">Due</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
+                <th className="px-4 py-3 text-left font-medium tracked text-ink-ghost">Invoice</th>
+                <th className="px-4 py-3 text-left font-medium tracked text-ink-ghost">Client</th>
+                <th className="px-4 py-3 text-right font-medium tracked text-ink-ghost">Due</th>
+                <th className="px-4 py-3 text-left font-medium tracked text-ink-ghost">Status</th>
               </tr>
             </thead>
             <tbody>
               {ar.invoices.slice(0, 10).map((inv: any) => (
-                <tr key={inv._id} className="border-b border-gray-100">
+                <tr key={inv._id} className="border-b border-hair/60">
                   <td className="px-4 py-3">
-                    <Link to={`/invoices/${inv._id}`} className="text-blue-600 hover:underline">
+                    <Link to={`/invoices/${inv._id}`} className="text-human hover:underline">
                       {inv.invoiceNumber}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">
+                  <td className="px-4 py-3 text-ink-dim">
                     {typeof inv.client === 'object' ? (inv.client as Client).name : ''}
                   </td>
-                  <td className="px-4 py-3 text-right font-mono text-red-600">{formatMoney(inv.amountDue)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-breach">{formatMoney(inv.amountDue)}</td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      inv.status === 'partial' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
-                    }`}>{titleCase(inv.status)}</span>
+                    <Chip tone={inv.status === 'partial' ? 'signal' : 'breach'}>{titleCase(inv.status)}</Chip>
                   </td>
                 </tr>
               ))}
