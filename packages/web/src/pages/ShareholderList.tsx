@@ -550,8 +550,20 @@ export default function ShareholderList() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Percentage to Transfer</label>
-                <input type="number" step="0.01" value={transferPercent} onChange={(e) => setTransferPercent(e.target.value)}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm" placeholder="e.g. 5.00" autoFocus />
+                <div className="flex gap-2">
+                  <input type="number" step="0.01" value={transferPercent} onChange={(e) => setTransferPercent(e.target.value)}
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm" placeholder="e.g. 5.00" autoFocus />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const from = shareholders?.find((s) => s._id === transferModal.fromId);
+                      if (from) setTransferPercent(String(from.sharePercent));
+                    }}
+                    className="shrink-0 border border-gray-300 px-3 py-2 rounded text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Max
+                  </button>
+                </div>
                 {transferPercent && (
                   <div className="text-xs text-gray-500 mt-1">
                     Value: {formatMoney(Math.round(parseFloat(transferPercent) * valuePerPercent))}

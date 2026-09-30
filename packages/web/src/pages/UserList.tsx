@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import SignatureCanvas from 'react-signature-canvas';
 import { USER_PAGE_IDS, USER_PAGE_LABELS, type UserPageId } from '@hbk/shared';
-import { useUsers, useUpdateUser, useDeactivateUser, useUserAccess, useUpdateUserAccess, uploadFile } from '../api/hooks';
+import { useUsers, useUpdateUser, useDeactivateUser, useInviteUser, useDeleteUser, useUserAccess, useUpdateUserAccess, uploadFile } from '../api/hooks';
 import { useAuth } from '../contexts/AuthContext';
-import { Pencil, X, Check, Ban } from 'lucide-react';
+import { Pencil, X, Check, Ban, Trash2 } from 'lucide-react';
 
 interface EditFormState {
   name: string;
@@ -20,6 +20,12 @@ export default function UserList() {
   const { data: users, isLoading } = useUsers();
   const updateUser = useUpdateUser();
   const deactivateUser = useDeactivateUser();
+  const inviteUser = useInviteUser();
+  const deleteUser = useDeleteUser();
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteForm, setInviteForm] = useState({ name: '', email: '', role: 'user' });
+  const [inviteError, setInviteError] = useState('');
+  const [inviteNotice, setInviteNotice] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditFormState>({ name: '', email: '', role: '', bankName: '', bankAccountNumber: '', fpsPhone: '', signatureUrl: '' });
   const [editError, setEditError] = useState('');
@@ -60,6 +66,33 @@ export default function UserList() {
     }
   }
 
+  async function sendInvite() {
+    setInviteError('');
+    setInviteNotice('');
+    try {
+      const result = await inviteUser.mutateAsync(inviteForm);
+      setInviteOpen(false);
+      setInviteForm({ name: '', email: '', role: 'user' });
+      setInviteNotice(
+        result.email === 'sent'
+          ? `Invited ${result.user.name}. A sign-in link was emailed to them.`
+          : `Invited ${result.user.name}. The email was not sent, so tell them to sign in with Authentik using ${result.user.email}.`,
+      );
+    } catch (err: any) {
+      setInviteError(err?.response?.data?.error || 'Could not invite user');
+    }
+  }
+
+  async function removeUser(u: { _id: string; name: string }) {
+    if (!confirm(`Delete ${u.name}? This cannot be undone.`)) return;
+    setInviteNotice('');
+    try {
+      await deleteUser.mutateAsync(u._id);
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Could not delete user');
+    }
+  }
+
   async function toggleActive(u: { _id: string; active: boolean }) {
     if (u._id === currentUser?.id) return;
     if (u.active) {
@@ -72,10 +105,20 @@ export default function UserList() {
 
   return (
     <div className="max-w-4xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">Users</h1>
-        <p className="text-sm text-gray-500 mt-1">Users appear on first Authentik sign-in (matched by email).</p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Users</h1>
+          <p className="text-sm text-gray-500 mt-1">Invite someone by email, or they appear on first Authentik sign-in with that address.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => { setInviteOpen(true); setInviteError(''); }}
+          className="bg-gray-900 text-white text-sm px-3 py-1.5 rounded"
+        >
+          Invite
+        </button>
       </div>
+      {inviteNotice && <p className="text-sm text-green-700 mb-4">{inviteNotice}</p>}
 
       <AccessPolicy users={users || []} />
 
@@ -275,13 +318,22 @@ export default function UserList() {
                         <Pencil size={14} />
                       </button>
                       {!isSelf && (
-                        <button
-                          onClick={() => toggleActive(u)}
-                          className={`p-1.5 rounded ${u.active ? 'text-red-500 hover:bg-red-50' : 'text-green-500 hover:bg-green-50'}`}
-                          title={u.active ? 'Deactivate' : 'Reactivate'}
-                        >
-                          {u.active ? <Ban size={14} /> : <Check size={14} />}
-                        </button>
+                        <>
+                          <button
+                            onClick={() => toggleActive(u)}
+                            className={`p-1.5 rounded ${u.active ? 'text-red-500 hover:bg-red-50' : 'text-green-500 hover:bg-green-50'}`}
+                            title={u.active ? 'Deactivate' : 'Reactivate'}
+                          >
+                            {u.active ? <Ban size={14} /> : <Check size={14} />}
+                          </button>
+                          <button
+                            onClick={() => removeUser(u)}
+                            className="p-1.5 rounded text-red-500 hover:bg-red-50"
+                            title="Delete"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -295,6 +347,64 @@ export default function UserList() {
       <p className="text-xs text-gray-400 mt-4">
         The email configured for each user is used for sending approval notifications from the platform.
       </p>
+
+      {inviteOpen && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-96">
+            <h3 className="text-lg font-bold mb-1">Invite user</h3>
+            <p className="text-xs text-gray-500 mb-4">They sign in with Authentik using this email. The invite does not create an Authentik account.</p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Name</label>
+                <input
+                  type="text"
+                  value={inviteForm.name}
+                  onChange={(e) => setInviteForm({ ...inviteForm, name: e.target.value })}
+                  className="border border-gray-300 rounded px-3 py-2 text-sm w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={inviteForm.email}
+                  onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
+                  className="border border-gray-300 rounded px-3 py-2 text-sm w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Role</label>
+                <select
+                  value={inviteForm.role}
+                  onChange={(e) => setInviteForm({ ...inviteForm, role: e.target.value })}
+                  className="border border-gray-300 rounded px-3 py-2 text-sm w-full"
+                >
+                  <option value="user">User</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+            </div>
+            {inviteError && <p className="text-xs text-red-600 mt-2">{inviteError}</p>}
+            <div className="flex gap-3 mt-4">
+              <button
+                type="button"
+                onClick={sendInvite}
+                disabled={!inviteForm.name || !inviteForm.email || inviteUser.isPending}
+                className="bg-gray-900 text-white text-sm px-3 py-1.5 rounded disabled:opacity-50"
+              >
+                {inviteUser.isPending ? 'Inviting…' : 'Send invite'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setInviteOpen(false)}
+                className="border border-gray-300 px-3 py-1.5 rounded text-sm text-gray-600"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

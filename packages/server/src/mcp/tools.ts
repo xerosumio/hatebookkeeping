@@ -746,7 +746,7 @@ export function registerTools(server: McpServer, api: ApiRequestFn = defaultApiR
     try { return ok(await api('PUT', `/users/${id}`, body)); } catch (e) { return fail(e); }
   });
 
-  server.tool('delete_user', 'Deactivate a user (admin)', { id: ReqStr }, async ({ id }) => {
+  server.tool('delete_user', 'Permanently delete a user who has no bookkeeping history (admin). Use update_user with active false to deactivate someone who does.', { id: ReqStr }, async ({ id }) => {
     try { return ok(await api('DELETE', `/users/${id}`)); } catch (e) { return fail(e); }
   });
 

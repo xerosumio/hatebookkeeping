@@ -1,11 +1,26 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import mongoose from 'mongoose';
 import { User } from '../models/User.js';
+import { Invoice } from '../models/Invoice.js';
+import { Quotation } from '../models/Quotation.js';
+import { PaymentRequest } from '../models/PaymentRequest.js';
+import { Reimbursement } from '../models/Reimbursement.js';
+import { Receipt } from '../models/Receipt.js';
+import { Transaction } from '../models/Transaction.js';
+import { RecurringItem } from '../models/RecurringItem.js';
+import { Client } from '../models/Client.js';
+import { Payee } from '../models/Payee.js';
+import { FundTransfer } from '../models/FundTransfer.js';
+import { Shareholder } from '../models/Shareholder.js';
+import { ShareBonusUser } from '../models/ShareBonusUser.js';
 import { authMiddleware, roleGuard, AuthRequest } from '../middleware/auth.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { USER_PAGE_IDS } from '@hbk/shared';
 import { resolvePolicy } from '../access/policy.js';
 import { getSettings } from '../models/Settings.js';
+import { getConfig } from '../config/env.js';
+import { sendEmail } from '../utils/email.js';
 
 const router = Router();
 
@@ -60,6 +75,41 @@ router.put('/access', roleGuard('admin'), async (req, res, next) => {
   }
 });
 
+const inviteSchema = z.object({
+  name: z.string().min(1),
+  email: z.string().email(),
+  role: z.enum(['admin', 'user']),
+});
+
+router.post('/', roleGuard('admin'), async (req, res, next) => {
+  try {
+    const data = inviteSchema.parse(req.body);
+    const email = data.email.toLowerCase();
+    const existing = await User.findOne({ email });
+    if (existing) throw new AppError(409, 'Email already in use');
+
+    const user = await User.create({
+      name: data.name.trim(),
+      email,
+      role: data.role,
+      active: true,
+    });
+
+    const loginUrl = new URL('/login', getConfig().frontendUrl).toString();
+    const sent = await sendEmail({
+      to: email,
+      subject: 'Sign in to HateBookkeeping',
+      html: `<p>You have been invited to HateBookkeeping as ${data.name}.</p><p>Sign in with Authentik using this email address:</p><p><a href="${loginUrl}">${loginUrl}</a></p>`,
+    });
+
+    const result = user.toObject();
+    delete (result as { passwordHash?: string }).passwordHash;
+    res.status(201).json({ user: result, email: sent.status === 'skipped' ? 'skipped' : sent.status === 'failed' ? 'failed' : 'sent' });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.get('/', async (_req, res, next) => {
   try {
     const users = await User.find({}, '-passwordHash').sort({ createdAt: -1 });
@@ -97,20 +147,42 @@ router.put('/:id', roleGuard('admin'), async (req: AuthRequest, res, next) => {
   }
 });
 
+async function bookkeepingHistory(userId: mongoose.Types.ObjectId): Promise<boolean> {
+  const id = userId;
+  const counts = await Promise.all([
+    Invoice.countDocuments({ createdBy: id }),
+    Quotation.countDocuments({ $or: [{ createdBy: id }, { approvedBy: id }, { 'approvals.user': id }] }),
+    PaymentRequest.countDocuments({ $or: [{ createdBy: id }, { approvedBy: id }, { 'approvals.user': id }] }),
+    Reimbursement.countDocuments({ submittedBy: id }),
+    Receipt.countDocuments({ createdBy: id }),
+    Transaction.countDocuments({ createdBy: id }),
+    RecurringItem.countDocuments({ createdBy: id }),
+    Client.countDocuments({ createdBy: id }),
+    Payee.countDocuments({ createdBy: id }),
+    FundTransfer.countDocuments({ createdBy: id }),
+    Shareholder.countDocuments({ user: id }),
+    ShareBonusUser.countDocuments({ user: id }),
+  ]);
+  return counts.some((count) => count > 0);
+}
+
 router.delete('/:id', roleGuard('admin'), async (req: AuthRequest, res, next) => {
   try {
     if (req.params.id === req.user!._id.toString()) {
-      throw new AppError(400, 'Cannot deactivate yourself');
+      throw new AppError(400, 'Cannot delete yourself');
     }
 
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      { active: false },
-      { new: true, select: '-passwordHash' },
-    );
-
+    const user = await User.findById(req.params.id);
     if (!user) throw new AppError(404, 'User not found');
-    res.json(user);
+    if (await bookkeepingHistory(user._id)) {
+      throw new AppError(409, 'This person has bookkeeping history. Deactivate them instead.');
+    }
+
+    const settings = await getSettings();
+    settings.approverIds = (settings.approverIds || []).filter((approverId) => approverId.toString() !== user._id.toString());
+    await settings.save();
+    await user.deleteOne();
+    res.json({ message: 'User deleted' });
   } catch (error) {
     next(error);
   }
