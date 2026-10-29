@@ -149,11 +149,11 @@ export function closeBlockReason(input: {
   return null;
 }
 
-export function reopenBlockReason(paymentRequestStatus: string | null | undefined): string | null {
-  if (paymentRequestStatus === 'approved' || paymentRequestStatus === 'executed') {
-    return `The payout request is already ${paymentRequestStatus}. Reject or delete it before reopening`;
-  }
-  return null;
+export function reopenBlockReason(requests: Array<{ requestNumber: string; status: string }>): string | null {
+  const settled = requests.filter((request) => request.status === 'approved' || request.status === 'executed');
+  if (settled.length === 0) return null;
+  const list = settled.map((request) => `${request.requestNumber} (${request.status})`).join(', ');
+  return `Some payout requests are already approved or paid: ${list}. Reject or delete them before reopening`;
 }
 
 function toClosePeople(docs: Array<IShareholder | IShareBonusUser>): ClosePerson[] {
@@ -183,7 +183,9 @@ export async function findClose(entityId: string, year: number, month: number) {
   return MonthlyClose.findOne({ entity: entityId, year, month })
     .populate('closedBy', 'name')
     .populate('distributions.shareholder', 'name sharePercent')
-    .populate('paymentRequest', 'requestNumber status')
+    .populate('distributions.paymentRequest', 'requestNumber status')
+    .populate('bonusDistributions.paymentRequest', 'requestNumber status')
+    .populate('paymentRequests', 'requestNumber status')
     .populate('staffReserveFund', 'name')
     .populate('companyReserveFund', 'name')
     .populate('reserveHeldIn', 'name');
@@ -348,30 +350,37 @@ export async function closeMonth(input: {
     }
 
     if (hasPayouts && source) {
-      const requestNumber = await getNextSequence('pay');
-      const request = await PaymentRequest.create({
-        requestNumber,
-        entity: entity._id,
-        description: `${entity.code} ${label} month close payouts`,
-        items: plan.payouts.map((line) => ({
-          payee: line.payee,
-          description: line.kind === 'bonus'
-            ? `${label} staff bonus - ${line.name} (${line.percent}%)`
-            : `${label} shareholder distribution - ${line.name} (${line.percent}%)`,
-          amount: line.amount,
-          category: line.kind === 'bonus' ? STAFF_BONUS_CATEGORY : SHAREHOLDER_DISTRIBUTION_CATEGORY,
-          recipient: line.name,
-          disbursementType: 'bank',
-          ...(line.kind === 'shareholder' ? { shareholderId: line.personId } : {}),
-        })),
-        totalAmount: plan.payouts.reduce((sum, line) => sum + line.amount, 0),
-        sourceBankAccount: source.name,
-        status: 'pending',
-        dueDate: new Date(to.getTime() - 1),
-        createdBy: userId,
-        activityLog: [{ action: 'created', user: userId, timestamp: now, note: `Created by ${label} month close` }],
-      });
-      close.paymentRequest = request._id as mongoose.Types.ObjectId;
+      for (const line of plan.payouts) {
+        const description = line.kind === 'bonus'
+          ? `${label} staff bonus - ${line.name} (${line.percent}%)`
+          : `${label} shareholder distribution - ${line.name} (${line.percent}%)`;
+        const request = await PaymentRequest.create({
+          requestNumber: await getNextSequence('pay'),
+          entity: entity._id,
+          description: `${entity.code} ${description}`,
+          items: [{
+            payee: line.payee,
+            description,
+            amount: line.amount,
+            category: line.kind === 'bonus' ? STAFF_BONUS_CATEGORY : SHAREHOLDER_DISTRIBUTION_CATEGORY,
+            recipient: line.name,
+            disbursementType: 'bank',
+            ...(line.kind === 'shareholder' ? { shareholderId: line.personId } : {}),
+          }],
+          totalAmount: line.amount,
+          sourceBankAccount: source.name,
+          status: 'pending',
+          dueDate: new Date(to.getTime() - 1),
+          createdBy: userId,
+          activityLog: [{ action: 'created', user: userId, timestamp: now, note: `Created by ${label} month close` }],
+        });
+        const requestId = request._id as mongoose.Types.ObjectId;
+        close.paymentRequests.push(requestId);
+        const entry = line.kind === 'bonus'
+          ? close.bonusDistributions.find((row) => String(row.bonusUser) === line.personId)
+          : close.distributions.find((row) => String(row.shareholder) === line.personId);
+        if (entry) entry.paymentRequest = requestId;
+      }
     }
 
     await close.save();
@@ -388,7 +397,7 @@ async function rollbackClose(close: IMonthlyClose, incremented: Array<{ fund: IF
     await Fund.updateOne({ _id: entry.fund._id }, { $inc: { balance: -entry.amount } });
   }
   await FundTransfer.deleteMany({ reference: closeReference(close._id) });
-  if (close.paymentRequest) await PaymentRequest.deleteOne({ _id: close.paymentRequest });
+  if (close.paymentRequests.length > 0) await PaymentRequest.deleteMany({ _id: { $in: close.paymentRequests } });
   await MonthlyClose.deleteOne({ _id: close._id });
 }
 
@@ -396,8 +405,8 @@ export async function reopenMonth(closeId: string): Promise<void> {
   const close = await MonthlyClose.findById(closeId);
   if (!close) throw new AppError(404, 'Monthly close not found');
 
-  const request = close.paymentRequest ? await PaymentRequest.findById(close.paymentRequest) : null;
-  const blocked = reopenBlockReason(request?.status);
+  const requests = await PaymentRequest.find({ _id: { $in: close.paymentRequests } }).select('requestNumber status');
+  const blocked = reopenBlockReason(requests.map((request) => ({ requestNumber: request.requestNumber, status: request.status })));
   if (blocked) throw new AppError(400, blocked);
 
   const transfers = await FundTransfer.find({ reference: closeReference(close._id) });
@@ -405,6 +414,6 @@ export async function reopenMonth(closeId: string): Promise<void> {
     if (transfer.toFund) await Fund.updateOne({ _id: transfer.toFund }, { $inc: { balance: -transfer.amount } });
   }
   await FundTransfer.deleteMany({ reference: closeReference(close._id) });
-  if (request) await PaymentRequest.deleteOne({ _id: request._id });
+  if (requests.length > 0) await PaymentRequest.deleteMany({ _id: { $in: requests.map((request) => request._id) } });
   await MonthlyClose.deleteOne({ _id: close._id });
 }

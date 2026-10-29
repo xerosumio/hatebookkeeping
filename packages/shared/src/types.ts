@@ -116,11 +116,18 @@ export interface EquityTransaction {
   updatedAt: string;
 }
 
+export interface MonthlyClosePaymentRequestRef {
+  _id: string;
+  requestNumber: string;
+  status: string;
+}
+
 export interface MonthlyCloseDistribution {
   shareholder: string | { _id: string; name: string; sharePercent: number };
   sharePercent: number;
   amount: number;
   equityTransaction?: string;
+  paymentRequest?: string | MonthlyClosePaymentRequestRef | null;
 }
 
 export interface MonthlyCloseBonusDistribution {
@@ -129,6 +136,7 @@ export interface MonthlyCloseBonusDistribution {
   name: string;
   percent: number;
   amount: number;
+  paymentRequest?: string | MonthlyClosePaymentRequestRef | null;
 }
 
 export interface MonthlyCloseTakeOut {
@@ -170,7 +178,7 @@ export interface MonthlyClose {
   distributions: MonthlyCloseDistribution[];
   bonusDistributions?: MonthlyCloseBonusDistribution[];
   takeOut?: MonthlyCloseTakeOut;
-  paymentRequest?: string | { _id: string; requestNumber: string; status: string };
+  paymentRequests?: Array<string | MonthlyClosePaymentRequestRef>;
   staffReserveFund?: string | { _id: string; name: string };
   companyReserveFund?: string | { _id: string; name: string };
   reserveHeldIn?: string | { _id: string; name: string };

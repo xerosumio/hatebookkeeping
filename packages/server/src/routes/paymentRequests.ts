@@ -94,7 +94,7 @@ async function writeExecutedLedger(request: IPaymentRequest, userId: mongoose.Ty
     if (isBankItem && item.shareholderId) {
       const lastTxn = await EquityTransaction.findOne({ shareholder: item.shareholderId })
         .sort({ date: -1, createdAt: -1 });
-      const monthlyClose = await MonthlyClose.findOne({ paymentRequest: request._id }).select('_id');
+      const monthlyClose = await MonthlyClose.findOne({ paymentRequests: request._id }).select('_id');
       const equity = await EquityTransaction.create({
         type: 'distribution',
         shareholder: item.shareholderId,

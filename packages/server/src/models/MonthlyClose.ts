@@ -5,6 +5,7 @@ export interface IDistributionEntry {
   sharePercent: number;
   amount: number;
   equityTransaction?: mongoose.Types.ObjectId;
+  paymentRequest?: mongoose.Types.ObjectId;
   method?: 'cash' | 'offset_liability';
   liabilityOffset?: number;
 }
@@ -15,6 +16,7 @@ export interface IBonusDistributionEntry {
   name: string;
   percent: number;
   amount: number;
+  paymentRequest?: mongoose.Types.ObjectId;
 }
 
 export interface ITakeOutSnapshot {
@@ -55,7 +57,7 @@ export interface IMonthlyClose extends Document {
   distributions: IDistributionEntry[];
   bonusDistributions: IBonusDistributionEntry[];
   takeOut?: ITakeOutSnapshot;
-  paymentRequest?: mongoose.Types.ObjectId;
+  paymentRequests: mongoose.Types.ObjectId[];
   staffReserveFund?: mongoose.Types.ObjectId;
   companyReserveFund?: mongoose.Types.ObjectId;
   reserveHeldIn?: mongoose.Types.ObjectId;
@@ -79,6 +81,7 @@ const distributionEntrySchema = new Schema<IDistributionEntry>(
     sharePercent: { type: Number, required: true },
     amount: { type: Number, required: true },
     equityTransaction: { type: Schema.Types.ObjectId, ref: 'EquityTransaction' },
+    paymentRequest: { type: Schema.Types.ObjectId, ref: 'PaymentRequest' },
     method: { type: String, enum: ['cash', 'offset_liability'], default: 'cash' },
     liabilityOffset: { type: Number },
   },
@@ -92,6 +95,7 @@ const bonusDistributionEntrySchema = new Schema<IBonusDistributionEntry>(
     name: { type: String, required: true },
     percent: { type: Number, required: true },
     amount: { type: Number, required: true },
+    paymentRequest: { type: Schema.Types.ObjectId, ref: 'PaymentRequest' },
   },
   { _id: false },
 );
@@ -148,7 +152,7 @@ const monthlyCloseSchema = new Schema<IMonthlyClose>(
     distributions: [distributionEntrySchema],
     bonusDistributions: [bonusDistributionEntrySchema],
     takeOut: { type: takeOutSnapshotSchema },
-    paymentRequest: { type: Schema.Types.ObjectId, ref: 'PaymentRequest' },
+    paymentRequests: [{ type: Schema.Types.ObjectId, ref: 'PaymentRequest' }],
     staffReserveFund: { type: Schema.Types.ObjectId, ref: 'Fund' },
     companyReserveFund: { type: Schema.Types.ObjectId, ref: 'Fund' },
     reserveHeldIn: { type: Schema.Types.ObjectId, ref: 'Fund' },
@@ -167,5 +171,6 @@ const monthlyCloseSchema = new Schema<IMonthlyClose>(
 );
 
 monthlyCloseSchema.index({ entity: 1, year: 1, month: 1 }, { unique: true });
+monthlyCloseSchema.index({ paymentRequests: 1 });
 
 export const MonthlyClose = mongoose.model<IMonthlyClose>('MonthlyClose', monthlyCloseSchema);

@@ -100,14 +100,22 @@ describe('closeBlockReason', () => {
 });
 
 describe('reopenBlockReason', () => {
-  it('allows reopening when the payout request is pending, rejected, or gone', () => {
-    assert.equal(reopenBlockReason('pending'), null);
-    assert.equal(reopenBlockReason('rejected'), null);
-    assert.equal(reopenBlockReason(null), null);
+  it('allows reopening when every payout request is pending, rejected, or gone', () => {
+    assert.equal(reopenBlockReason([
+      { requestNumber: 'PAY-2026-0001', status: 'pending' },
+      { requestNumber: 'PAY-2026-0002', status: 'rejected' },
+    ]), null);
+    assert.equal(reopenBlockReason([]), null);
   });
 
-  it('blocks reopening once the payout request is approved or executed', () => {
-    assert.match(reopenBlockReason('approved') ?? '', /approved/);
-    assert.match(reopenBlockReason('executed') ?? '', /executed/);
+  it('blocks reopening and names each approved or executed request', () => {
+    const reason = reopenBlockReason([
+      { requestNumber: 'PAY-2026-0001', status: 'pending' },
+      { requestNumber: 'PAY-2026-0002', status: 'approved' },
+      { requestNumber: 'PAY-2026-0003', status: 'executed' },
+    ]) ?? '';
+    assert.match(reason, /PAY-2026-0002 \(approved\)/);
+    assert.match(reason, /PAY-2026-0003 \(executed\)/);
+    assert.doesNotMatch(reason, /PAY-2026-0001/);
   });
 });

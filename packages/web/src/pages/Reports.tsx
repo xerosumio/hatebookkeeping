@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { useClosePreview, useCloseMonth, useEntities, useMonthlyClose, useMonthPlan, useReopenMonth } from '../api/hooks';
 import { useAuth } from '../contexts/AuthContext';
 import { formatMoney, titleCase } from '../utils/money';
-import type { Entity, MonthlyClose, MonthPlanInvoiceLine, MonthPlanReport, MonthPlanRequestLine, TakeOutReport } from '../types';
+import type {
+  Entity, MonthlyClose, MonthlyCloseDistribution, MonthlyClosePaymentRequestRef, MonthPlanInvoiceLine, MonthPlanReport, MonthPlanRequestLine, TakeOutReport } from '../types';
 
 type RangeMode = 'month' | 'year' | 'custom';
 
@@ -296,6 +297,10 @@ function nameOf(value: unknown): string {
   return value && typeof value === 'object' && 'name' in value ? String((value as { name: unknown }).name) : '';
 }
 
+function requestRef(value: MonthlyCloseDistribution['paymentRequest']): MonthlyClosePaymentRequestRef | null {
+  return value && typeof value === 'object' ? value : null;
+}
+
 function MonthClosePanel({ entity, year, month }: { entity: string; year: number; month: number }) {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
@@ -333,7 +338,7 @@ function MonthClosePanel({ entity, year, month }: { entity: string; year: number
         reopening={reopen.isPending}
         onReopen={async () => {
           if (!close._id) return;
-          if (!confirm(`Reopen ${label}? This removes the reserve entries and deletes the pending payout request.`)) return;
+          if (!confirm(`Reopen ${label}? This removes the reserve entries and deletes the pending payout requests.`)) return;
           try {
             await reopen.mutateAsync(close._id);
           } catch (err) {
@@ -374,13 +379,17 @@ function ClosedMonthSummary({
   reopening: boolean;
   onReopen: () => void;
 }) {
-  const request = typeof close.paymentRequest === 'object' ? close.paymentRequest : null;
   const closedBy = nameOf(close.closedBy);
   const payouts = [
-    ...(close.bonusDistributions || []).map((line) => ({ label: `${line.name} bonus ${line.percent.toFixed(2)}%`, amount: line.amount })),
+    ...(close.bonusDistributions || []).map((line) => ({
+      label: `${line.name} bonus ${line.percent.toFixed(2)}%`,
+      amount: line.amount,
+      request: requestRef(line.paymentRequest),
+    })),
     ...close.distributions.map((line) => ({
       label: `${nameOf(line.shareholder) || 'Shareholder'} ${line.sharePercent.toFixed(2)}%`,
       amount: line.amount,
+      request: requestRef(line.paymentRequest),
     })),
   ];
   return (
@@ -413,17 +422,22 @@ function ClosedMonthSummary({
           <SplitLine label={`Company reserve${nameOf(close.companyReserveFund) ? ` to ${nameOf(close.companyReserveFund)}` : ''}`} amount={close.companyReserve} />
         )}
         {payouts.map((line, index) => (
-          <SplitLine key={`payout-${index}`} label={line.label} amount={line.amount} />
+          <div key={`payout-${index}`} className="flex items-baseline justify-between gap-4">
+            <span className="text-sm text-gray-600">
+              {line.label}
+              {line.request && (
+                <>
+                  {' · '}
+                  <Link to={`/payment-requests/${line.request._id}`} className="font-medium text-blue-600 hover:underline">
+                    {line.request.requestNumber}
+                  </Link>{' '}
+                  <span className="text-xs text-gray-500">({titleCase(line.request.status)})</span>
+                </>
+              )}
+            </span>
+            <span className="font-mono text-sm font-semibold text-gray-900">{formatMoney(line.amount)}</span>
+          </div>
         ))}
-        {request && (
-          <p className="text-sm text-gray-600">
-            Payouts:{' '}
-            <Link to={`/payment-requests/${request._id}`} className="font-medium text-blue-600 hover:underline">
-              {request.requestNumber}
-            </Link>{' '}
-            ({titleCase(request.status)})
-          </p>
-        )}
         {close.isLoss && (
           <p className="text-sm text-red-700">Short this month. Nothing was distributed.</p>
         )}
@@ -479,7 +493,7 @@ function CloseMonthDialog({
       <div className="max-h-[85vh] w-[520px] overflow-y-auto rounded-lg bg-white p-6 shadow-lg">
         <h3 className="mb-1 text-lg font-bold">Close {label}</h3>
         <p className="mb-4 text-xs text-gray-500">
-          Uses today's operating balance. Reserves are earmarked inside the bank account you choose. Bonus and shareholder payouts become one pending payment request.
+          Uses today's operating balance. Reserves are earmarked inside the bank account you choose. Each bonus user and shareholder gets their own pending payment request.
         </p>
 
         {isLoading || !takeOut ? (
