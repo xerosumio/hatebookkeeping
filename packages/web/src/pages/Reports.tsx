@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useEntities, useMonthPlan } from '../api/hooks';
+import { useClosePreview, useCloseMonth, useEntities, useMonthlyClose, useMonthPlan, useReopenMonth } from '../api/hooks';
+import { useAuth } from '../contexts/AuthContext';
 import { formatMoney, titleCase } from '../utils/money';
-import type { Entity, MonthPlanInvoiceLine, MonthPlanReport, MonthPlanRequestLine, TakeOutReport } from '../types';
+import type { Entity, MonthlyClose, MonthPlanInvoiceLine, MonthPlanReport, MonthPlanRequestLine, TakeOutReport } from '../types';
 
 type RangeMode = 'month' | 'year' | 'custom';
 
@@ -173,6 +174,10 @@ export default function Reports() {
               </div>
             </div>
 
+            {mode === 'month' && (
+              <MonthClosePanel entity={entityFilter} year={year} month={month} />
+            )}
+
             <TakeOut takeOut={data.takeOut} />
 
             <ProfitAndLoss pl={data.pl} />
@@ -279,6 +284,301 @@ function TakeOut({ takeOut }: { takeOut: TakeOutReport }) {
         )}
       </div>
     </section>
+  );
+}
+
+function apiError(err: unknown, fallback: string) {
+  const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+  return message || fallback;
+}
+
+function nameOf(value: unknown): string {
+  return value && typeof value === 'object' && 'name' in value ? String((value as { name: unknown }).name) : '';
+}
+
+function MonthClosePanel({ entity, year, month }: { entity: string; year: number; month: number }) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const { data: close, isLoading } = useMonthlyClose(entity || undefined, year, month);
+  const reopen = useReopenMonth();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const label = `${monthNames[month]} ${year}`;
+
+  if (!entity) {
+    return (
+      <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-3">
+        <span className="text-sm text-gray-500">Pick one entity to close {label}.</span>
+        {isAdmin && (
+          <button
+            type="button"
+            disabled
+            title="Closing works on one entity at a time"
+            className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white opacity-40"
+          >
+            Close month
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  if (isLoading) return null;
+
+  if (close) {
+    return (
+      <ClosedMonthSummary
+        close={close}
+        label={label}
+        canReopen={isAdmin}
+        reopening={reopen.isPending}
+        onReopen={async () => {
+          if (!close._id) return;
+          if (!confirm(`Reopen ${label}? This removes the reserve entries and deletes the pending payout request.`)) return;
+          try {
+            await reopen.mutateAsync(close._id);
+          } catch (err) {
+            alert(apiError(err, 'Could not reopen this month'));
+          }
+        }}
+      />
+    );
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-3">
+        <span className="text-sm text-gray-500">{label} is open.</span>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setDialogOpen(true)}
+            className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Close month
+          </button>
+        )}
+      </div>
+      {dialogOpen && (
+        <CloseMonthDialog entity={entity} year={year} month={month} label={label} onClose={() => setDialogOpen(false)} />
+      )}
+    </>
+  );
+}
+
+function ClosedMonthSummary({
+  close, label, canReopen, reopening, onReopen,
+}: {
+  close: MonthlyClose;
+  label: string;
+  canReopen: boolean;
+  reopening: boolean;
+  onReopen: () => void;
+}) {
+  const request = typeof close.paymentRequest === 'object' ? close.paymentRequest : null;
+  const closedBy = nameOf(close.closedBy);
+  const payouts = [
+    ...(close.bonusDistributions || []).map((line) => ({ label: `${line.name} bonus ${line.percent.toFixed(2)}%`, amount: line.amount })),
+    ...close.distributions.map((line) => ({
+      label: `${nameOf(line.shareholder) || 'Shareholder'} ${line.sharePercent.toFixed(2)}%`,
+      amount: line.amount,
+    })),
+  ];
+  return (
+    <section className="rounded-lg border border-green-200 bg-green-50 p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="text-sm font-semibold text-green-800">{label} closed</div>
+          <div className="text-xs text-green-700">
+            {close.closedAt ? `Closed on ${formatHkDate(close.closedAt)}` : 'Closed'}
+            {closedBy ? ` by ${closedBy}` : ''}
+          </div>
+        </div>
+        {canReopen && (
+          <button
+            type="button"
+            onClick={onReopen}
+            disabled={reopening}
+            className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            {reopening ? 'Reopening...' : 'Reopen'}
+          </button>
+        )}
+      </div>
+      <div className="mt-3 space-y-2 border-t border-green-200 pt-3">
+        {close.takeOut && <SplitLine label="Left to take out at close" amount={close.takeOut.available} />}
+        {close.staffReserve > 0 && (
+          <SplitLine label={`Staff reserve${nameOf(close.staffReserveFund) ? ` to ${nameOf(close.staffReserveFund)}` : ''}`} amount={close.staffReserve} />
+        )}
+        {close.companyReserve > 0 && (
+          <SplitLine label={`Company reserve${nameOf(close.companyReserveFund) ? ` to ${nameOf(close.companyReserveFund)}` : ''}`} amount={close.companyReserve} />
+        )}
+        {payouts.map((line, index) => (
+          <SplitLine key={`payout-${index}`} label={line.label} amount={line.amount} />
+        ))}
+        {request && (
+          <p className="text-sm text-gray-600">
+            Payouts:{' '}
+            <Link to={`/payment-requests/${request._id}`} className="font-medium text-blue-600 hover:underline">
+              {request.requestNumber}
+            </Link>{' '}
+            ({titleCase(request.status)})
+          </p>
+        )}
+        {close.isLoss && (
+          <p className="text-sm text-red-700">Short this month. Nothing was distributed.</p>
+        )}
+        {close.notes && <p className="text-xs text-gray-500">{close.notes}</p>}
+      </div>
+    </section>
+  );
+}
+
+function CloseMonthDialog({
+  entity, year, month, label, onClose,
+}: {
+  entity: string;
+  year: number;
+  month: number;
+  label: string;
+  onClose: () => void;
+}) {
+  const { data: preview, isLoading } = useClosePreview(entity, year, month);
+  const closeMonth = useCloseMonth();
+  const [reserveHeldIn, setReserveHeldIn] = useState('');
+  const [sourceBankAccount, setSourceBankAccount] = useState('');
+  const [notes, setNotes] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!preview?.defaultBankFund) return;
+    setReserveHeldIn((current) => current || preview.defaultBankFund!);
+    setSourceBankAccount((current) => current || preview.defaultBankFund!);
+  }, [preview?.defaultBankFund]);
+
+  const takeOut = preview?.takeOut;
+  const distributing = takeOut?.direction === 'take_out';
+  const hasReserves = Boolean(takeOut && (takeOut.staffReserve > 0 || takeOut.companyReserve > 0));
+  const hasPayouts = Boolean(takeOut && [...takeOut.bonus, ...takeOut.shareholders].some((line) => line.amount > 0));
+  const bankFunds = preview?.bankFunds.filter((fund) => fund.type === 'bank') ?? [];
+  const blocked = (preview?.missingPayees.length ?? 0) > 0
+    || (hasReserves && !reserveHeldIn)
+    || (hasPayouts && !sourceBankAccount);
+
+  async function handleConfirm() {
+    setError('');
+    try {
+      await closeMonth.mutateAsync({ entity, year, month, reserveHeldIn, sourceBankAccount, notes });
+      onClose();
+    } catch (err) {
+      setError(apiError(err, 'Could not close this month'));
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+      <div className="max-h-[85vh] w-[520px] overflow-y-auto rounded-lg bg-white p-6 shadow-lg">
+        <h3 className="mb-1 text-lg font-bold">Close {label}</h3>
+        <p className="mb-4 text-xs text-gray-500">
+          Uses today's operating balance. Reserves are earmarked inside the bank account you choose. Bonus and shareholder payouts become one pending payment request.
+        </p>
+
+        {isLoading || !takeOut ? (
+          <p className="text-sm text-gray-500">Loading...</p>
+        ) : (
+          <div className="space-y-4">
+            <div className="space-y-2 rounded border border-gray-200 p-3">
+              <SplitLine label="Left to take out" amount={takeOut.available} />
+              {distributing ? (
+                <>
+                  {takeOut.bonus.map((line, index) => (
+                    <SplitLine key={`b-${index}`} label={`${line.name} bonus ${line.percent.toFixed(2)}%`} amount={line.amount} />
+                  ))}
+                  <SplitLine label="Staff reserve (5%)" amount={takeOut.staffReserve} />
+                  <SplitLine label="Company reserve (30% of the rest)" amount={takeOut.companyReserve} />
+                  {takeOut.shareholders.map((line, index) => (
+                    <SplitLine key={`s-${index}`} label={`${line.name} ${line.sharePercent.toFixed(2)}%`} amount={line.amount} />
+                  ))}
+                </>
+              ) : (
+                <p className="text-sm text-red-700">
+                  Nothing to distribute. Closing only records the month.
+                </p>
+              )}
+            </div>
+
+            {preview.missingPayees.length > 0 && (
+              <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                Set a payee on the{' '}
+                <Link to="/shareholders" className="font-medium underline">Shareholders page</Link>{' '}
+                for: {preview.missingPayees.map((person) => person.name).join(', ')}
+              </div>
+            )}
+
+            {hasReserves && (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Hold reserves in</label>
+                <select
+                  value={reserveHeldIn}
+                  onChange={(e) => setReserveHeldIn(e.target.value)}
+                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                >
+                  <option value="">Select a fund...</option>
+                  {preview.bankFunds.map((fund) => (
+                    <option key={fund._id} value={fund._id}>{fund.name} ({formatMoney(fund.balance)})</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {hasPayouts && (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Pay out from</label>
+                <select
+                  value={sourceBankAccount}
+                  onChange={(e) => setSourceBankAccount(e.target.value)}
+                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                >
+                  <option value="">Select a bank fund...</option>
+                  {bankFunds.map((fund) => (
+                    <option key={fund._id} value={fund._id}>{fund.name} ({formatMoney(fund.balance)})</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Notes</label>
+              <input
+                type="text"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                placeholder="Optional"
+              />
+            </div>
+          </div>
+        )}
+
+        {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
+        <div className="mt-4 flex gap-3">
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={isLoading || !takeOut || blocked || closeMonth.isPending}
+            className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {closeMonth.isPending ? 'Closing...' : `Close ${label}`}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

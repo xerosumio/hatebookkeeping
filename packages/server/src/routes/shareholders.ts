@@ -25,6 +25,7 @@ router.get('/', async (_req, res, next) => {
   try {
     const shareholders = await Shareholder.find({ active: true })
       .populate('user', 'name email role')
+      .populate('payee', 'name')
       .sort({ sharePercent: -1 });
 
     const result = await Promise.all(
@@ -98,6 +99,7 @@ router.get('/bonus', async (_req, res, next) => {
   try {
     const people = await ShareBonusUser.find()
       .populate('user', 'name email role')
+      .populate('payee', 'name')
       .sort({ name: 1 });
     res.json(people);
   } catch (error) {
@@ -111,6 +113,7 @@ router.post('/bonus', async (req: AuthRequest, res, next) => {
     const data = z.object({
       user: z.string().min(1),
       bonusPercent: z.number().min(0).max(100),
+      payee: z.string().min(1).optional(),
     }).parse(req.body);
     const user = await User.findById(data.user);
     if (!user || !user.active) throw new AppError(400, 'Choose an active user');
@@ -120,6 +123,7 @@ router.post('/bonus', async (req: AuthRequest, res, next) => {
       user: user._id,
       name: user.name,
       bonusPercent: data.bonusPercent,
+      payee: data.payee,
     });
     res.status(201).json(person);
   } catch (error) {
@@ -131,11 +135,13 @@ router.put('/bonus/:id', async (req: AuthRequest, res, next) => {
   try {
     requireAdmin(req);
     const data = z.object({
-      bonusPercent: z.number().min(0).max(100),
+      bonusPercent: z.number().min(0).max(100).optional(),
+      payee: z.string().nullable().optional(),
     }).parse(req.body);
     const person = await ShareBonusUser.findById(req.params.id);
     if (!person) throw new AppError(404, 'Share bonus user not found');
-    person.bonusPercent = data.bonusPercent;
+    if (data.bonusPercent !== undefined) person.bonusPercent = data.bonusPercent;
+    if (data.payee !== undefined) person.set('payee', data.payee || undefined);
     await person.save();
     res.json(person);
   } catch (error) {
@@ -296,6 +302,7 @@ router.put('/:id', async (req: AuthRequest, res, next) => {
       sharePercent: z.number().min(0).max(100).optional(),
       active: z.boolean().optional(),
       reason: z.string().optional(),
+      payee: z.string().nullable().optional(),
     }).parse(req.body);
 
     const shareholder = await Shareholder.findById(req.params.id);
@@ -321,6 +328,7 @@ router.put('/:id', async (req: AuthRequest, res, next) => {
 
     if (data.name !== undefined) shareholder.name = data.name;
     if (data.active !== undefined) shareholder.active = data.active;
+    if (data.payee !== undefined) shareholder.set('payee', data.payee || undefined);
 
     await shareholder.save();
     res.json(shareholder);

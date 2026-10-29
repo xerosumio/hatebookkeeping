@@ -15,6 +15,8 @@ import { hkInstant, parseYmd } from '../utils/hkDate.js';
 import { formatMoney } from '../utils/pdf/formatMoney.js';
 import { getRequiredApproverIds, hasFullApproval } from '../utils/dualApproval.js';
 import { ShareLiability } from '../models/ShareLiability.js';
+import { EquityTransaction } from '../models/EquityTransaction.js';
+import { MonthlyClose } from '../models/MonthlyClose.js';
 import type { IPaymentRequest } from '../models/PaymentRequest.js';
 import mongoose from 'mongoose';
 
@@ -89,6 +91,28 @@ async function writeExecutedLedger(request: IPaymentRequest, userId: mongoose.Ty
       await adjustFundBalance(request.sourceBankAccount, -item.amount);
     }
 
+    if (isBankItem && item.shareholderId) {
+      const lastTxn = await EquityTransaction.findOne({ shareholder: item.shareholderId })
+        .sort({ date: -1, createdAt: -1 });
+      const monthlyClose = await MonthlyClose.findOne({ paymentRequest: request._id }).select('_id');
+      const equity = await EquityTransaction.create({
+        type: 'distribution',
+        shareholder: item.shareholderId,
+        amount: -item.amount,
+        date: ledgerDate,
+        description: `${item.description} (via ${request.requestNumber})`,
+        monthlyClose: monthlyClose?._id,
+        balanceAfter: (lastTxn?.balanceAfter ?? 0) - item.amount,
+        createdBy: userId,
+      });
+      if (monthlyClose) {
+        await MonthlyClose.updateOne(
+          { _id: monthlyClose._id, 'distributions.shareholder': item.shareholderId },
+          { $set: { 'distributions.$.equityTransaction': equity._id } },
+        );
+      }
+    }
+
     if (!isBankItem && item.shareholderId) {
       await ShareLiability.create({
         shareholder: item.shareholderId,
@@ -119,6 +143,10 @@ async function rewriteExecutedLedger(request: IPaymentRequest, userId: mongoose.
   const suffix = `(via ${request.requestNumber})`;
   await ShareLiability.deleteMany({
     type: 'payment',
+    description: { $regex: `${escapeRegex(suffix)}$` },
+  });
+  await EquityTransaction.deleteMany({
+    type: 'distribution',
     description: { $regex: `${escapeRegex(suffix)}$` },
   });
 

@@ -9,13 +9,30 @@ export interface IDistributionEntry {
   liabilityOffset?: number;
 }
 
+export interface IBonusDistributionEntry {
+  bonusUser: mongoose.Types.ObjectId;
+  user?: mongoose.Types.ObjectId;
+  name: string;
+  percent: number;
+  amount: number;
+}
+
+export interface ITakeOutSnapshot {
+  operatingCash: number;
+  pendingOut: number;
+  available: number;
+  direction: 'pay_in' | 'take_out' | 'even';
+  bonusTotal: number;
+  afterBonus: number;
+}
+
 export interface IApprovalEntry {
   user: mongoose.Types.ObjectId;
   at: Date;
 }
 
 export interface IActivityLogEntry {
-  action: 'created' | 'submitted' | 'approved' | 'rejected' | 'finalized' | 'notified';
+  action: 'created' | 'submitted' | 'approved' | 'rejected' | 'finalized' | 'notified' | 'reopened';
   user: mongoose.Types.ObjectId;
   timestamp: Date;
   note?: string;
@@ -36,6 +53,12 @@ export interface IMonthlyClose extends Document {
   staffReserve: number;
   closingCash: number;
   distributions: IDistributionEntry[];
+  bonusDistributions: IBonusDistributionEntry[];
+  takeOut?: ITakeOutSnapshot;
+  paymentRequest?: mongoose.Types.ObjectId;
+  staffReserveFund?: mongoose.Types.ObjectId;
+  companyReserveFund?: mongoose.Types.ObjectId;
+  reserveHeldIn?: mongoose.Types.ObjectId;
   isLoss: boolean;
   approvals: IApprovalEntry[];
   approvedBy?: mongoose.Types.ObjectId;
@@ -62,6 +85,29 @@ const distributionEntrySchema = new Schema<IDistributionEntry>(
   { _id: false },
 );
 
+const bonusDistributionEntrySchema = new Schema<IBonusDistributionEntry>(
+  {
+    bonusUser: { type: Schema.Types.ObjectId, ref: 'ShareBonusUser', required: true },
+    user: { type: Schema.Types.ObjectId, ref: 'User' },
+    name: { type: String, required: true },
+    percent: { type: Number, required: true },
+    amount: { type: Number, required: true },
+  },
+  { _id: false },
+);
+
+const takeOutSnapshotSchema = new Schema<ITakeOutSnapshot>(
+  {
+    operatingCash: { type: Number, required: true },
+    pendingOut: { type: Number, required: true },
+    available: { type: Number, required: true },
+    direction: { type: String, enum: ['pay_in', 'take_out', 'even'], required: true },
+    bonusTotal: { type: Number, default: 0 },
+    afterBonus: { type: Number, default: 0 },
+  },
+  { _id: false },
+);
+
 const approvalEntrySchema = new Schema<IApprovalEntry>(
   {
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
@@ -72,7 +118,7 @@ const approvalEntrySchema = new Schema<IApprovalEntry>(
 
 const activityLogEntrySchema = new Schema<IActivityLogEntry>(
   {
-    action: { type: String, enum: ['created', 'submitted', 'approved', 'rejected', 'finalized', 'notified'], required: true },
+    action: { type: String, enum: ['created', 'submitted', 'approved', 'rejected', 'finalized', 'notified', 'reopened'], required: true },
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     timestamp: { type: Date, required: true },
     note: { type: String },
@@ -100,6 +146,12 @@ const monthlyCloseSchema = new Schema<IMonthlyClose>(
     staffReserve: { type: Number, default: 0 },
     closingCash: { type: Number, default: 0 },
     distributions: [distributionEntrySchema],
+    bonusDistributions: [bonusDistributionEntrySchema],
+    takeOut: { type: takeOutSnapshotSchema },
+    paymentRequest: { type: Schema.Types.ObjectId, ref: 'PaymentRequest' },
+    staffReserveFund: { type: Schema.Types.ObjectId, ref: 'Fund' },
+    companyReserveFund: { type: Schema.Types.ObjectId, ref: 'Fund' },
+    reserveHeldIn: { type: Schema.Types.ObjectId, ref: 'Fund' },
     isLoss: { type: Boolean, default: false },
     approvals: [approvalEntrySchema],
     approvedBy: { type: Schema.Types.ObjectId, ref: 'User' },

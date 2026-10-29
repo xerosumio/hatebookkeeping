@@ -6,6 +6,7 @@ import type {
   Settings, CashFlowReport, AccountsReceivableReport, IncomeStatementReport, AccountsPayableReport,
   Reimbursement, Entity, Shareholder, ShareBonusUser, ShareLiabilityEntry, EquityTransaction, Fund, FundTransfer,
   FundLedgerResponse, AppNotification, BalanceSheetReport, MonthlySummaryReport, MonthPlanReport,
+  MonthlyClose, MonthlyClosePreview,
 } from '../types';
 
 // Users (admin-only)
@@ -638,6 +639,55 @@ export function useMonthPlan(startDate?: string, endDate?: string, entity?: stri
   });
 }
 
+// Monthly close
+export function useMonthlyClose(entity?: string, year?: number, month?: number) {
+  return useQuery({
+    queryKey: ['monthly-close', entity, year, month],
+    queryFn: () =>
+      api.get<MonthlyClose | null>('/monthly-close', { params: { entity, year, month } }).then((r) => r.data),
+    enabled: Boolean(entity && year && month),
+  });
+}
+
+export function useClosePreview(entity?: string, year?: number, month?: number, enabled = true) {
+  return useQuery({
+    queryKey: ['monthly-close', 'preview', entity, year, month],
+    queryFn: () =>
+      api.get<MonthlyClosePreview>('/monthly-close/preview', { params: { entity, year, month } }).then((r) => r.data),
+    enabled: enabled && Boolean(entity && year && month),
+  });
+}
+
+function invalidateAfterClose(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ['monthly-close'] });
+  qc.invalidateQueries({ queryKey: ['reports'] });
+  qc.invalidateQueries({ queryKey: ['funds'] });
+  qc.invalidateQueries({ queryKey: ['paymentRequests'] });
+}
+
+export function useCloseMonth() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      entity: string;
+      year: number;
+      month: number;
+      reserveHeldIn?: string;
+      sourceBankAccount?: string;
+      notes?: string;
+    }) => api.post<MonthlyClose>('/monthly-close', data).then((r) => r.data),
+    onSuccess: () => invalidateAfterClose(qc),
+  });
+}
+
+export function useReopenMonth() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post(`/monthly-close/${id}/reopen`).then((r) => r.data),
+    onSuccess: () => invalidateAfterClose(qc),
+  });
+}
+
 // API tokens
 export function useApiTokens() {
   return useQuery({
@@ -806,8 +856,8 @@ export function useAddShareBonusUser() {
 export function useUpdateShareBonusUser() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, bonusPercent }: { id: string; bonusPercent: number }) =>
-      api.put<ShareBonusUser>(`/shareholders/bonus/${id}`, { bonusPercent }).then((r) => r.data),
+    mutationFn: ({ id, ...data }: { id: string; bonusPercent?: number; payee?: string | null }) =>
+      api.put<ShareBonusUser>(`/shareholders/bonus/${id}`, data).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['share-bonus-users'] }),
   });
 }
@@ -828,7 +878,7 @@ export function useUpdateShareholder() {
       data,
     }: {
       id: string;
-      data: { name?: string; sharePercent?: number; active?: boolean; reason?: string };
+      data: { name?: string; sharePercent?: number; active?: boolean; reason?: string; payee?: string | null };
     }) => api.put<Shareholder>(`/shareholders/${id}`, data).then((r) => r.data),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ['shareholders'] });

@@ -5,6 +5,7 @@ import {
   useShareholderLiabilities, useCreateShareholderLiability, useUpdateShareholderLiability, useDeleteShareholderLiability,
   useCreateShareholder, useRemoveShareholder, useUsers,
   useShareBonusUsers, useAddShareBonusUser, useUpdateShareBonusUser, useRemoveShareBonusUser,
+  useUpdateShareholder, usePayees,
 } from '../api/hooks';
 import { useAuth } from '../contexts/AuthContext';
 import { formatMoney, titleCase } from '../utils/money';
@@ -24,6 +25,38 @@ function apiError(err: unknown, fallback: string) {
   return message || fallback;
 }
 
+function payeeIdOf(payee: string | { _id: string } | null | undefined) {
+  if (!payee) return '';
+  return typeof payee === 'object' ? payee._id : payee;
+}
+
+function PayeeCell({
+  value, payees, canEdit, onChange,
+}: {
+  value: string | { _id: string; name: string } | null | undefined;
+  payees: Array<{ _id: string; name: string }>;
+  canEdit: boolean;
+  onChange: (payee: string | null) => void;
+}) {
+  const id = payeeIdOf(value);
+  if (!canEdit) {
+    const name = typeof value === 'object' && value ? value.name : payees.find((p) => p._id === id)?.name;
+    return <span className={name ? '' : 'text-gray-400'}>{name || 'Not set'}</span>;
+  }
+  return (
+    <select
+      value={id}
+      onChange={(e) => onChange(e.target.value || null)}
+      className="border border-gray-300 rounded px-2 py-1 text-xs max-w-[180px]"
+    >
+      <option value="">Not set</option>
+      {payees.map((p) => (
+        <option key={p._id} value={p._id}>{p.name}</option>
+      ))}
+    </select>
+  );
+}
+
 export default function ShareholderList() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -36,6 +69,8 @@ export default function ShareholderList() {
   const addBonusUser = useAddShareBonusUser();
   const updateBonusUser = useUpdateShareBonusUser();
   const removeBonusUser = useRemoveShareBonusUser();
+  const updateShareholder = useUpdateShareholder();
+  const { data: payees } = usePayees();
   const investMutation = useInvestShareholder();
   const transferMutation = useShareTransfer();
   const createLiabilityMutation = useCreateShareholderLiability();
@@ -182,6 +217,22 @@ export default function ShareholderList() {
     }
   }
 
+  async function handleShareholderPayee(id: string, payee: string | null) {
+    try {
+      await updateShareholder.mutateAsync({ id, data: { payee } });
+    } catch (err) {
+      alert(apiError(err, 'Could not update payee'));
+    }
+  }
+
+  async function handleBonusPayee(id: string, payee: string | null) {
+    try {
+      await updateBonusUser.mutateAsync({ id, payee });
+    } catch (err) {
+      alert(apiError(err, 'Could not update payee'));
+    }
+  }
+
   async function handleRemoveBonus(id: string, name: string) {
     if (!confirm(`Remove ${name} from share bonus users?`)) return;
     await removeBonusUser.mutateAsync(id);
@@ -228,6 +279,7 @@ export default function ShareholderList() {
               <th className="text-left px-4 py-3 font-medium text-gray-600">Name</th>
               <th className="text-right px-4 py-3 font-medium text-gray-600">Share %</th>
               <th className="text-right px-4 py-3 font-medium text-gray-600">Share Value (HKD)</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">Payee</th>
               <th className="text-right px-4 py-3 font-medium text-gray-600">Actions</th>
             </tr>
           </thead>
@@ -248,6 +300,14 @@ export default function ShareholderList() {
                 <td className="px-4 py-3 text-right font-mono">{sh.sharePercent.toFixed(2)}%</td>
                 <td className="px-4 py-3 text-right font-mono text-gray-600">
                   {formatMoney(Math.round(sh.sharePercent * valuePerPercent))}
+                </td>
+                <td className="px-4 py-3">
+                  <PayeeCell
+                    value={sh.payee}
+                    payees={payees || []}
+                    canEdit={isAdmin}
+                    onChange={(payee) => handleShareholderPayee(sh._id, payee)}
+                  />
                 </td>
                 <td className="px-4 py-3 text-right">
                   <button
@@ -290,7 +350,7 @@ export default function ShareholderList() {
           <div>
             <h2 className="text-lg font-bold">Share bonus users</h2>
             <p className="text-xs text-gray-500 mt-1">
-              A separate list from ownership. Total bonus {bonusTotal.toFixed(2)}%. This does not change share percentages or post a payment.
+              A separate list from ownership. Total bonus {bonusTotal.toFixed(2)}%. This does not change share percentages. Closing a month on Reports creates a payment request to each person's payee.
             </p>
           </div>
           {isAdmin && (
@@ -308,13 +368,14 @@ export default function ShareholderList() {
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Name</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Bonus %</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Payee</th>
                 {isAdmin && <th className="text-right px-4 py-3 font-medium text-gray-600">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {(bonusUsers || []).length === 0 ? (
                 <tr>
-                  <td colSpan={isAdmin ? 3 : 2} className="px-4 py-6 text-gray-500">No share bonus users.</td>
+                  <td colSpan={isAdmin ? 4 : 3} className="px-4 py-6 text-gray-500">No share bonus users.</td>
                 </tr>
               ) : bonusUsers?.map((person) => (
                 <tr key={person._id} className="hover:bg-gray-50">
@@ -338,6 +399,14 @@ export default function ShareholderList() {
                     ) : (
                       `${person.bonusPercent.toFixed(2)}%`
                     )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <PayeeCell
+                      value={person.payee}
+                      payees={payees || []}
+                      canEdit={isAdmin}
+                      onChange={(payee) => handleBonusPayee(person._id, payee)}
+                    />
                   </td>
                   {isAdmin && (
                     <td className="px-4 py-3 text-right space-x-1">

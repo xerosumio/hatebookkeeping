@@ -16,6 +16,7 @@ export interface IShareholder extends Document {
   shareHistory: IShareAdjustmentLog[];
   sharePurchaseOwed?: number;
   sharePurchasePaid?: number;
+  payee?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -40,6 +41,7 @@ const shareholderSchema = new Schema<IShareholder>(
     shareHistory: { type: [shareAdjustmentLogSchema], default: [] },
     sharePurchaseOwed: { type: Number, default: 0 },
     sharePurchasePaid: { type: Number, default: 0 },
+    payee: { type: Schema.Types.ObjectId, ref: 'Payee' },
   },
   { timestamps: true },
 );

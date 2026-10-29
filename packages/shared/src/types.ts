@@ -73,6 +73,7 @@ export interface Shareholder {
   sharePurchasePaid: number;
   active: boolean;
   shareHistory?: ShareAdjustmentLog[];
+  payee?: string | { _id: string; name: string } | null;
   currentEquity?: number;
   totalInvested?: number;
   createdAt: string;
@@ -84,6 +85,7 @@ export interface ShareBonusUser {
   user: string | { _id: string; name: string; email: string; role: string };
   name: string;
   bonusPercent: number;
+  payee?: string | { _id: string; name: string } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -121,13 +123,30 @@ export interface MonthlyCloseDistribution {
   equityTransaction?: string;
 }
 
+export interface MonthlyCloseBonusDistribution {
+  bonusUser: string;
+  user?: string;
+  name: string;
+  percent: number;
+  amount: number;
+}
+
+export interface MonthlyCloseTakeOut {
+  operatingCash: number;
+  pendingOut: number;
+  available: number;
+  direction: 'pay_in' | 'take_out' | 'even';
+  bonusTotal: number;
+  afterBonus: number;
+}
+
 export interface MonthlyCloseApproval {
   user: string | { _id: string; name: string };
   at: string;
 }
 
 export interface MonthlyCloseActivity {
-  action: 'created' | 'submitted' | 'approved' | 'rejected' | 'finalized' | 'notified';
+  action: 'created' | 'submitted' | 'approved' | 'rejected' | 'finalized' | 'notified' | 'reopened';
   user: string | { _id: string; name: string };
   timestamp: string;
   note?: string;
@@ -149,6 +168,12 @@ export interface MonthlyClose {
   staffReserve: number;
   closingCash: number;
   distributions: MonthlyCloseDistribution[];
+  bonusDistributions?: MonthlyCloseBonusDistribution[];
+  takeOut?: MonthlyCloseTakeOut;
+  paymentRequest?: string | { _id: string; requestNumber: string; status: string };
+  staffReserveFund?: string | { _id: string; name: string };
+  companyReserveFund?: string | { _id: string; name: string };
+  reserveHeldIn?: string | { _id: string; name: string };
   isLoss: boolean;
   approvals: MonthlyCloseApproval[];
   approvedBy?: string | { _id: string; name: string };
@@ -590,6 +615,17 @@ export interface TakeOutReport {
   shareholderPool: number;
   unassignedShareholderPool: number;
   shareholders: TakeOutShareLine[];
+}
+
+export interface MonthlyClosePreview {
+  year: number;
+  month: number;
+  entity: string;
+  takeOut: TakeOutReport;
+  bankFunds: Array<{ _id: string; name: string; type: string; balance: number }>;
+  defaultBankFund: string | null;
+  missingPayees: Array<{ kind: 'shareholder' | 'bonus'; name: string }>;
+  existing: MonthlyClose | null;
 }
 
 export interface RecurringHistoryEntry {
