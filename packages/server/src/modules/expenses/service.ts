@@ -10,7 +10,6 @@ import type { UserDoc } from '../users/model.js';
 import { Expense, type ExpenseDoc } from './model.js';
 
 registerReference('payee', async (id) => countLabel(await Expense.countDocuments({ payeeId: id }), 'expense'));
-registerReference('staff', async (id) => countLabel(await Expense.countDocuments({ 'items.staffId': id }), 'salary run'));
 
 export const KIND_LABEL: Record<ExpenseKind, string> = { expense: 'Expense', claim: 'Claim', salary: 'Salary run' };
 export const KIND_PATH: Record<ExpenseKind, string> = { expense: '/expenses', claim: '/claims', salary: '/salary/runs' };

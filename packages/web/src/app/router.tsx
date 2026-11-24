@@ -28,6 +28,9 @@ const Dashboard = lazy(() => import('../features/dashboard/Dashboard'));
 const Pnl = lazy(() => import('../features/pnl/Pnl'));
 const OtherIncome = lazy(() => import('../features/otherIncome/OtherIncome'));
 
+const Salary = lazy(() => import('../features/salary/Salary'));
+const SalaryRun = lazy(() => import('../features/salary/SalaryRun'));
+
 const guarded = (any: Permission[], page: ReactNode) => <Needs any={any}>{page}</Needs>;
 
 export const router = createBrowserRouter([
@@ -60,6 +63,8 @@ export const router = createBrowserRouter([
       { path: '/claims/:id/edit', element: guarded(['claims.own'], <ClaimForm />) },
       { path: '/pnl', element: guarded(['pnl.view'], <Pnl />) },
       { path: '/other-income', element: guarded(['otherIncome.manage'], <OtherIncome />) },
+      { path: '/salary', element: guarded(['salary.view'], <Salary />) },
+      { path: '/salary/runs/:id', element: guarded(['salary.view'], <SalaryRun />) },
       // Old bookmarks and mistyped addresses go home instead of showing a blank page.
       { path: '*', element: <Navigate to="/" replace /> },
     ],

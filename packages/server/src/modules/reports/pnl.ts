@@ -123,7 +123,8 @@ export async function entriesFor(basis: PnlBasis, range: Range, companyId: strin
   for (const expense of expenses) {
     for (const item of expense.items) {
       const date = basis === 'cash' ? (expense.paidDate as string) : item.date;
-      if (!inRange(date, range)) continue;
+      // A zero line (someone left off this month's salary) is not an item behind any figure.
+      if (!inRange(date, range) || item.amount === 0) continue;
       const salary = expense.kind === 'salary';
       entries.push({
         side: 'expense',

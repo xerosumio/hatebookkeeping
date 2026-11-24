@@ -7,10 +7,10 @@ import { conflict } from './errors.js';
  * Each module registers a check ("is this client on any invoice?"); the
  * owner of the record asks all of them before deleting.
  */
-export type ReferenceKind = 'client' | 'payee' | 'staff';
+export type ReferenceKind = 'client' | 'payee';
 type Check = (id: string) => Promise<string | null>;
 
-const checks: Record<ReferenceKind, Check[]> = { client: [], payee: [], staff: [] };
+const checks: Record<ReferenceKind, Check[]> = { client: [], payee: [] };
 
 /** `check` returns what uses the record ("3 invoices"), or null when nothing does. */
 export function registerReference(kind: ReferenceKind, check: Check): void {

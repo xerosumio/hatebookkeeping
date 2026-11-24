@@ -10,6 +10,7 @@ import otherIncomeRoutes from './modules/otherIncome/routes.js';
 import payeeRoutes from './modules/payees/routes.js';
 import quoteRoutes from './modules/quotes/routes.js';
 import { dashboardRouter, reportRouter } from './modules/reports/routes.js';
+import salaryRoutes from './modules/salary/routes.js';
 import settingsRoutes from './modules/settings/routes.js';
 import userRoutes from './modules/users/routes.js';
 import { requireAuth } from './platform/auth.js';
@@ -56,6 +57,7 @@ export function createApp(): express.Express {
   app.use('/api/expenses', expenseRouter);
   app.use('/api/claims', claimRouter);
   app.use('/api/other-income', otherIncomeRoutes);
+  app.use('/api/salary', salaryRoutes);
   app.use('/api/reports', reportRouter);
   app.use('/api/dashboard', dashboardRouter);
 
