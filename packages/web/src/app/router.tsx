@@ -16,6 +16,14 @@ const Invoices = lazy(() => import('../features/invoices/Invoices'));
 const InvoiceForm = lazy(() => import('../features/invoices/InvoiceForm'));
 const InvoiceDetail = lazy(() => import('../features/invoices/InvoiceDetail'));
 
+const Payees = lazy(() => import('../features/payees/Payees'));
+const Expenses = lazy(() => import('../features/expenses/Expenses'));
+const ExpenseForm = lazy(() => import('../features/expenses/ExpenseForm'));
+const ExpenseDetail = lazy(() => import('../features/expenses/ExpenseDetail'));
+const Claims = lazy(() => import('../features/claims/Claims'));
+const ClaimForm = lazy(() => import('../features/claims/ClaimForm'));
+const ClaimDetail = lazy(() => import('../features/claims/ClaimDetail'));
+
 const guarded = (any: Permission[], page: ReactNode) => <Needs any={any}>{page}</Needs>;
 
 export const router = createBrowserRouter([
@@ -37,6 +45,15 @@ export const router = createBrowserRouter([
       { path: '/invoices/new', element: guarded(['invoices.manage'], <InvoiceForm />) },
       { path: '/invoices/:id', element: guarded(['invoices.view'], <InvoiceDetail />) },
       { path: '/invoices/:id/edit', element: guarded(['invoices.manage'], <InvoiceForm />) },
+      { path: '/payees', element: guarded(['payees.view'], <Payees />) },
+      { path: '/expenses', element: guarded(['expenses.view'], <Expenses />) },
+      { path: '/expenses/new', element: guarded(['expenses.manage'], <ExpenseForm />) },
+      { path: '/expenses/:id', element: guarded(['expenses.view'], <ExpenseDetail />) },
+      { path: '/expenses/:id/edit', element: guarded(['expenses.manage'], <ExpenseForm />) },
+      { path: '/claims', element: guarded(['claims.own'], <Claims />) },
+      { path: '/claims/new', element: guarded(['claims.own'], <ClaimForm />) },
+      { path: '/claims/:id', element: guarded(['claims.own'], <ClaimDetail />) },
+      { path: '/claims/:id/edit', element: guarded(['claims.own'], <ClaimForm />) },
       // Old bookmarks and mistyped addresses go home instead of showing a blank page.
       { path: '*', element: <Navigate to="/" replace /> },
     ],

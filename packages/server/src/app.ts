@@ -3,8 +3,10 @@ import mongoose from 'mongoose';
 import authRoutes from './modules/auth/routes.js';
 import clientRoutes from './modules/clients/routes.js';
 import companyRoutes from './modules/companies/routes.js';
+import { claimRouter, expenseRouter } from './modules/expenses/routes.js';
 import fileRoutes from './modules/files/routes.js';
 import invoiceRoutes, { paymentRouter } from './modules/invoices/routes.js';
+import payeeRoutes from './modules/payees/routes.js';
 import quoteRoutes from './modules/quotes/routes.js';
 import settingsRoutes from './modules/settings/routes.js';
 import userRoutes from './modules/users/routes.js';
@@ -48,6 +50,9 @@ export function createApp(): express.Express {
   app.use('/api/quotes', quoteRoutes);
   app.use('/api/invoices', invoiceRoutes);
   app.use('/api/payments', paymentRouter);
+  app.use('/api/payees', payeeRoutes);
+  app.use('/api/expenses', expenseRouter);
+  app.use('/api/claims', claimRouter);
 
   app.use('/api', (_req, _res, next) => next(new AppError(404, 'There is nothing at this address.')));
   app.use(errorHandler);
