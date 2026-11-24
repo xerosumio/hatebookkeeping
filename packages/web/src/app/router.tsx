@@ -31,6 +31,8 @@ const OtherIncome = lazy(() => import('../features/otherIncome/OtherIncome'));
 const Salary = lazy(() => import('../features/salary/Salary'));
 const SalaryRun = lazy(() => import('../features/salary/SalaryRun'));
 
+const Recurring = lazy(() => import('../features/recurring/Recurring'));
+
 const guarded = (any: Permission[], page: ReactNode) => <Needs any={any}>{page}</Needs>;
 
 export const router = createBrowserRouter([
@@ -65,6 +67,7 @@ export const router = createBrowserRouter([
       { path: '/other-income', element: guarded(['otherIncome.manage'], <OtherIncome />) },
       { path: '/salary', element: guarded(['salary.view'], <Salary />) },
       { path: '/salary/runs/:id', element: guarded(['salary.view'], <SalaryRun />) },
+      { path: '/recurring', element: guarded(['recurring.view'], <Recurring />) },
       // Old bookmarks and mistyped addresses go home instead of showing a blank page.
       { path: '*', element: <Navigate to="/" replace /> },
     ],

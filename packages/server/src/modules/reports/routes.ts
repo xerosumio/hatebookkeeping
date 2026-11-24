@@ -11,6 +11,7 @@ import { Company } from '../companies/model.js';
 import { Expense } from '../expenses/model.js';
 import { Invoice } from '../invoices/model.js';
 import { Quote } from '../quotes/model.js';
+import { recurringDue } from '../recurring/service.js';
 import { approvalPolicy } from '../settings/service.js';
 import { entriesFor, pnlEntries, pnlForMonth, pnlForYear, totalsOf, type Side } from './pnl.js';
 
@@ -72,7 +73,7 @@ dashboardRouter.get(
     const month = hkCurrentMonth();
     const range = monthBounds(month);
 
-    const [cash, billed, openInvoices, quotes, waiting, approved, policy, hasCompany] = await Promise.all([
+    const [cash, billed, openInvoices, quotes, waiting, approved, policy, hasCompany, recurring] = await Promise.all([
       entriesFor('cash', range, companyId),
       entriesFor('billed', range, companyId),
       Invoice.find({ ...company, status: { $in: ['unpaid', 'partial'] } }).select('number clientId dueDate total amountPaid').lean(),
@@ -81,6 +82,7 @@ dashboardRouter.get(
       Expense.find({ ...company, status: 'approved' }).select('kind number title total dueDate').lean(),
       approvalPolicy(),
       Company.exists({ active: true }),
+      recurringDue(companyId, today),
     ]);
 
     const clients = await namesOf(Client, openInvoices.map((invoice) => invoice.clientId));
@@ -128,7 +130,7 @@ dashboardRouter.get(
       waitingForPayment: approved
         .map((expense) => ({ kind: expense.kind, id: String(expense._id), number: expense.number, title: expense.title, total: expense.total, dueDate: expense.dueDate }))
         .sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') || a.number.localeCompare(b.number)),
-      recurringDue: [],
+      recurringDue: recurring,
       setup: { hasCompany: hasCompany !== null, hasApprovers: policy.approverIds.length > 0 },
     };
     res.json(dashboard);

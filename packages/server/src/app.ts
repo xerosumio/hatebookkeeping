@@ -9,6 +9,7 @@ import invoiceRoutes, { paymentRouter } from './modules/invoices/routes.js';
 import otherIncomeRoutes from './modules/otherIncome/routes.js';
 import payeeRoutes from './modules/payees/routes.js';
 import quoteRoutes from './modules/quotes/routes.js';
+import recurringRoutes from './modules/recurring/routes.js';
 import { dashboardRouter, reportRouter } from './modules/reports/routes.js';
 import salaryRoutes from './modules/salary/routes.js';
 import settingsRoutes from './modules/settings/routes.js';
@@ -58,6 +59,7 @@ export function createApp(): express.Express {
   app.use('/api/claims', claimRouter);
   app.use('/api/other-income', otherIncomeRoutes);
   app.use('/api/salary', salaryRoutes);
+  app.use('/api/recurring', recurringRoutes);
   app.use('/api/reports', reportRouter);
   app.use('/api/dashboard', dashboardRouter);
 
