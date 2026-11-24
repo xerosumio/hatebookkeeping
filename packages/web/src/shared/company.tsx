@@ -85,6 +85,15 @@ export function CompanyPicker() {
 export function CompanyField({ value, onChange, error, disabled }: { value: string; onChange: (id: string) => void; error?: string; disabled?: boolean }) {
   const { companies, all } = useCompanies();
   const options = companies.some((company) => company.id === value) || !value ? companies : [...companies, ...all.filter((company) => company.id === value)];
+  if (all.length === 0) {
+    return (
+      <Field label="Company" error="No company is set up yet. An admin adds one under Settings.">
+        <Select disabled invalid>
+          <option>None</option>
+        </Select>
+      </Field>
+    );
+  }
   if (options.length < 2 && !error) return null;
   return (
     <Field label="Company" error={error}>

@@ -1,6 +1,8 @@
 import type { Types } from 'mongoose';
 import { hkToday, type CompanyDto, type NumberingDto, type Ref } from '@hbk/shared';
-import { validationError } from '../../platform/errors.js';
+import type { PdfCompany } from '../../integrations/pdf/types.js';
+import { notFound, validationError } from '../../platform/errors.js';
+import { imageDataUri } from '../files/service.js';
 import { Company, Counter, type CompanyDoc } from './model.js';
 
 export function companyDto(company: CompanyDoc): CompanyDto {
@@ -130,4 +132,29 @@ export async function setNumbering(companyId: string, wanted: Record<CustomerSer
     ),
   );
   return numberingOf(companyId);
+}
+
+/** Everything a PDF prints about the company, with its images loaded. */
+export async function pdfCompany(companyId: unknown): Promise<{ company: CompanyDoc; pdf: PdfCompany }> {
+  const company = await Company.findById(companyId);
+  if (!company) throw notFound('That company');
+  const [logo, chop, signature] = await Promise.all([
+    imageDataUri(company.logoFileId),
+    imageDataUri(company.chopFileId),
+    imageDataUri(company.signatureFileId),
+  ]);
+  return {
+    company,
+    pdf: {
+      name: company.name,
+      address: company.address,
+      phone: company.phone,
+      email: company.email,
+      website: company.website,
+      brandColor: company.brandColor,
+      logo,
+      chop,
+      signature,
+    },
+  };
 }

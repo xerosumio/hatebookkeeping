@@ -225,7 +225,10 @@ export interface InvoiceDto {
   amountPaid: number;
   amountDue: number;
   notes: string;
+  /** What is printed: the invoice's own bank details, or the company's. */
   bankDetails: string;
+  /** True when this invoice carries its own bank details instead of the company's. */
+  ownBankDetails: boolean;
   quote: { id: string; number: string } | null;
   milestoneLabel: string;
   payments: PaymentDto[];

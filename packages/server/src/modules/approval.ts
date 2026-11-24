@@ -86,3 +86,18 @@ export function approversToAsk(
   const done = new Set(approvals.map((approval) => String(approval.userId)));
   return policy.approverIds.filter((id) => !ownerIds.includes(id) && !done.has(id));
 }
+
+/**
+ * Refuses a submission that could never be approved: the people who wrote an
+ * item cannot approve it, so enough other approvers must exist.
+ */
+export function assertCanReachApproval(policy: ApprovalPolicy, ownerIds: readonly string[]): void {
+  assertApproversChosen(policy);
+  const others = approversToAsk(policy, ownerIds).length;
+  if (others < policy.required) {
+    throw conflict(
+      `This needs ${policy.required} approval${policy.required === 1 ? '' : 's'}, but only ${others} approver${others === 1 ? '' : 's'} ` +
+        'other than the people who prepared it can give one. An admin must choose more approvers in Settings.',
+    );
+  }
+}
