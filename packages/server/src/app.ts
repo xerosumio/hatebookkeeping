@@ -1,6 +1,9 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import authRoutes from './modules/auth/routes.js';
+import companyRoutes from './modules/companies/routes.js';
+import fileRoutes from './modules/files/routes.js';
+import settingsRoutes from './modules/settings/routes.js';
 import userRoutes from './modules/users/routes.js';
 import { requireAuth } from './platform/auth.js';
 import { corsForWebOrigin } from './platform/cors.js';
@@ -35,6 +38,9 @@ export function createApp(): express.Express {
   app.use('/api', requireAuth);
 
   app.use('/api/users', userRoutes);
+  app.use('/api/settings', settingsRoutes);
+  app.use('/api/companies', companyRoutes);
+  app.use('/api/files', fileRoutes);
 
   app.use('/api', (_req, _res, next) => next(new AppError(404, 'There is nothing at this address.')));
   app.use(errorHandler);
