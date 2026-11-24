@@ -1,0 +1,35 @@
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Build shared packages
+        run: npm run build:shared
+      - name: Shared rules (money, dates, schemas, permissions)
+        run: npm test --workspace @hbk/shared
+      - name: Server types
+        run: npm run typecheck --workspace @hbk/server
+      - name: Server tests (in-memory MongoDB)
+        run: npm test --workspace @hbk/server
+      - name: Server build
+        run: npm run build --workspace @hbk/server
+      - name: Web lint
+        run: npm run lint --workspace @hbk/web
+      - name: Web build
+        run: npm run build --workspace @hbk/web

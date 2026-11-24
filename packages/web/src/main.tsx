@@ -1,7 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import App from './App';
-import { applyTheme, readTheme } from './lib/theme';
+import { App } from './app/App';
+import { applyTheme, readTheme } from './shared/lib/theme';
 import './index.css';
 
 applyTheme(readTheme());
