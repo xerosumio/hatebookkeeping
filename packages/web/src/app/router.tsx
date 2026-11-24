@@ -1,7 +1,7 @@
 import { lazy, type ReactNode } from 'react';
 import { Navigate, createBrowserRouter } from 'react-router-dom';
 import type { Permission } from '@hbk/shared';
-import { Needs, SignedIn } from './guards';
+import { Home, Needs, SignedIn } from './guards';
 
 const Login = lazy(() => import('../features/auth/Login'));
 const AuthCallback = lazy(() => import('../features/auth/AuthCallback'));
@@ -24,6 +24,10 @@ const Claims = lazy(() => import('../features/claims/Claims'));
 const ClaimForm = lazy(() => import('../features/claims/ClaimForm'));
 const ClaimDetail = lazy(() => import('../features/claims/ClaimDetail'));
 
+const Dashboard = lazy(() => import('../features/dashboard/Dashboard'));
+const Pnl = lazy(() => import('../features/pnl/Pnl'));
+const OtherIncome = lazy(() => import('../features/otherIncome/OtherIncome'));
+
 const guarded = (any: Permission[], page: ReactNode) => <Needs any={any}>{page}</Needs>;
 
 export const router = createBrowserRouter([
@@ -32,7 +36,7 @@ export const router = createBrowserRouter([
   {
     element: <SignedIn />,
     children: [
-      { path: '/', element: <Profile /> },
+      { path: '/', element: <Home dashboard={<Dashboard />} /> },
       { path: '/profile', element: <Profile /> },
       { path: '/users', element: guarded(['users.manage'], <Users />) },
       { path: '/settings', element: guarded(['settings.manage'], <Settings />) },
@@ -54,6 +58,8 @@ export const router = createBrowserRouter([
       { path: '/claims/new', element: guarded(['claims.own'], <ClaimForm />) },
       { path: '/claims/:id', element: guarded(['claims.own'], <ClaimDetail />) },
       { path: '/claims/:id/edit', element: guarded(['claims.own'], <ClaimForm />) },
+      { path: '/pnl', element: guarded(['pnl.view'], <Pnl />) },
+      { path: '/other-income', element: guarded(['otherIncome.manage'], <OtherIncome />) },
       // Old bookmarks and mistyped addresses go home instead of showing a blank page.
       { path: '*', element: <Navigate to="/" replace /> },
     ],

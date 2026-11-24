@@ -6,8 +6,10 @@ import companyRoutes from './modules/companies/routes.js';
 import { claimRouter, expenseRouter } from './modules/expenses/routes.js';
 import fileRoutes from './modules/files/routes.js';
 import invoiceRoutes, { paymentRouter } from './modules/invoices/routes.js';
+import otherIncomeRoutes from './modules/otherIncome/routes.js';
 import payeeRoutes from './modules/payees/routes.js';
 import quoteRoutes from './modules/quotes/routes.js';
+import { dashboardRouter, reportRouter } from './modules/reports/routes.js';
 import settingsRoutes from './modules/settings/routes.js';
 import userRoutes from './modules/users/routes.js';
 import { requireAuth } from './platform/auth.js';
@@ -53,6 +55,9 @@ export function createApp(): express.Express {
   app.use('/api/payees', payeeRoutes);
   app.use('/api/expenses', expenseRouter);
   app.use('/api/claims', claimRouter);
+  app.use('/api/other-income', otherIncomeRoutes);
+  app.use('/api/reports', reportRouter);
+  app.use('/api/dashboard', dashboardRouter);
 
   app.use('/api', (_req, _res, next) => next(new AppError(404, 'There is nothing at this address.')));
   app.use(errorHandler);
