@@ -149,9 +149,9 @@ export function CompanyForm({ company, onClose }: { company: CompanyDto | null; 
         <Textarea {...text('quoteTerms')} rows={4} />
       </Field>
       <div className="grid gap-4 md:grid-cols-3">
-        <ImageSlot label="Logo" hint="PNG or JPEG" fileId={form.logoFileId} error={errors.logoFileId} onChange={(id) => setForm({ ...form, logoFileId: id })} />
-        <ImageSlot label="Company chop" hint="Printed on approved quotes, invoices and receipts" fileId={form.chopFileId} error={errors.chopFileId} onChange={(id) => setForm({ ...form, chopFileId: id })} />
-        <ImageSlot label="Signature" hint="Printed next to the chop" fileId={form.signatureFileId} error={errors.signatureFileId} onChange={(id) => setForm({ ...form, signatureFileId: id })} />
+        <ImageSlot label="Logo" hint="PNG or JPEG" fileId={form.logoFileId} error={errors.logoFileId} onChange={(id) => setForm((current) => ({ ...current, logoFileId: id }))} />
+        <ImageSlot label="Company chop" hint="Printed on approved quotes, invoices and receipts" fileId={form.chopFileId} error={errors.chopFileId} onChange={(id) => setForm((current) => ({ ...current, chopFileId: id }))} />
+        <ImageSlot label="Signature" hint="Printed next to the chop" fileId={form.signatureFileId} error={errors.signatureFileId} onChange={(id) => setForm((current) => ({ ...current, signatureFileId: id }))} />
       </div>
       {company ? <Numbering companyId={company.id} /> : <div className="text-xs text-ink-faint">Document numbers can be set after the company is saved.</div>}
       {company ? (

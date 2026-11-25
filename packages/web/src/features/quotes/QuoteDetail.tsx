@@ -130,7 +130,7 @@ export default function QuoteDetail() {
                     cell: (milestone) =>
                       milestone.invoice ? (
                         <Link to={`/invoices/${milestone.invoice.id}`} className="text-human underline">
-                          {milestone.invoice.number}
+                          {milestone.invoice.number || 'Draft'}
                         </Link>
                       ) : has('convert') ? (
                         <Button size="sm" busy={convert.busy} onClick={() => void convert.run(milestone.id)}>
@@ -169,7 +169,7 @@ export default function QuoteDetail() {
             {quote.invoice ? (
               <DetailRow label="Invoice">
                 <Link to={`/invoices/${quote.invoice.id}`} className="text-human underline">
-                  {quote.invoice.number}
+                  {quote.invoice.number || 'Draft invoice'}
                 </Link>
               </DetailRow>
             ) : null}
