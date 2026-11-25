@@ -20,4 +20,9 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    // The route table only wires lazy pages together; it has nothing to hot-reload.
+    files: ['src/app/router.tsx'],
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
 ])

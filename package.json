@@ -1,9 +1,9 @@
 {
   "name": "hatebookkeeping",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "Finance OS for Axilogy and Naton",
+  "description": "Bookkeeping for Axilogy and Naton Lab: quotes, invoices, expenses, claims, salary and the monthly P&L",
   "engines": {
     "node": ">=22"
   },
@@ -11,16 +11,18 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspace @hbk/shared && npm run build --workspace @naton/ui && npm run build --workspace @hbk/server && npm run build --workspace @hbk/web",
+    "build": "npm run build:shared && npm run build --workspace @hbk/server && npm run build --workspace @hbk/web",
     "build:shared": "npm run build --workspace @hbk/shared && npm run build --workspace @naton/ui",
     "dev": "npm run build:shared && concurrently -n shared,ui,server,web -c blue,cyan,green,magenta \"npm:dev:shared\" \"npm:dev:ui\" \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:local": "npm run build:shared && concurrently -n server,web -c green,magenta \"npm run dev:local --workspace @hbk/server\" \"npm:dev:web\"",
     "dev:shared": "npm run dev --workspace @hbk/shared",
     "dev:ui": "npm run dev --workspace @naton/ui",
     "dev:server": "npm run dev --workspace @hbk/server",
     "dev:web": "npm run dev --workspace @hbk/web",
-    "typecheck": "npm run build:shared && tsc --noEmit -p packages/web",
-    "seed": "npm run seed --workspace @hbk/server",
-    "audit:data": "npm run audit:data --workspace @hbk/server"
+    "typecheck": "npm run build:shared && npm run typecheck --workspace @hbk/server && npm run typecheck --workspace @hbk/web",
+    "lint": "npm run lint --workspace @hbk/web",
+    "test": "npm run build:shared && npm test --workspace @hbk/shared && npm test --workspace @hbk/server",
+    "check": "npm run typecheck && npm run lint && npm test && npm run build"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",

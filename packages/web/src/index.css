@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import '@naton/ui-theme';
+@source '../../ui/src';
 
 html,
 body,
@@ -12,6 +13,22 @@ body {
   background: var(--color-void);
   color: var(--color-ink);
   font-family: var(--font-sans);
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.5;
+}
+
+/* Native date and month pickers follow the theme. */
+input[type='date'],
+input[type='month'] {
+  color-scheme: light dark;
+}
+
+:root[data-theme='light'] input[type='date'],
+:root[data-theme='light'] input[type='month'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] input[type='date'],
+:root[data-theme='dark'] input[type='month'] {
+  color-scheme: dark;
 }

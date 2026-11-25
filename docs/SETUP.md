@@ -1,82 +1,85 @@
 # Setting up HateBookkeeping
 
-Depends on two external services: MongoDB and Authentik. Nothing is bundled — you point the API at them through `.env`.
+To just try the app, you need none of this: run `npm run dev:local` (see the README).
 
-Production hosting (Coolify + GitHub Pages) is in [DEPLOY.md](./DEPLOY.md).
+To run it for real, the API needs two outside services: a MongoDB database and Authentik for sign-in. You point the API at them in a `.env` file. Hosting is covered in [DEPLOY.md](./DEPLOY.md).
 
----
-
-## 1. Secrets
+## 1. Create the configuration file
 
 ```bash
 cp .env.example .env
-echo "SESSION_SECRET=$(openssl rand -base64 48)"
+openssl rand -base64 48
 ```
 
-Paste `SESSION_SECRET` into `.env`. It signs `hbk_web_` session tokens.
-
----
+Paste the generated text into `.env` as `SESSION_SECRET`. It signs sign-in sessions; changing it later signs everyone out.
 
 ## 2. MongoDB
 
-```
-MONGODB_URI=mongodb://localhost:27017/hatebookkeeping
-```
-
-Atlas or a local `mongod` both work. Transactions are not required.
-
----
-
-## 3. Origins
-
-| Variable | What it is | Local example |
-| --- | --- | --- |
-| `PUBLIC_URL` | API origin. Authentik redirect URIs are built from this. | `http://localhost:3000` |
-| `WEB_ORIGIN` | SPA origin. CORS and the post-login redirect. | `http://localhost:5173` |
-
-Use the exact scheme + host + port the browser sees. No trailing slash.
-
----
-
-## 4. Authentik / OIDC
-
-1. Create a **confidential** OAuth2/OIDC application (slug e.g. `hatebookkeeping`).
-2. Issuer is the application’s OIDC base:
+Set `MONGODB_URI` to your database address. The last part of the address is the database name:
 
 ```
-OIDC_ISSUER=https://authentik.example.com/application/o/hatebookkeeping/
-OIDC_CLIENT_ID=…
-OIDC_CLIENT_SECRET=…
-OIDC_SCOPES=openid profile email
+MONGODB_URI=mongodb://localhost:27017/hatebookkeeping_v2
 ```
 
-3. Redirect URI (on **PUBLIC_URL**, not Pages):
+The app creates what it needs in an empty database. It does not read data from the old version of HateBookkeeping, so use a database name the old version never used.
 
-```
-http://localhost:3000/api/auth/callback
-```
+Uploaded logos, chops, signatures and receipts are stored in the database too (up to 5 MB each), so there is no upload folder to set up or back up separately.
 
-In production that is `https://<coolify-host>/api/auth/callback`.
+## 3. Addresses
 
-4. Optional: set `OIDC_ADMIN_GROUP` to an Authentik group name. Members become `admin` on every login. Leave blank to keep roles as they are in Mongo (existing William/Andy admins stay admins).
+| Setting | What it is |
+| --- | --- |
+| `PUBLIC_URL` | The address browsers use to reach the API. The Authentik redirect address is built from it. |
+| `WEB_ORIGIN` | The address the web app is served from. The API accepts browser requests only from here, and sends people back here after sign-in. |
 
-Users must sign in with the **same email** already stored on the user document so the first login links `authentikId`.
+Use the exact scheme, host and port, with no trailing slash. For local development the API listens on port 3000 and the Vite dev server on port 5173 of `localhost`.
 
----
+## 4. Authentik
 
-## 5. Optional
+1. In Authentik, create an OAuth2/OpenID provider of the **confidential** kind and an application for it (slug, for example, `hatebookkeeping`).
+2. Copy its details into `.env`:
 
-- **Email:** `EMAIL_API_URL` + `EMAIL_API_KEY` for approval and recurring reminders.
-- **Airwallex:** `AIRWALLEX_AX_*` and `AIRWALLEX_NT_*` for live HKD balances.
+   ```
+   OIDC_ISSUER=https://authentik.example.com/application/o/hatebookkeeping/
+   OIDC_CLIENT_ID=…
+   OIDC_CLIENT_SECRET=…
+   ```
 
----
+3. Register one redirect address in Authentik: your `PUBLIC_URL` followed by `/api/auth/callback`.
+4. Make sure the provider sends the `email`, `profile` and group information (the default scopes do).
 
-## Check
+### The first admin
+
+On an empty database nobody has a role yet. Set `OIDC_ADMIN_GROUP` to the name of an Authentik group (the default is `hbk-admins`) and put yourself in that group. Members of the group become admins when they sign in.
+
+Everyone else who signs in for the first time starts as **staff**, which means they can only enter their own claims. An admin changes roles on the Users page.
+
+Leaving the Authentik group later does not take the admin role away. Another admin does that on the Users page. The app will not let the last admin remove their own admin role.
+
+## 5. Email (optional)
+
+Set `EMAIL_API_URL` and `EMAIL_API_KEY` to send approval requests and recurring reminders. Without them the app works the same, and each item's history says that the email was not sent.
+
+Recurring reminders go out once a day at 08:00 Hong Kong time, to admins and bookkeepers.
+
+## 6. Start it
 
 ```bash
 npm install
 npm run dev
-curl http://localhost:3000/api/health
 ```
 
-Open http://localhost:5173 and sign in with Authentik.
+The API reports its health at `/api/health` on port 3000. Open the address Vite prints and sign in.
+
+If a setting is missing or wrong, the API stops at start-up and names the setting.
+
+## 7. First things to fill in
+
+Sign in as an admin and open **Settings**:
+
+1. **Company**: name, address, the short code used in document numbers (for example `AX`), bank details for invoices, standard quote terms, and the logo, chop and signature images (PNG or JPEG).
+2. **Document numbers**: if you are carrying on from earlier paperwork, set the next quote, invoice and receipt numbers. They can be raised, never lowered.
+3. **Approvers**: choose who approves, and how many approvals are needed. Until this is done nothing can be submitted for approval. Because nobody approves their own item, choose at least two people.
+4. **Categories**: rename, add or switch off income and expense categories. "Sales" and "Salary" are used by the app itself and stay on.
+
+Then add clients, payees and staff as you need them.
